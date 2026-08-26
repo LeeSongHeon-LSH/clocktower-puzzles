@@ -1,0 +1,148 @@
+# 아키텍처 — 시계탑 퍼즐
+
+> 요구사항은 [REQUIREMENTS.md](./REQUIREMENTS.md) 참조.
+
+## 1. 기술 스택
+
+| 영역 | 선택 | 비고 |
+|---|---|---|
+| 프레임워크 | Next.js 16 (App Router) | Vercel 네이티브, 추후 텔러 앱 확장 대비 |
+| 언어 | TypeScript (strict) | |
+| 스타일 | Tailwind CSS v4 | |
+| 테스트 | Vitest | 솔버 유일해 검증이 핵심 테스트 |
+| 패키지 매니저 | npm | |
+| 타운스퀘어 렌더링 | SVG 직접 구현 | 외부 차트 라이브러리 없음 |
+| 배포 | Vercel (GitHub 연동 자동 배포) | |
+
+## 2. 디렉토리 구조
+
+```
+src/
+  app/
+    page.tsx              # 홈: 퍼즐 목록 + 필터
+    puzzles/[id]/page.tsx # 퍼즐 풀이 페이지
+    about/page.tsx        # 소개 + 팬 고지문
+    admin/page.tsx        # 역할명 편집 (비밀번호 잠금)
+    api/admin/roles/route.ts  # 역할명 저장 API (GitHub 커밋)
+  components/             # TownSquare, InfoLog, QuestionPanel, HintBox, Walkthrough …
+  lib/
+    solver/               # 룰 엔진 (퍼즐 검증용, UI 비노출)
+      types.ts            # World(그리모어 배정), 등록 시스템
+      roles/              # 역할별 제약 로직 (1역할 1파일)
+      solve.ts            # 전수 탐색 + 제약 평가
+    progress.ts           # localStorage 풀이 기록
+  data/
+    roles.ts              # 역할 사전: id → { en, ko, team, edition } (관리자 편집 대상)
+    puzzles/
+      index.ts            # 퍼즐 레지스트리
+      tb-01.ts …          # 문제당 1파일
+tests/
+  solver/                 # 솔버 단위 테스트 (역할 로직별)
+  puzzles.test.ts         # 전 퍼즐 유일해 검증 (배포 게이트)
+docs/                     # 이 문서들
+```
+
+## 3. 데이터 모델
+
+### 3.1 퍼즐 파일 (`src/data/puzzles/*.ts`)
+
+```ts
+export default definePuzzle({
+  id: "tb-01",
+  title: "장의사의 증언",
+  edition: "tb",              // tb | bmr | sv | mixed
+  difficulty: "easy",         // easy | normal | hard
+  playerCount: 7,
+  // 좌석: A, B, C… (배열 인덱스 = 좌석 순서, 원형)
+  claims: [                   // 좌석별 공개 주장
+    { seat: 0, role: "washerwoman",
+      info: [{ night: 1, text: "B 또는 C가 사서",
+               data: { type: "washerwoman", targets: [1, 2], shownRole: "librarian" } }] },
+    // …전 좌석
+  ],
+  events: [                   // 시간축 이벤트
+    { day: 1, type: "execution", seat: 3 },
+    { night: 2, type: "death", seat: 4 },
+  ],
+  questions: [                // 단계형 서브 질문
+    { id: "demon", text: "데몬은 누구인가?", answerSeats: [5] },
+    { id: "drunk", text: "술꾼은 누구인가?", answerSeats: [2] },
+  ],
+  hints: ["…", "…"],          // 최대 2개
+  walkthrough: ["① …", "② …"], // 단계별 해설
+  solution: { 0: "washerwoman", 1: "empath", /* seat → 실제 역할 */ },
+})
+```
+
+- `text`는 사람이 읽는 서술, `data`는 솔버 입력. 둘 다 퍼즐 작성자가 유지한다(이중 기입이지만 렌더링 자유도를 위해 허용).
+- `solution`은 정답 그리모어. 솔버 테스트가 "탐색 결과 유일해 == solution"을 검증한다.
+
+### 3.2 역할 사전 (`src/data/roles.ts`)
+
+```ts
+export const ROLES = {
+  imp: { en: "Imp", ko: "임프", team: "demon", edition: "tb" },
+  scarletwoman: { en: "Scarlet Woman", ko: "부정한 여인", team: "minion", edition: "tb" },
+  // …
+} satisfies Record<RoleId, RoleMeta>
+```
+
+- UI 표기는 항상 `ko(en)` 형식.
+- 이 파일이 관리자 페이지의 편집 대상 (GitHub 커밋으로 갱신, §5).
+
+### 3.3 풀이 기록 (localStorage)
+
+```
+clocktower-puzzles:progress = {
+  [puzzleId]: { solved: boolean, firstTry: boolean }
+}
+```
+
+## 4. 솔버 설계
+
+목적: **퍼즐이 유일해임을 전수 탐색으로 증명**하는 개발용 도구. UI에 노출하지 않는다. 장기적으로 텔러 앱의 룰 엔진 기반.
+
+### 4.1 모델
+
+- **World** = 좌석 → 실제 역할 배정 + 부가 상태(술꾼이 착각 중인 역할, 임프의 밤 선택, 독살자 대상 등 필요한 만큼의 비결정 변수).
+- 탐색: 역할 배정 후보를 생성(팀 구성 규칙 — 인원수별 마을 사람/외부인/하수인/데몬 수, 남작 수정치 반영)하고, 각 World에 대해 **제약 평가**:
+  - 참인 주장(선한 생존 정직 역할)의 정보는 게임 룰상 실제로 발생 가능해야 한다.
+  - 술꾼·독살 상태의 정보는 임의 값 허용(텔러 재량), 악역 주장은 임의 거짓 허용.
+  - 이벤트 시퀀스(처형·사망)가 룰과 모순되지 않아야 한다 (예: 임프 킬, 부정한 여인 승계).
+- 결과: 정합한 World 집합. **크기 1**이어야 검증 통과. (서브 질문 정답도 그 World에서 도출되는지 확인.)
+
+### 4.2 역할 로직 구조
+
+- 역할 1개 = 파일 1개, `checkInfo(world, claim, gameLog): boolean` 형태의 제약 함수 등록.
+- 지원 역할 목록은 REQUIREMENTS §2.4. 새 역할 추가 = 파일 추가 + 테스트 추가.
+- 정보 교란 계층: 술 취함(drunk) / 중독(poisoned) / 은둔자·스파이 오등록(misregistration)을 공통 유틸로 처리.
+
+### 4.3 성능 전제
+
+- 인원수 ≤ 10, 등장 역할 풀을 퍼즐마다 명시(스크립트 전체가 아니라 "이 퍼즐에 나올 수 있는 역할" 목록)하여 탐색 공간을 통제한다.
+- 전수 탐색으로 충분한 규모를 유지한다. 퍼즐이 커져서 느려지면 그때 가지치기 도입.
+
+## 5. 역할명 편집 플로우 (관리자)
+
+```
+관리자 페이지(/admin, ADMIN_PASSWORD 입력)
+  → PUT /api/admin/roles  (수정된 ko 표기 목록)
+  → 서버가 GitHub Contents API로 src/data/roles.ts 커밋 (GITHUB_TOKEN)
+  → GitHub push → Vercel 자동 재배포 (~1분)
+```
+
+- 리포가 유일한 진실 원본. 런타임 DB 없음.
+- 환경변수: `ADMIN_PASSWORD`, `GITHUB_TOKEN` (repo 권한, Vercel에 설정).
+- 로컬 개발 시에는 GitHub 커밋 대신 파일 직접 수정도 가능(수동).
+
+## 6. 테스트·품질 게이트
+
+- `tests/puzzles.test.ts`: 모든 퍼즐에 대해 (1) 스키마 유효, (2) 솔버 유일해, (3) solution·questions 정답 일치. **이 테스트가 깨지면 머지/배포 금지.**
+- `tests/solver/*`: 역할 로직 단위 테스트 (참/거짓 정보 케이스).
+- CI는 초기에 생략(개인 프로젝트) — `npm test`를 푸시 전 수동 실행. 필요해지면 GitHub Actions 추가.
+
+## 7. 배포
+
+- GitHub private repo `LeeSongHeon-LSH/clocktower-puzzles` → Vercel 연동(사용자가 1회 클릭).
+- `main` push = 프로덕션 배포.
+- 퍼즐 데이터는 빌드 시점에 정적 포함(SSG). 서버 런타임이 필요한 것은 `/api/admin/*` 뿐.

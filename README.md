@@ -1,36 +1,21 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 시계탑 퍼즐 (clocktower-puzzles)
 
-## Getting Started
+보드게임 **Blood on the Clocktower**(시계탑에 흐른 피)의 상황 추리 퍼즐을 웹에서 풀 수 있는 사이트.
+The Pandemonium Institute와 무관한 비공식 팬 프로젝트입니다.
 
-First, run the development server:
+- 요구사항: [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md)
+- 아키텍처: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+
+## 개발
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev    # http://localhost:3000
+npm test       # 솔버 단위 테스트 + 전 퍼즐 유일해 검증 (배포 게이트)
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 퍼즐 추가
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. `src/data/puzzles/`에 새 TS 파일 작성 (기존 파일 참고), `index.ts`에 등록
+2. `npm test`로 유일해 검증 통과 확인
+3. push → Vercel 자동 배포
