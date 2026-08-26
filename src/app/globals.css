@@ -1,26 +1,61 @@
 @import "tailwindcss";
 
+/* 밤의 마을 팔레트 — 보랏빛 잉크 밤하늘 위 양피지 글, 핏빛과 황동 두 악센트 */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --ink: #17121f; /* 배경: 깊은 밤 */
+  --panel: #211a2d; /* 떠 있는 면 */
+  --panel-edge: #352a47; /* 면 경계 */
+  --parchment: #ece1cb; /* 본문 글 */
+  --faded: #9d92ab; /* 흐린 글 */
+  --blood: #c73e35; /* 핏빛: 위험/악/주 동작 */
+  --blood-deep: #8e2a24;
+  --brass: #cfa96a; /* 황동: 시계, 강조, 정답 */
+  --team-townsfolk: #7fb3e0;
+  --team-outsider: #63c2ad;
+  --team-minion: #e08a5a;
+  --team-demon: #d6453a;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-ink: var(--ink);
+  --color-panel: var(--panel);
+  --color-panel-edge: var(--panel-edge);
+  --color-parchment: var(--parchment);
+  --color-faded: var(--faded);
+  --color-blood: var(--blood);
+  --color-blood-deep: var(--blood-deep);
+  --color-brass: var(--brass);
+  --color-team-townsfolk: var(--team-townsfolk);
+  --color-team-outsider: var(--team-outsider);
+  --color-team-minion: var(--team-minion);
+  --color-team-demon: var(--team-demon);
+  --font-display: var(--font-gowun-batang), "Gowun Batang", serif;
+  --font-sans: var(--font-geist-sans), var(--font-noto-sans-kr), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--ink);
+  color: var(--parchment);
+  font-family: var(--font-sans);
+}
+
+/* 제목 계열은 바탕 세리프 — 오래된 소설책의 표지처럼 */
+.font-display {
+  font-family: var(--font-display);
+}
+
+::selection {
+  background: var(--blood-deep);
+  color: var(--parchment);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
