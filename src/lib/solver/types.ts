@@ -56,7 +56,8 @@ export type InfoData =
 /** 특정 밤에 받았다고 주장하는 정보 한 건 */
 export interface ClaimInfo {
   night: number; // 1-based
-  text: string; // 사람이 읽는 서술 (UI 표시용)
+  /** 사람이 읽는 서술. 생략하면 UI가 data에서 자동 생성한다 (역할명 사전과 항상 동기화) */
+  text?: string;
   data?: InfoData; // 솔버 입력. 정보성 주장엔 필수, 순수 서사엔 생략 가능
 }
 
