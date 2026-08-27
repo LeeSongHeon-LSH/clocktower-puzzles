@@ -24,6 +24,12 @@
 // - 샤바로스는 밤마다 2명을 고르는데 시신도 고를 수 있어 실제 사망 0~2건이 전부 설명
 //   없이 성립한다 (관대한 방향). 역류(부활)는 이벤트로 표현 불가 — "might"라 비발동 ∃가
 //   항상 성립하고, 역류가 발동한 게임은 입력될 수 없다.
+// - 좀부울: 직전 낮에 처형 사망이 있으면 깨어나지 않는다 (그 밤 킬 불가·킬 부재 공짜).
+//   첫 죽음은 가짜 — 이벤트는 그대로 두되(등록상 사망) 비밀리에 생존해 계속 킬하고,
+//   탕녀 승계도 발동하지 않는다. 죽는 순간 중독됐다면 정말로 죽는다 (그쪽만 승계 분기).
+//   같은 좌석의 두 번째 사망은 스키마상 입력 불가라 표현 가능한 퍼즐에서 좀부울의 진짜
+//   죽음은 (중독 분기 외엔) 없다. 생존 2인 이하 종료 판정에서 가짜 죽음 좀부울은
+//   생존자로 센다 (실제로 살아 있다 — 게임이 계속되는 관대한 방향).
 
 import { ROLES } from "@/data/roles";
 import { canShowAsRole } from "./registration";
@@ -120,6 +126,11 @@ export interface DemonScenario {
   /** 음유시인 발동으로 전원이 취해 있던 밤들 — 그 밤의 정보·킬·독살은 모두 무효 */
   minstrelNights?: Set<number>;
   /**
+   * 좀부울의 가짜 죽음 시점 (밤 n = n, 낮 d 처형 = d + 0.5). 좀부울 세계에서 가짜 죽음이
+   * 일어났을 때만 존재 — 그 좌석은 등록상 죽었지만 실제로 살아 있어 계속 깨어나고 킬한다.
+   */
+  zombuulFakeDeadAt?: number | null;
+  /**
    * 노 다시 세계: 밤 n에 노 다시의 독을 받고 '있었을 수 있는' 좌석들 (데몬 세계에서만).
    * 간격 추상화의 관대한 쪽 — 첩자의 주민 오등록 흡수(∃), 밤중 사망으로 인한 이동을
    * 전부 합집합으로 담는다. 여기 든 좌석의 정보는 무제약이고 비정상 동작 강제(require)를
@@ -159,6 +170,8 @@ interface St {
   foolDodgeUsed: boolean;
   /** Po 전용: 직전 밤의 선택이 '아무도 안 함'이었는가 (참이면 이번 밤엔 반드시 3명을 고른다) */
   poChoseNone: boolean;
+  /** 좀부울 전용: 가짜 죽음 시점 (밤 n = n, 낮 d = d + 0.5). null = 아직 안 죽음 */
+  zombuulFakeDeadAt: number | null;
   /** 할머니의 실제 손주. null = 미확정 (밤1 정보가 취함/중독이었거나 주장이 없음) */
   grandchild: Seat | null;
 }
@@ -178,6 +191,7 @@ function cloneSt(s: St): St {
     minstrelNights: [...s.minstrelNights],
     foolDodgeUsed: s.foolDodgeUsed,
     poChoseNone: s.poChoseNone,
+    zombuulFakeDeadAt: s.zombuulFakeDeadAt,
     grandchild: s.grandchild,
   };
 }
@@ -354,6 +368,7 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
       exorcistBlocked: new Set(st.exorcistBlocked),
       impKillDuringNight: [...st.impKills],
       minstrelNights: new Set(st.minstrelNights),
+      zombuulFakeDeadAt: st.zombuulFakeDeadAt,
       nodashiiPoisoned: demonRole === "nodashii"
         ? Array.from({ length: pz.nights + 1 }, (_, n) =>
             n === 0 ? new Set<Seat>() : ndPoisonedAt(st.demonNights[n] ?? st.demon, n))
@@ -376,11 +391,22 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
     let branches: { st: St; demonless: boolean }[];
     if (executed === st.demon) {
       branches = [];
+      // (0) 좀부울의 첫 죽음은 가짜다 — 등록상 죽지만 비밀리에 생존, 승계 없음.
+      //     멀쩡했어야 가짜 죽음이 성립한다 (중독된 좀부울은 정말로 죽는다 — 아래 진짜 죽음 경로).
+      if (demonRole === "zombuul" && st.zombuulFakeDeadAt === null) {
+        const c = cloneSt(st);
+        if (forbid_(c, day, executed)) {
+          c.zombuulFakeDeadAt = day + 0.5;
+          branches.push({ st: c, demonless: false });
+        }
+      }
+      /** 진짜 죽음의 전제 — 좀부울이라면 그 시점의 중독이 강제된다 */
+      const realDeath: Mut = (c) => demonRole !== "zombuul" || require_(c, day, executed);
       // (a) 탕녀 승계 — 게임이 계속된다
       const swOk = swSeat >= 0 && swSeat !== executed && aliveAtDay[swSeat] && !st.became.has(swSeat) && aliveBefore >= 5;
       if (swOk) {
         const c = cloneSt(st);
-        if (forbid_(c, day, swSeat)) { // 중독된 탕녀는 승계 불가 (밤 day의 독이 낮까지 지속)
+        if (realDeath(c) && forbid_(c, day, swSeat)) { // 중독된 탕녀는 승계 불가 (밤 day의 독이 낮까지 지속)
           c.demon = swSeat;
           c.became.set(swSeat, day + 0.5);
           c.poChoseNone = false; // 승계한 Po의 선택 상태는 새로 시작한다
@@ -393,7 +419,7 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
         && day === pz.nights - 1 && demonRole !== "vortox";
       if (mmOk) {
         const c = cloneSt(st);
-        let ok = forbid_(c, day, mmSeat); // 중독된 마스터마인드는 연장하지 못한다
+        let ok = realDeath(c) && forbid_(c, day, mmSeat); // 중독된 마스터마인드는 연장하지 못한다
         if (ok && swOk) ok = require_(c, day, swSeat); // 승계 가능했던 탕녀는 중독됐던 것
         if (ok) branches.push({ st: c, demonless: true });
       }
@@ -410,7 +436,8 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
     if (tlForced(aliveAtDay, executed) && !require_(s, day, tealadySeat)) continue;
     // 회피를 쓰지 않은 어릿광대는 처형으로 죽지 않는다 → 그 밤의 중독 강제
     if (executed === foolSeat && !s.foolDodgeUsed && !require_(s, day, foolSeat)) continue;
-    if (aliveBefore - 1 <= 2) continue;
+    // 가짜 죽음 좀부울은 등록상 죽었지만 실제로 살아 있다 — 종료 판정에서 생존자로 센다
+    if (aliveBefore - 1 + (s.zombuulFakeDeadAt !== null ? 1 : 0) <= 2) continue;
 
     // 트리거 계산: 처형으로 죽은 좌석의 토큰 등록
     const token = tokenAt(s.became, executed, day);
@@ -451,7 +478,10 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
       doDay(st, 1);
       return;
     }
-    if (!demonless && !sched.aliveAtNightStart(night)[st.demon]) return;
+    // 가짜 죽음 좀부울은 등록상 죽었어도 실제로 살아 있어 계속 진행한다
+    const demonReallyAlive = sched.aliveAtNightStart(night)[st.demon]
+      || (demonRole === "zombuul" && st.zombuulFakeDeadAt !== null);
+    if (!demonless && !demonReallyAlive) return;
 
     if (minstrelActive) {
       // 전원 취함: 킬도, 독살도, 유효한 정보도 없는 밤
@@ -503,10 +533,12 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
       return nb !== null && nb.every((x) => isGoodTeam(assignment[x]) || assignment[x] === "spy");
     })();
 
+    // 좀부울: 직전 낮에 처형 사망이 있으면 깨어나지 않는다 — 그 밤 킬 불가, 킬 부재는 공짜
+    const zombuulRested = demonRole === "zombuul" && sched.executedOnDay(night - 1) !== null;
     // 데몬 킬 집합: 보통은 0~1건, Po의 3킬 밤(직전 선택이 '아무도 안 함')에는 최대 3건,
     // 샤바로스는 매밤 2명 선택(시신 포함 가능)이라 최대 2건.
     const poTriple = demonRole === "po" && st.poChoseNone;
-    const killSets: Seat[][] = demonless ? [[]]
+    const killSets: Seat[][] = demonless || zombuulRested ? [[]]
       : poTriple ? subsetsUpTo(deaths, 3)
       : demonRole === "shabaloth" ? subsetsUpTo(deaths, 2)
       : [[], ...deaths.map((d) => [d])];
@@ -627,6 +659,11 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
           });
         } else {
           // 데몬 킬 부재 — 설명이 하나는 있어야 한다 (Po의 조용한 밤은 자발적 선택이라 공짜)
+          if (zombuulRested) {
+            // 어제 낮에 처형 사망이 있었다 — 좀부울은 애초에 깨어나지 않는 밤 (킬 부재가
+            // 규칙이고, '선택했으나 실패' 계열 분기도 성립하지 않는다)
+            impVariants.push(() => true);
+          } else {
           if (demonRole === "shabaloth") {
             // 시신 2명을 골랐을 수 있다 — 킬 부재가 설명 없이 성립한다 (관대한 방향)
             impVariants.push(() => true);
@@ -669,6 +706,7 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
               return true;
             });
           }
+          }
         }
 
         for (const variant of impVariants) {
@@ -692,21 +730,36 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
           } else if (demonKills.includes(demon) || plan.demonByOther) {
             // 밤에 데몬이 살해당함 → 탕녀만이 게임을 지속시킨다 (생존 5인 이상)
             nexts = [];
+            // 좀부울의 첫 죽음은 가짜 — 승계 없이 계속된다 (멀쩡했어야 한다.
+            // 중독된 좀부울은 정말로 죽어 아래 탕녀 승계 경로로 간다)
+            if (demonRole === "zombuul" && s2.zombuulFakeDeadAt === null) {
+              const c = cloneSt(s2);
+              if (forbid_(c, night, demon)) {
+                c.zombuulFakeDeadAt = night;
+                nexts.push(c);
+              }
+            }
             if (swSeat >= 0 && !s2.became.has(swSeat) && aliveAfter[swSeat] && countTrue(aliveStart) >= 5) {
               const c = cloneSt(s2);
-              if (forbid_(c, night, swSeat)) {
+              // 좀부울의 진짜 죽음(승계 발동)에는 그 시점 중독이 강제된다
+              if (demonRole === "zombuul" && !require_(c, night, demon)) { /* 가짜 죽음만 가능 */ }
+              else if (forbid_(c, night, swSeat)) {
                 c.demon = swSeat;
                 c.became.set(swSeat, night);
                 c.poChoseNone = false; // 승계한 Po의 선택 상태는 새로 시작한다
-                nexts = [c];
+                nexts.push(c);
               }
             }
           } else {
             nexts = [s2];
           }
 
-          if (deaths.length > 0 && countTrue(aliveAfter) <= 2) continue; // 게임이 이미 끝났어야 한다
-          for (const nx of nexts) doDay(nx, night);
+          for (const nx of nexts) {
+            // 게임이 이미 끝났어야 한다 — 가짜 죽음 좀부울은 실제로 살아 있어 생존자로 센다
+            const fakeAlive = nx.zombuulFakeDeadAt !== null ? 1 : 0;
+            if (deaths.length > 0 && countTrue(aliveAfter) + fakeAlive <= 2) continue;
+            doDay(nx, night);
+          }
         }
       }
     }
@@ -726,6 +779,7 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
     minstrelNights: [],
     foolDodgeUsed: false,
     poChoseNone: false,
+    zombuulFakeDeadAt: null,
     grandchild: null,
   };
 

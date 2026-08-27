@@ -139,6 +139,18 @@ export function wakes(ctx: Ctx, seat: Seat, night: number): boolean {
     case "lunatic":
       // 자기가 데몬인 줄 알고 데몬처럼 깨어나 '킬'을 고른다 (실제로는 아무 일도 없다)
       return night >= 2 && aliveStart[seat];
+    case "zombuul": {
+      // 구마사제 봉쇄 밤에는 깨어나지 못한다
+      if (ctx.sc.exorcistBlocked?.has(night)) return false;
+      // 승계한 밤(탕녀)에는 악마가 됐다고 통보받으며 깨어난다
+      if (ctx.sc.becameDemonAt.get(seat) === night) return true;
+      if (night < 2) return false;
+      // 직전 낮에 처형 사망이 있으면 깨어나지 않는다 — '오늘 아무도 죽지 않았다'가 조건
+      if (ctx.sched.executedOnDay(night - 1) !== null) return false;
+      // 가짜 죽음 후에도 (등록상 사망) 비밀리에 계속 깨어나 킬한다
+      if (ctx.sc.zombuulFakeDeadAt != null && ctx.sc.zombuulFakeDeadAt < night) return true;
+      return aliveStart[seat];
+    }
     case "imp":
     case "vortox":
     case "nodashii":

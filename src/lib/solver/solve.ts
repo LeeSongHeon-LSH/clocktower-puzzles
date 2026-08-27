@@ -218,6 +218,10 @@ function tryWorld(
   const poisonerSeat = assignment.indexOf("poisoner");
   const vortoxSeat = assignment.indexOf("vortox");
   const needsExactPoison = soberInfos.some((i) => i.data.type === "mathematician");
+  // 독살 대상은 등록상 생존자여야 한다 — 단 가짜 죽음 좀부울은 실제로 살아 있어 대상이 될 수 있다
+  const canBePoisonTarget = (night: number, target: Seat): boolean =>
+    sched.aliveAtNightStart(night)[target] ||
+    (sc.zombuulFakeDeadAt != null && target === sc.currentDemonSeat && sc.zombuulFakeDeadAt < night);
 
   if (!needsExactPoison) {
     // 빠른 경로: 술/독 없이 설명 안 되는 정보는 그 밤 그 좌석의 독살을 강제한다.
@@ -265,7 +269,7 @@ function tryWorld(
       if (poisonerSeat < 0) return null;
       if (isSweetDrunk(ctx, poisonerSeat, night)) return null; // 취한 독살범의 독은 듣지 않는다
       if (!sched.aliveAtNightStart(night)[poisonerSeat]) return null;
-      if (!sched.aliveAtNightStart(night)[target]) return null;
+      if (!canBePoisonTarget(night, target)) return null;
       if (sc.poisonForbidden.get(night)?.has(target)) return null;
     }
     const poisonTargets: (Seat | null)[] = new Array(pz.nights + 1).fill(null);
@@ -283,15 +287,20 @@ function tryWorld(
     const req = sc.poisonRequired.get(night);
     const forbidden = sc.poisonForbidden.get(night);
     if (req !== undefined) {
-      if (poisonerSeat < 0 || !sched.aliveAtNightStart(night)[poisonerSeat] || !sched.aliveAtNightStart(night)[req] || forbidden?.has(req)) {
+      if (poisonerSeat < 0 || !sched.aliveAtNightStart(night)[poisonerSeat] || !canBePoisonTarget(night, req) || forbidden?.has(req)) {
         return null;
       }
       optionsPerNight[night] = [req];
     } else if (poisonerSeat >= 0 && sched.aliveAtNightStart(night)[poisonerSeat] && !isSweetDrunk(ctx, poisonerSeat, night)) {
       const alive = sched.aliveAtNightStart(night);
-      optionsPerNight[night] = alive
+      const opts = alive
         .map((a, s) => (a && !forbidden?.has(s) ? s : null))
         .filter((s): s is Seat => s !== null);
+      // 가짜 죽음 좀부울(등록상 사망, 실제 생존)도 독살 대상이 될 수 있다
+      if (!alive[sc.currentDemonSeat] && canBePoisonTarget(night, sc.currentDemonSeat) && !forbidden?.has(sc.currentDemonSeat)) {
+        opts.push(sc.currentDemonSeat);
+      }
+      optionsPerNight[night] = opts;
     } else {
       optionsPerNight[night] = [null];
     }
