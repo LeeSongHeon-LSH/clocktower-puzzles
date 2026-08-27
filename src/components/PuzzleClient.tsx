@@ -130,8 +130,18 @@ export function PuzzleClient({ puzzle }: { puzzle: Puzzle }) {
           <span>
             {puzzle.playerCount}인 · {puzzle.nights}일차
           </span>
+          {puzzle.source === "community" && (
+            <span className="font-bold text-team-outsider">사설</span>
+          )}
         </p>
-        <h1 className="font-display text-3xl font-bold">{puzzle.title}</h1>
+        <h1 className="font-display text-3xl font-bold">
+          {puzzle.title}
+          {puzzle.source === "community" && (
+            <span className="ml-2 align-middle text-sm font-normal text-team-outsider">
+              (사설{puzzle.author ? ` · ${puzzle.author}` : ""})
+            </span>
+          )}
+        </h1>
         {puzzle.intro && (
           <p className="max-w-prose text-sm leading-relaxed text-faded">{puzzle.intro}</p>
         )}
