@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit",
+    "typegen": "next typegen",
+    "typecheck": "next typegen && tsc --noEmit",
     "rules:sync": "tsx scripts/fetch-rule-sources.ts",
     "rules:check": "tsx scripts/fetch-rule-sources.ts --check"
   },

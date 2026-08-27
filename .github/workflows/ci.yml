@@ -23,11 +23,17 @@ jobs:
 
       - run: npm ci
 
-      # 전 퍼즐 유일해 검증 + 코덱/규칙 문서 정합성
-      - run: npm test
+      # 전 퍼즐 유일해 검증 + 코덱/규칙 문서 정합성 — 이게 핵심 관문이라 먼저 돌린다
+      - name: 퍼즐 유일해 검증
+        run: npm test
 
-      - run: npm run typecheck
+      # PageProps/LayoutProps는 Next가 생성하는 전역 타입이라
+      # typecheck 스크립트가 next typegen을 먼저 실행한다 (깨끗한 클론에서도 통과)
+      - name: 타입 검사
+        run: npm run typecheck
 
-      - run: npm run lint
+      - name: 린트
+        run: npm run lint
 
-      - run: npm run build
+      - name: 빌드
+        run: npm run build
