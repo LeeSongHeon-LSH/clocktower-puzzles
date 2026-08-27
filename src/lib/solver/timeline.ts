@@ -9,7 +9,7 @@
 // 시나리오가 "밤 n에 반드시/절대 독살돼야 하는 좌석" 제약을 방출하고
 // solve가 주장 검증에서 나온 독살 요구와 병합해 일관성을 판정한다.
 
-import type { GameEvent, RoleId, Seat, SolverPuzzle } from "./types";
+import type { RoleId, Seat, SolverPuzzle } from "./types";
 
 const MINION_ROLES: RoleId[] = ["poisoner", "spy", "baron", "scarletwoman"];
 

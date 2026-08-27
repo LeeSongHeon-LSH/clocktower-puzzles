@@ -2,11 +2,11 @@
 
 // 홈 퍼즐 목록: 난이도 필터 + localStorage 해결 배지
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import type { Difficulty, PuzzleEdition } from "@/lib/puzzles/schema";
 import { EDITION_LABELS } from "@/data/roles";
-import { loadProgress, type ProgressMap } from "@/lib/progress";
+import { useProgress } from "@/lib/progress";
 
 export interface PuzzleSummary {
   id: string;
@@ -27,11 +27,7 @@ const DIFFICULTY_ORDER: Difficulty[] = ["easy", "normal", "hard"];
 
 export function HomeClient({ puzzles }: { puzzles: PuzzleSummary[] }) {
   const [filter, setFilter] = useState<Difficulty | "all">("all");
-  const [progress, setProgress] = useState<ProgressMap>({});
-
-  useEffect(() => {
-    setProgress(loadProgress());
-  }, []);
+  const progress = useProgress();
 
   const shown = puzzles.filter((p) => filter === "all" || p.difficulty === filter);
 

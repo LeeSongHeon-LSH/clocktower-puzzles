@@ -2,12 +2,12 @@
 
 // 퍼즐 플레이 화면: 타운스퀘어 + 주장 열람 + 밤의 기록 + 단계형 질문 + 힌트/해설
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { Puzzle } from "@/lib/puzzles/schema";
 import { seatName } from "@/lib/puzzles/schema";
 import { EDITION_LABELS, ROLES, roleLabel } from "@/data/roles";
 import { renderInfo } from "@/lib/render";
-import { loadProgress, saveProgress } from "@/lib/progress";
+import { loadProgress, saveProgress, useProgress } from "@/lib/progress";
 import { TownSquare, type TownSquareReveal } from "@/components/TownSquare";
 
 const DIFFICULTY_LABELS = { easy: "쉬움", normal: "보통", hard: "어려움" } as const;
@@ -21,15 +21,14 @@ export function PuzzleClient({ puzzle }: { puzzle: Puzzle }) {
   const [wrong, setWrong] = useState(false);
   const [attempts, setAttempts] = useState(0);
   const [hintsOpen, setHintsOpen] = useState(0);
-  const [done, setDone] = useState<Done>(null);
+  const [sessionDone, setSessionDone] = useState<Done>(null);
   const [confirmGiveUp, setConfirmGiveUp] = useState(false);
 
-  // 이미 푼 퍼즐은 재방문 시 해설이 바로 열린다
-  useEffect(() => {
-    const prev = loadProgress()[puzzle.id];
-    if (prev?.status === "solved") setDone("solved");
-    else if (prev?.status === "gaveup") setDone("gaveup");
-  }, [puzzle.id]);
+  // 이미 푼 퍼즐은 재방문 시 해설이 바로 열린다.
+  // 이번 세션의 결과가 있으면 그것이 우선, 없으면 저장된 기록을 따른다.
+  const saved = useProgress()[puzzle.id]?.status;
+  const done: Done =
+    sessionDone ?? (saved === "solved" || saved === "gaveup" ? saved : null);
 
   const deadSeats = useMemo(
     () => new Set(puzzle.events.map((e) => e.seat)),
@@ -50,7 +49,7 @@ export function PuzzleClient({ puzzle }: { puzzle: Puzzle }) {
     : null;
 
   const finish = (status: "solved" | "gaveup", finalAttempts: number) => {
-    setDone(status);
+    setSessionDone(status);
     const prev = loadProgress()[puzzle.id];
     if (prev?.status === "solved") return; // 해결 기록은 격하하지 않는다
     saveProgress(puzzle.id, { status, hintsUsed: hintsOpen, attempts: finalAttempts });
