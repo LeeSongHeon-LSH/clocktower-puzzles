@@ -227,6 +227,8 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
   const gamblerSeat = assignment.indexOf("gambler");
   const tinkerSeat = assignment.indexOf("tinker");
   const mcSeat = assignment.indexOf("moonchild");
+  const gossipSeat = assignment.indexOf("gossip");
+  const mmSeat = assignment.indexOf("mastermind");
   const minstrelSeat = assignment.indexOf("minstrel");
   const tealadySeat = assignment.indexOf("tealady");
   const foolSeat = assignment.indexOf("fool");
@@ -351,22 +353,43 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
     }
     const aliveAtDay = sched.aliveAfterNight(day);
     const aliveBefore = countTrue(aliveAtDay);
-    const s = cloneSt(st);
-    if (executed === s.demon) {
-      // 탕녀 승계만이 게임을 지속시킨다
-      const swOk = swSeat >= 0 && swSeat !== executed && aliveAtDay[swSeat] && !s.became.has(swSeat) && aliveBefore >= 5;
-      if (!swOk) return;
-      if (!forbid_(s, day, swSeat)) return; // 중독된 탕녀는 승계 불가 (밤 day의 독이 낮까지 지속)
-      s.demon = swSeat;
-      s.became.set(swSeat, day + 0.5);
+    let branches: { st: St; demonless: boolean }[];
+    if (executed === st.demon) {
+      branches = [];
+      // (a) 탕녀 승계 — 게임이 계속된다
+      const swOk = swSeat >= 0 && swSeat !== executed && aliveAtDay[swSeat] && !st.became.has(swSeat) && aliveBefore >= 5;
+      if (swOk) {
+        const c = cloneSt(st);
+        if (forbid_(c, day, swSeat)) { // 중독된 탕녀는 승계 불가 (밤 day의 독이 낮까지 지속)
+          c.demon = swSeat;
+          c.became.set(swSeat, day + 0.5);
+          branches.push({ st: c, demonless: false });
+        }
+      }
+      // (b) 마스터마인드 연장 — 게임을 '끝내는' 처형이어야 발동한다 (탕녀가 승계하면 안 끝남).
+      //     하루(밤 하나 + 낮 하나)만 이어지므로 마지막 낮(nights-1) 처형일 때만 현재에 닿는다.
+      const mmOk = mmSeat >= 0 && mmSeat !== executed && aliveAtDay[mmSeat] && !st.became.has(mmSeat)
+        && day === pz.nights - 1 && demonRole !== "vortox";
+      if (mmOk) {
+        const c = cloneSt(st);
+        let ok = forbid_(c, day, mmSeat); // 중독된 마스터마인드는 연장하지 못한다
+        if (ok && swOk) ok = require_(c, day, swSeat); // 승계 가능했던 탕녀는 중독됐던 것
+        if (ok) branches.push({ st: c, demonless: true });
+      }
+      if (branches.length === 0) return;
+    } else {
+      branches = [{ st: cloneSt(st), demonless: false }];
     }
+
+    for (const br of branches) {
+    const s = br.st;
     // 멀쩡한 성자 처형 = 게임 종료 → 처형된 성자는 그 밤 독살됐어야 한다
-    if (assignment[executed] === "saint" && !require_(s, day, executed)) return;
+    if (assignment[executed] === "saint" && !require_(s, day, executed)) continue;
     // 보호가 확실한 찻집 여인의 이웃은 처형으로도 죽지 않는다 → 찻집 여인의 중독 강제
-    if (tlForced(aliveAtDay, executed) && !require_(s, day, tealadySeat)) return;
+    if (tlForced(aliveAtDay, executed) && !require_(s, day, tealadySeat)) continue;
     // 회피를 쓰지 않은 어릿광대는 처형으로 죽지 않는다 → 그 밤의 중독 강제
-    if (executed === foolSeat && !s.foolDodgeUsed && !require_(s, day, foolSeat)) return;
-    if (aliveBefore - 1 <= 2) return;
+    if (executed === foolSeat && !s.foolDodgeUsed && !require_(s, day, foolSeat)) continue;
+    if (aliveBefore - 1 <= 2) continue;
 
     // 트리거 계산: 처형으로 죽은 좌석의 토큰 등록
     const token = tokenAt(s.became, executed, day);
@@ -382,21 +405,23 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
 
     if (minstrelMode !== "none") {
       const act = cloneSt(s);
-      if (forbid_(act, day, minstrelSeat)) doNight(act, day + 1, gfTrigger, true); // 멀쩡한 음유시인 → 전원 취함
+      if (forbid_(act, day, minstrelSeat)) doNight(act, day + 1, gfTrigger, true, br.demonless); // 멀쩡한 음유시인 → 전원 취함
       if (minstrelMode === "must") {
         const poi = cloneSt(s);
-        if (require_(poi, day, minstrelSeat)) doNight(poi, day + 1, gfTrigger, false);
+        if (require_(poi, day, minstrelSeat)) doNight(poi, day + 1, gfTrigger, false, br.demonless);
       } else {
-        doNight(s, day + 1, gfTrigger, false); // 하수인으로 등록되지 않은 것으로 (∃)
+        doNight(s, day + 1, gfTrigger, false, br.demonless); // 하수인으로 등록되지 않은 것으로 (∃)
       }
-      return;
+      continue;
     }
-    doNight(s, day + 1, gfTrigger, false);
+    doNight(s, day + 1, gfTrigger, false, br.demonless);
+    }
   }
 
   type Mut = (s: St) => boolean;
 
-  function doNight(st: St, night: number, trigger: Trigger, minstrelActive: boolean) {
+  /** demonless: 마스터마인드 연장 밤 — 데몬이 죽어 있어 데몬 킬도, 킬 부재 설명도 없다 */
+  function doNight(st: St, night: number, trigger: Trigger, minstrelActive: boolean, demonless = false) {
     st.demonNights[night] = st.demon;
     const deaths = sched.diedAtNight(night);
     if (night === 1) {
@@ -405,7 +430,7 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
       doDay(st, 1);
       return;
     }
-    if (!sched.aliveAtNightStart(night)[st.demon]) return;
+    if (!demonless && !sched.aliveAtNightStart(night)[st.demon]) return;
 
     if (minstrelActive) {
       // 전원 취함: 킬도, 독살도, 유효한 정보도 없는 밤
@@ -449,14 +474,14 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
       return nb !== null && nb.every((x) => isGoodTeam(assignment[x]) || assignment[x] === "spy");
     })();
 
-    for (const impKill of [...deaths, null] as (Seat | null)[]) {
+    for (const impKill of (demonless ? [null] : [...deaths, null]) as (Seat | null)[]) {
       const rest = deaths.filter((d) => d !== impKill);
 
       // ── 남은 죽음들을 {암살자, 대부, 할머니 연쇄, 도박 오답, 땜장이}에 귀속 ──
       // 각 귀속은 상태 변형(Mut) 목록으로 표현하고, 완성된 조합마다 임프 분기를 돈다.
       interface Plan { muts: Mut[]; gfKilled: boolean; demonByOther: boolean }
       const plans: Plan[] = [];
-      const collect = (idx: number, usedAs: boolean, usedGf: boolean, usedLink: boolean, usedMc: boolean, muts: Mut[], gfKilled: boolean, demonByOther: boolean) => {
+      const collect = (idx: number, usedAs: boolean, usedGf: boolean, usedLink: boolean, usedMc: boolean, usedGossip: boolean, muts: Mut[], gfKilled: boolean, demonByOther: boolean) => {
         if (idx === rest.length) {
           plans.push({ muts, gfKilled, demonByOther });
           return;
@@ -470,7 +495,7 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
           return true;
         };
         if (assassinReady && !usedAs) {
-          collect(idx + 1, true, usedGf, usedLink, usedMc, [...muts, (s) => {
+          collect(idx + 1, true, usedGf, usedLink, usedMc, usedGossip, [...muts, (s) => {
             if (!forbid_(s, night, assassinSeat)) return false; // 중독된 암살자는 죽이지 못한다
             s.assassinUsed = true;
             s.assassinNight = night;
@@ -478,7 +503,7 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
           }], gfKilled, demonByOther || d === demon);
         }
         if (gfReady && trigger !== "none" && !usedGf) {
-          collect(idx + 1, usedAs, true, usedLink, usedMc, [...muts, (s) => {
+          collect(idx + 1, usedAs, true, usedLink, usedMc, usedGossip, [...muts, (s) => {
             if (!forbid_(s, night, gfSeat)) return false;
             s.godfatherNights.push(night);
             return sideEffects(true)(s);
@@ -486,7 +511,7 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
         }
         if (d === gmSeat && !usedLink && impKill !== null && impKill !== gmSeat
           && (isGoodTeam(assignment[impKill]) || assignment[impKill] === "spy")) {
-          collect(idx + 1, usedAs, usedGf, true, usedMc, [...muts, (s) => {
+          collect(idx + 1, usedAs, usedGf, true, usedMc, usedGossip, [...muts, (s) => {
             if (s.grandchild === null) s.grandchild = impKill; // 미확정 손주를 여기서 확정 (∃)
             else if (s.grandchild !== impKill) return false;
             if (!forbid_(s, night, gmSeat)) return false; // 중독된 할머니는 연쇄 사망하지 않는다
@@ -494,13 +519,13 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
           }], gfKilled, demonByOther);
         }
         if (d === gamblerSeat && gamble !== undefined && !gambleMustCorrect) {
-          collect(idx + 1, usedAs, usedGf, usedLink, usedMc, [...muts, (s) => {
+          collect(idx + 1, usedAs, usedGf, usedLink, usedMc, usedGossip, [...muts, (s) => {
             if (!forbid_(s, night, gamblerSeat)) return false; // 중독된 도박사는 오답으로도 죽지 않는다
             return sideEffects(false)(s);
           }], gfKilled, demonByOther);
         }
         if (d === tinkerSeat) {
-          collect(idx + 1, usedAs, usedGf, usedLink, usedMc, [...muts, (s) => {
+          collect(idx + 1, usedAs, usedGf, usedLink, usedMc, usedGossip, [...muts, (s) => {
             if (!forbid_(s, night, tinkerSeat)) return false; // 중독된 땜장이는 텔러가 죽일 수 없다
             return sideEffects(false)(s);
           }], gfKilled, demonByOther);
@@ -508,14 +533,22 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
         // 달의 자손의 저주: 어젯밤(또는 어제 낮 처형으로) 죽은 달의 자손이 선한 플레이어를
         // 지목했다 (∃) — 선으로 등록되는 좌석만 저주로 죽을 수 있고, 발동은 한 번뿐
         if (night === mcCurseNight && !usedMc && (isGoodTeam(assignment[d]) || assignment[d] === "spy")) {
-          collect(idx + 1, usedAs, usedGf, usedLink, true, [...muts, (s) => {
+          collect(idx + 1, usedAs, usedGf, usedLink, true, usedGossip, [...muts, (s) => {
             // 죽음을 알고 지목하던 시점(전날 밤~낮)에 멀쩡했어야 저주가 성립한다
             if (!forbid_(s, night - 1, mcSeat)) return false;
             return sideEffects(true)(s);
           }], gfKilled, demonByOther);
         }
+        // 소문꾼: 어제 낮의 공개 발언이 참이었다면(∃ — 발언 내용은 기록되지 않는다)
+        // 그 밤 텔러가 고른 1명이 죽는다. 밤당 발언 하나 → 한 번만.
+        if (gossipSeat >= 0 && aliveStart[gossipSeat] && !usedGossip) {
+          collect(idx + 1, usedAs, usedGf, usedLink, usedMc, true, [...muts, (s) => {
+            if (!forbid_(s, night, gossipSeat)) return false; // 취하거나 중독된 소문꾼은 죽이지 못한다
+            return sideEffects(true)(s);
+          }], gfKilled, demonByOther || d === demon);
+        }
       };
-      collect(0, false, false, false, false, [], false, false);
+      collect(0, false, false, false, false, false, [], false, false);
 
       for (const plan of plans) {
         const base = cloneSt(st);
@@ -530,7 +563,9 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
 
         // ── 임프 ──
         const impVariants: Mut[] = [];
-        if (impKill !== null) {
+        if (demonless) {
+          impVariants.push(() => true); // 데몬이 죽은 연장 밤 — 킬도, 킬 부재의 설명도 없다
+        } else if (impKill !== null) {
           impVariants.push((s) => {
             if (!forbid_(s, night, demon)) return false; // 킬이 성공했으니 데몬은 중독 아님
             // 봉쇄됐어야 하는 밤에 킬이 났다 → 구마사제가 중독됐던 것

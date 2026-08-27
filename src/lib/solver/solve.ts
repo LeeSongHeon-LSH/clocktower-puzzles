@@ -50,6 +50,7 @@ function assignableRoles(pz: SolverPuzzle): RoleId[] {
   for (const c of pz.claims) out.add(c.role);
   if (pz.rolePool.includes("drunk")) out.add("drunk");
   if (pz.rolePool.includes("mutant")) out.add("mutant");
+  if (pz.rolePool.includes("lunatic")) out.add("lunatic");
   return [...out];
 }
 
@@ -57,6 +58,10 @@ function validatePuzzle(pz: SolverPuzzle): Claim[] {
   const claimBySeat: Claim[] = [];
   if (new Set(pz.rolePool).size !== pz.rolePool.length) throw new Error("역할 풀에 중복이 있습니다");
   if (!pz.rolePool.some((r) => ROLES[r].team === "demon")) throw new Error("역할 풀에 악마가 없습니다");
+  if (pz.rolePool.includes("vortox") && pz.rolePool.includes("mastermind")) {
+    // 연장 밤에는 죽은 보르톡스의 거짓 강제가 풀리는데 그 조합 처리가 아직 없다 — 건전성 위해 거부
+    throw new Error("보르톡스와 마스터마인드는 아직 한 퍼즐에서 함께 지원되지 않습니다");
+  }
   const unmodeled = assignableRoles(pz).filter((r) => !SOLVER_ROLES.includes(r));
   if (unmodeled.length > 0) {
     throw new Error(`솔버가 아직 모르는 역할입니다: ${unmodeled.map((r) => ROLES[r].ko).join(", ")}`);
@@ -65,8 +70,8 @@ function validatePuzzle(pz: SolverPuzzle): Claim[] {
     if (c.seat < 0 || c.seat >= pz.playerCount) throw new Error(`잘못된 좌석: ${c.seat}`);
     if (claimBySeat[c.seat]) throw new Error(`좌석 ${c.seat}의 주장이 중복`);
     if (!pz.rolePool.includes(c.role)) throw new Error(`풀에 없는 역할 주장: ${c.role}`);
-    if (c.role === "drunk" || c.role === "mutant" || ROLES[c.role].team === "demon") {
-      // 광인은 외부인임을 감추려 마을 사람을 사칭한다 — 광인이라고 공개 주장하지 않는다
+    if (c.role === "drunk" || c.role === "mutant" || c.role === "lunatic" || ROLES[c.role].team === "demon") {
+      // 숨은 외부인(주정뱅이·광인·루나틱)은 자기 정체를 모르거나 감춘다 — 공개 주장하지 않는다
       throw new Error(`주장할 수 없는 역할: ${c.role}`);
     }
     for (const info of c.info) {
@@ -119,9 +124,9 @@ export function solve(pz: SolverPuzzle): World[] {
           const outsiderClaims = goodSeats.filter((s) => ROLES[claimBySeat[s].role].team === "outsider");
           const need = comp.outsider - outsiderClaims.length;
           if (need < 0 || need > 1) continue;
-          // 숨은 외부인: 주정뱅이(자기 역할을 믿음) 또는 광인(외부인임을 알고 사칭) —
-          // 마을 사람을 주장하는 선한 좌석 하나가 실제로는 이들일 수 있다
-          const hiddenRoles = (["drunk", "mutant"] as RoleId[]).filter((r) => pz.rolePool.includes(r));
+          // 숨은 외부인: 주정뱅이(자기 역할을 믿음), 광인(외부인임을 알고 사칭),
+          // 루나틱(자기가 데몬인 줄 알고 허세) — 마을 사람을 주장하는 선한 좌석 하나가 실제로는 이들일 수 있다
+          const hiddenRoles = (["drunk", "mutant", "lunatic"] as RoleId[]).filter((r) => pz.rolePool.includes(r));
           if (need === 1 && hiddenRoles.length === 0) continue;
           const hiddenChoices: ({ seat: Seat; role: RoleId } | null)[] = need === 1
             ? goodSeats
@@ -201,7 +206,7 @@ function tryWorld(
   // 선한 좌석(주정뱅이 포함)의 정보 수집 + 구조 검증 (깨어날 수 없었다면 그 주장은 참일 수 없다)
   const infos: GoodInfo[] = [];
   for (const s of goodSeats) {
-    if (assignment[s] === "mutant") continue; // 광인의 주장은 전부 날조 — 구조도 내용도 검증하지 않는다
+    if (assignment[s] === "mutant" || assignment[s] === "lunatic") continue; // 광인·루나틱의 주장은 전부 날조 — 구조도 내용도 검증하지 않는다
     for (const info of claimBySeat[s].info) {
       if (!info.data) continue;
       if (!wakes(ctx, s, info.night)) return null;

@@ -136,6 +136,9 @@ export function wakes(ctx: Ctx, seat: Seat, night: number): boolean {
     case "witch":
       // 밤마다 저주 대상을 고른다 — 생존자가 3명 이하면 능력을 잃고 깨어나지 않는다
       return aliveStart[seat] && aliveStart.filter(Boolean).length > 3;
+    case "lunatic":
+      // 자기가 데몬인 줄 알고 데몬처럼 깨어나 '킬'을 고른다 (실제로는 아무 일도 없다)
+      return night >= 2 && aliveStart[seat];
     case "imp":
     case "vortox":
     case "nodashii": {
