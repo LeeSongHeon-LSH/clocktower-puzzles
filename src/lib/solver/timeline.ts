@@ -226,6 +226,7 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
   const swSeat = assignment.indexOf("scarletwoman");
   const gamblerSeat = assignment.indexOf("gambler");
   const tinkerSeat = assignment.indexOf("tinker");
+  const mcSeat = assignment.indexOf("moonchild");
   const minstrelSeat = assignment.indexOf("minstrel");
   const tealadySeat = assignment.indexOf("tealady");
   const foolSeat = assignment.indexOf("fool");
@@ -234,6 +235,19 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
   function actionData(seat: Seat, type: "monk" | "exorcist" | "gambler", night: number) {
     return claimBySeat[seat]?.info.find((i) => i.night === night && i.data?.type === type)?.data;
   }
+
+  // 달의 자손의 저주가 발동할 수 있는 밤: 죽음(밤 n → 다음 날 알게 됨 → 밤 n+1),
+  // 처형(낮 d → 즉시 알게 됨 → 밤 d+1). 사망 시점은 이벤트로 고정이라 밤 하나로 정해진다.
+  const mcCurseNight: number = (() => {
+    if (mcSeat < 0) return -1;
+    for (let n = 2; n <= pz.nights; n++) {
+      if (sched.diedAtNight(n).includes(mcSeat)) return n + 1;
+    }
+    for (let d = 1; d <= pz.nights - 1; d++) {
+      if (sched.executedOnDay(d) === mcSeat) return d + 1;
+    }
+    return -1;
+  })();
 
   const gmClaimTarget: Seat | null = (() => {
     if (gmSeat < 0) return null;
@@ -442,7 +456,7 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
       // 각 귀속은 상태 변형(Mut) 목록으로 표현하고, 완성된 조합마다 임프 분기를 돈다.
       interface Plan { muts: Mut[]; gfKilled: boolean; demonByOther: boolean }
       const plans: Plan[] = [];
-      const collect = (idx: number, usedAs: boolean, usedGf: boolean, usedLink: boolean, muts: Mut[], gfKilled: boolean, demonByOther: boolean) => {
+      const collect = (idx: number, usedAs: boolean, usedGf: boolean, usedLink: boolean, usedMc: boolean, muts: Mut[], gfKilled: boolean, demonByOther: boolean) => {
         if (idx === rest.length) {
           plans.push({ muts, gfKilled, demonByOther });
           return;
@@ -456,7 +470,7 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
           return true;
         };
         if (assassinReady && !usedAs) {
-          collect(idx + 1, true, usedGf, usedLink, [...muts, (s) => {
+          collect(idx + 1, true, usedGf, usedLink, usedMc, [...muts, (s) => {
             if (!forbid_(s, night, assassinSeat)) return false; // 중독된 암살자는 죽이지 못한다
             s.assassinUsed = true;
             s.assassinNight = night;
@@ -464,7 +478,7 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
           }], gfKilled, demonByOther || d === demon);
         }
         if (gfReady && trigger !== "none" && !usedGf) {
-          collect(idx + 1, usedAs, true, usedLink, [...muts, (s) => {
+          collect(idx + 1, usedAs, true, usedLink, usedMc, [...muts, (s) => {
             if (!forbid_(s, night, gfSeat)) return false;
             s.godfatherNights.push(night);
             return sideEffects(true)(s);
@@ -472,7 +486,7 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
         }
         if (d === gmSeat && !usedLink && impKill !== null && impKill !== gmSeat
           && (isGoodTeam(assignment[impKill]) || assignment[impKill] === "spy")) {
-          collect(idx + 1, usedAs, usedGf, true, [...muts, (s) => {
+          collect(idx + 1, usedAs, usedGf, true, usedMc, [...muts, (s) => {
             if (s.grandchild === null) s.grandchild = impKill; // 미확정 손주를 여기서 확정 (∃)
             else if (s.grandchild !== impKill) return false;
             if (!forbid_(s, night, gmSeat)) return false; // 중독된 할머니는 연쇄 사망하지 않는다
@@ -480,19 +494,28 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
           }], gfKilled, demonByOther);
         }
         if (d === gamblerSeat && gamble !== undefined && !gambleMustCorrect) {
-          collect(idx + 1, usedAs, usedGf, usedLink, [...muts, (s) => {
+          collect(idx + 1, usedAs, usedGf, usedLink, usedMc, [...muts, (s) => {
             if (!forbid_(s, night, gamblerSeat)) return false; // 중독된 도박사는 오답으로도 죽지 않는다
             return sideEffects(false)(s);
           }], gfKilled, demonByOther);
         }
         if (d === tinkerSeat) {
-          collect(idx + 1, usedAs, usedGf, usedLink, [...muts, (s) => {
+          collect(idx + 1, usedAs, usedGf, usedLink, usedMc, [...muts, (s) => {
             if (!forbid_(s, night, tinkerSeat)) return false; // 중독된 땜장이는 텔러가 죽일 수 없다
             return sideEffects(false)(s);
           }], gfKilled, demonByOther);
         }
+        // 달의 자손의 저주: 어젯밤(또는 어제 낮 처형으로) 죽은 달의 자손이 선한 플레이어를
+        // 지목했다 (∃) — 선으로 등록되는 좌석만 저주로 죽을 수 있고, 발동은 한 번뿐
+        if (night === mcCurseNight && !usedMc && (isGoodTeam(assignment[d]) || assignment[d] === "spy")) {
+          collect(idx + 1, usedAs, usedGf, usedLink, true, [...muts, (s) => {
+            // 죽음을 알고 지목하던 시점(전날 밤~낮)에 멀쩡했어야 저주가 성립한다
+            if (!forbid_(s, night - 1, mcSeat)) return false;
+            return sideEffects(true)(s);
+          }], gfKilled, demonByOther);
+        }
       };
-      collect(0, false, false, false, [], false, false);
+      collect(0, false, false, false, false, [], false, false);
 
       for (const plan of plans) {
         const base = cloneSt(st);

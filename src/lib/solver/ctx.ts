@@ -131,7 +131,11 @@ export function wakes(ctx: Ctx, seat: Seat, night: number): boolean {
     }
     case "poisoner":
     case "spy":
+    case "devilsadvocate": // 밤마다 처형 면역 대상을 고른다 (밤1 포함)
       return aliveStart[seat];
+    case "witch":
+      // 밤마다 저주 대상을 고른다 — 생존자가 3명 이하면 능력을 잃고 깨어나지 않는다
+      return aliveStart[seat] && aliveStart.filter(Boolean).length > 3;
     case "imp":
     case "vortox":
     case "nodashii": {
