@@ -25,8 +25,6 @@ src/
     rules/page.tsx        # 규칙 허브: 취함·중독 + 역할 목록 (§8)
     rules/drunk-and-poison/page.tsx  # 취함·중독 해설 + 알마낙 원문 출처
     rules/role/[id]/page.tsx         # 역할별 규칙 문서 (공식 능력 문구 + 해설)
-    admin/page.tsx        # 역할명 편집 (비밀번호 잠금)
-    api/admin/roles/route.ts  # 역할명 저장 API (GitHub 커밋)
   components/             # TownSquare, InfoLog, QuestionPanel, HintBox, Walkthrough …
   lib/
     solver/               # 룰 엔진 (퍼즐 검증용, UI 비노출)
@@ -35,7 +33,7 @@ src/
       solve.ts            # 전수 탐색 + 제약 평가
     progress.ts           # localStorage 풀이 기록
   data/
-    roles.ts              # 역할 사전: id → { en, ko, team, edition } (관리자 편집 대상)
+    roles.ts              # 역할 사전: id → { en, ko, team, edition } (공식 번역 고정)
     rules.ts              # 취함·중독 한국어 서술 (직접 작성, 출처 키 참조)
     role-notes.ts         # 역할별 한국어 해설 (직접 작성)
     rule-sources.generated.ts  # 알마낙 원문 인용 (자동 생성 — 직접 편집 금지)
@@ -43,8 +41,6 @@ src/
     puzzles/
       index.ts            # 퍼즐 레지스트리
       tb-01.ts …          # 문제당 1파일
-  lib/
-    rate-limit.ts         # 관리자 API 브루트포스 방지 (실패 5회 → 15분 차단)
 scripts/
   fetch-rule-sources.ts   # 공식 위키 API에서 규칙 원문 대조·생성 (§8)
 tests/
@@ -99,7 +95,7 @@ export const ROLES = {
 ```
 
 - UI 표기는 항상 `ko(en)` 형식.
-- 이 파일이 관리자 페이지의 편집 대상 (GitHub 커밋으로 갱신, §5).
+- 표기는 공식 번역에 고정한다. 바꿔야 하면 이 파일을 직접 커밋한다 (§5).
 
 ### 3.3 풀이 기록 (localStorage)
 
@@ -133,18 +129,17 @@ clocktower-puzzles:progress = {
 - 인원수 ≤ 10, 등장 역할 풀을 퍼즐마다 명시(스크립트 전체가 아니라 "이 퍼즐에 나올 수 있는 역할" 목록)하여 탐색 공간을 통제한다.
 - 전수 탐색으로 충분한 규모를 유지한다. 퍼즐이 커져서 느려지면 그때 가지치기 도입.
 
-## 5. 역할명 편집 플로우 (관리자)
+## 5. 역할명 변경 (런타임 편집 없음)
 
-```
-관리자 페이지(/admin, ADMIN_PASSWORD 입력)
-  → PUT /api/admin/roles  (수정된 ko 표기 목록)
-  → 서버가 GitHub Contents API로 src/data/roles.ts 커밋 (GITHUB_TOKEN)
-  → GitHub push → Vercel 자동 재배포 (~1분)
-```
+역할명은 공식 한국어 번역을 그대로 따르므로 런타임에 바꿀 이유가 없다. 바꿀 일이
+생기면 `src/data/roles.ts`를 직접 고쳐 커밋한다 (푸시 = 자동 재배포).
 
-- 리포가 유일한 진실 원본. 런타임 DB 없음.
-- 환경변수: `ADMIN_PASSWORD`, `GITHUB_TOKEN` (repo 권한, Vercel에 설정).
-- 로컬 개발 시에는 GitHub 커밋 대신 파일 직접 수정도 가능(수동).
+- **서버에 인증도 비밀 값도 두지 않는다.** 앱은 환경변수를 하나도 요구하지 않는다.
+- 과거에는 `/admin` 페이지가 `GITHUB_TOKEN`으로 이 파일을 커밋했으나 2026-08-27 제거했다
+  (공식 표기 고정 원칙과 모순 + repo 쓰기 토큰을 서버에 둘 이유가 사라짐). 함께 사라진 것:
+  `/admin`, `/api/admin/roles`, `src/lib/rate-limit.ts`, `ADMIN_PASSWORD`,
+  `GITHUB_TOKEN`, `GITHUB_REPO`. **Vercel 환경변수에서도 지울 것.**
+- 사용자 피드백은 앱 밖(외부 채널)에서 받는다. 앱은 읽기 전용을 유지한다.
 
 ## 6. 테스트·품질 게이트
 
@@ -156,7 +151,7 @@ clocktower-puzzles:progress = {
 
 - GitHub private repo `LeeSongHeon-LSH/clocktower-puzzles` → Vercel 연동(사용자가 1회 클릭).
 - `main` push = 프로덕션 배포.
-- 퍼즐 데이터는 빌드 시점에 정적 포함(SSG). 서버 런타임이 필요한 것은 `/api/admin/*` 뿐.
+- **전 페이지가 정적이다.** 서버 라우트도 API도 없다 — 순수 정적 배포로 CDN에서 전부 서빙된다.
 - 부하 특성: 100 동시 연결 기준 홈 4,500 req/s, 퍼즐 3,450 req/s (에러 0, p99 ≤ 53ms).
   전 페이지가 정적이라 실서비스에서는 Vercel 엣지 캐시가 대부분 처리한다.
 
@@ -185,7 +180,7 @@ scripts/fetch-rule-sources.ts      두 공식 소스에서 대조·생성
    **앵커가 사라지면 실패한다** — 공식 문구가 개정됐다는 신호이므로 한국어 서술도 다시 검토해야 한다.
 2. **공식 한국어 번역** `ThePandemoniumInstitute/botc-translations`의 `game/ko.json` —
    역할별 능력 문구를 받고, `roles.ts`의 한국어 표기가 공식과 일치하는지 대조한다.
-   불일치는 **경고**로만 알린다(관리자 페이지에서 의도적으로 바꿀 수 있으므로).
+   불일치는 **경고**로만 알린다 — 공식 번역 개정 중일 수 있어 최종 판단은 사람이 한다.
 
 - `npm run rules:sync` — 대조 후 생성 파일 갱신. `npm run rules:check` — 대조만(파일 미변경).
 - 역할명·에디션명은 공식 번역을 그대로 따른다 (REQUIREMENTS §3). 현재 예외 없음.

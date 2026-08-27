@@ -380,7 +380,7 @@ export type RuleSourceKey = keyof typeof RULE_SOURCES;
     );
   }
 
-  // 표기 불일치는 경고로만 알린다 — roles.ts는 관리자 페이지에서 의도적으로 바꿀 수 있다.
+  // 표기 불일치는 경고로만 알린다 — 공식 번역이 개정되는 중일 수도 있으므로 판단은 사람이 한다.
   if (roles.mismatches.length > 0) {
     console.warn(
       `\n⚠ roles.ts의 한국어 표기 ${roles.mismatches.length}건이 공식 번역과 다릅니다:`,

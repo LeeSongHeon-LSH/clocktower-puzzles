@@ -1,4 +1,4 @@
-// 역할 사전 — UI 표기의 유일한 원본. 관리자 페이지(/admin)가 이 파일을 GitHub 커밋으로 갱신한다.
+// 역할 사전 — UI 표기의 유일한 원본. 이 파일을 직접 고쳐 커밋한다(런타임 편집 기능 없음).
 // UI 표기는 항상 `한국어(영어)` 형식을 쓴다: roleLabel() 참조.
 //
 // 한국어 표기 기준: Pandemonium Institute 공식 번역(github.com/ThePandemoniumInstitute/botc-translations
