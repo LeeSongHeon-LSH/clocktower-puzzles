@@ -43,8 +43,10 @@ export default function AboutPage() {
       <section className="space-y-3">
         <h2 className="font-display text-xl font-bold">기록</h2>
         <p className="max-w-prose text-faded">
-          풀이 기록(해결 배지, 힌트 사용)은 이 브라우저의 localStorage에만
-          저장됩니다. 서버에는 아무것도 저장되지 않습니다.
+          풀이 기록(해결 배지, 힌트 사용)과 좌석에 남긴 메모는 이 브라우저의
+          localStorage에만 저장됩니다. 서버에는 아무것도 저장되지 않고, 계정도
+          이용자 구분도 없어서 같은 기기를 함께 쓰지 않는 한 다른 사람의 화면에
+          나타나지 않습니다.
         </p>
       </section>
 

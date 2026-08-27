@@ -8,7 +8,8 @@ import { seatName } from "@/lib/puzzles/schema";
 import { EDITION_LABELS, ROLES, roleLabel } from "@/data/roles";
 import { renderInfo } from "@/lib/render";
 import { loadProgress, saveProgress, useProgress } from "@/lib/progress";
-import { TownSquare, type TownSquareReveal } from "@/components/TownSquare";
+import { MAX_MEMO, clearNotes, saveNote, useSeatNotes } from "@/lib/notes";
+import { MARKS, TownSquare, type SeatAnnotation, type TownSquareReveal } from "@/components/TownSquare";
 
 const DIFFICULTY_LABELS = { easy: "쉬움", normal: "보통", hard: "어려움" } as const;
 
@@ -35,6 +36,9 @@ export function PuzzleClient({ puzzle }: { puzzle: Puzzle }) {
     [puzzle.events],
   );
 
+  // 좌석 메모는 이 브라우저에만 남는다 — 계정도 사용자 구분도 없다.
+  const notes = useSeatNotes(puzzle.id);
+
   const claimBySeat = useMemo(() => {
     const m = new Map<number, Puzzle["claims"][number]>();
     for (const c of puzzle.claims) m.set(c.seat, c);
@@ -44,8 +48,29 @@ export function PuzzleClient({ puzzle }: { puzzle: Puzzle }) {
   const demonSeat =
     puzzle.currentDemonSeat ?? puzzle.solution.findIndex((r) => r === "imp");
 
+  /**
+   * 토큰에 얹는 글. 주장 역할은 한글만 쓴다 — 토큰이 좁아 병기가 안 들어간다
+   * (요구사항 §3의 도식 예외). 전체 표기는 좌석을 누르면 아래 카드에 나온다.
+   */
+  const annotations: SeatAnnotation[] = useMemo(
+    () =>
+      Array.from({ length: puzzle.playerCount }, (_, seat) => {
+        const claim = claimBySeat.get(seat);
+        return {
+          claim: claim ? ROLES[claim.role].ko : undefined,
+          memo: notes[seat]?.memo,
+          mark: notes[seat]?.mark,
+        };
+      }),
+    [puzzle.playerCount, claimBySeat, notes],
+  );
+
   const reveal: TownSquareReveal | null = done
-    ? { teams: puzzle.solution.map((r) => ROLES[r].team), demonSeat }
+    ? {
+        teams: puzzle.solution.map((r) => ROLES[r].team),
+        demonSeat,
+        roles: puzzle.solution.map((r) => ROLES[r].ko),
+      }
     : null;
 
   const finish = (status: "solved" | "gaveup", finalAttempts: number) => {
@@ -111,6 +136,7 @@ export function PuzzleClient({ puzzle }: { puzzle: Puzzle }) {
   }, [puzzle]);
 
   const selectedClaim = selectedSeat != null ? claimBySeat.get(selectedSeat) : undefined;
+  const note = selectedClaim ? notes[selectedClaim.seat] : undefined;
 
   return (
     <article className="space-y-8">
@@ -158,6 +184,7 @@ export function PuzzleClient({ puzzle }: { puzzle: Puzzle }) {
           onSelect={(s) => setSelectedSeat((prev) => (prev === s ? null : s))}
           reveal={reveal}
           centerLabel={`${puzzle.nights}일차 낮`}
+          annotations={annotations}
         />
         <div className="rounded-lg border border-panel-edge bg-panel p-4 text-sm">
           {selectedClaim ? (
@@ -184,9 +211,56 @@ export function PuzzleClient({ puzzle }: { puzzle: Puzzle }) {
               ) : (
                 <p className="text-faded">받은 정보 주장이 없다.</p>
               )}
+
+              {/* 내 메모 — 이 브라우저에만 남는다 */}
+              <div className="space-y-2 border-t border-panel-edge pt-3">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="mr-1 text-xs text-faded">내 표시</span>
+                  {MARKS.map((m) => {
+                    const on = note?.mark === m.id;
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        aria-pressed={on}
+                        onClick={() =>
+                          saveNote(puzzle.id, selectedClaim.seat, {
+                            ...note,
+                            mark: on ? undefined : m.id,
+                          })
+                        }
+                        style={on ? { borderColor: m.color, color: m.color } : undefined}
+                        className={`rounded-full border px-2.5 py-1 text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brass ${
+                          on ? "bg-panel-edge/40" : "border-panel-edge text-faded hover:text-parchment"
+                        }`}
+                      >
+                        <span aria-hidden className="mr-1">{m.symbol}</span>
+                        {m.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="flex items-center gap-2">
+                  <label htmlFor="seat-memo" className="text-xs text-faded">
+                    메모
+                  </label>
+                  <input
+                    id="seat-memo"
+                    value={note?.memo ?? ""}
+                    maxLength={MAX_MEMO}
+                    placeholder={`${MAX_MEMO}자까지 — 토큰에 그대로 보인다`}
+                    onChange={(e) =>
+                      saveNote(puzzle.id, selectedClaim.seat, { ...note, memo: e.target.value })
+                    }
+                    className="w-full max-w-56 rounded border border-panel-edge bg-ink px-2 py-1 text-sm text-parchment placeholder:text-faded/60"
+                  />
+                </div>
+              </div>
             </div>
           ) : (
-            <p className="text-center text-faded">좌석을 눌러 그 사람의 주장을 확인하라.</p>
+            <p className="text-center text-faded">
+              좌석을 눌러 그 사람의 주장을 보고, 표시와 메모를 남겨라.
+            </p>
           )}
         </div>
         <details className="rounded-lg border border-panel-edge bg-panel">
@@ -215,6 +289,17 @@ export function PuzzleClient({ puzzle }: { puzzle: Puzzle }) {
             ))}
           </ul>
         </details>
+        {Object.keys(notes).length > 0 && (
+          <p className="text-right">
+            <button
+              type="button"
+              onClick={() => clearNotes(puzzle.id)}
+              className="text-xs text-faded underline-offset-4 hover:text-blood hover:underline"
+            >
+              이 문제의 메모 {Object.keys(notes).length}개 지우기
+            </button>
+          </p>
+        )}
       </section>
 
       {/* ── 밤의 기록 ── */}

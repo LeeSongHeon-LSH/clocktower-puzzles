@@ -37,6 +37,7 @@ src/
       roles/              # 역할별 제약 로직 (1역할 1파일)
       solve.ts            # 전수 탐색 + 제약 평가
     progress.ts           # localStorage 풀이 기록
+    notes.ts              # localStorage 좌석 메모 (표시 + 4자 메모)
   data/
     roles.ts              # 역할 사전: id → { en, ko, team, edition } (공식 번역 고정)
     rules.ts              # 취함·중독 한국어 서술 (직접 작성, 출처 키 참조)
@@ -105,17 +106,23 @@ export const ROLES = {
 - UI 표기는 항상 `ko(en)` 형식.
 - 표기는 공식 번역에 고정한다. 바꿔야 하면 이 파일을 직접 커밋한다 (§5).
 
-### 3.3 풀이 기록 (localStorage)
+### 3.3 풀이 기록 · 좌석 메모 (localStorage)
 
 ```
-clocktower-puzzles:progress = {
-  [puzzleId]: { solved: boolean, firstTry: boolean }
+clocktower-puzzles-progress-v1 = {
+  [puzzleId]: { status, hintsUsed, attempts }
+}
+clocktower-puzzles-notes-v1 = {
+  [puzzleId]: { [seat]: { mark?: "trust"|"doubt"|"lie"|"evil", memo?: string } }
 }
 ```
 
+키를 나눈 이유: 메모는 풀이 기록과 수명이 다르다 (문제별로 지울 수 있어야 한다).
+서버도 계정도 없으므로 둘 다 그 브라우저 밖으로 나가지 않는다.
+
 ## 4. 솔버 설계
 
-목적: **퍼즐이 유일해임을 전수 탐색으로 증명**하는 개발용 도구. UI에 노출하지 않는다. 장기적으로 텔러 앱의 룰 엔진 기반.
+목적: **퍼즐이 유일해임을 전수 탐색으로 증명**하는 개발용 도구. UI에 노출하지 않는다.
 
 ### 4.1 모델
 

@@ -5,6 +5,7 @@
 
 import type { Team } from "@/lib/solver/types";
 import { seatName } from "@/lib/puzzles/schema";
+import type { SeatMark } from "@/lib/notes";
 
 const TEAM_COLOR: Record<Team, string> = {
   townsfolk: "var(--team-townsfolk)",
@@ -16,6 +17,28 @@ const TEAM_COLOR: Record<Team, string> = {
 export interface TownSquareReveal {
   teams: Team[];
   demonSeat: number;
+  /** 정답 공개 뒤 토큰에 실을 실제 역할(한글). 주장 대신 이쪽을 보여준다. */
+  roles?: string[];
+}
+
+/**
+ * 좌석 표시 순서와 색. 풀이자가 누르는 버튼(PuzzleClient)과 토큰 배지가
+ * 같은 기호·같은 색을 쓰도록 한 곳에서 정의한다.
+ */
+export const MARKS: { id: SeatMark; symbol: string; label: string; color: string }[] = [
+  { id: "trust", symbol: "✓", label: "믿음", color: "var(--team-townsfolk)" },
+  { id: "doubt", symbol: "?", label: "의심", color: "var(--brass)" },
+  { id: "lie", symbol: "✗", label: "거짓", color: "var(--team-minion)" },
+  { id: "evil", symbol: "악", label: "악역?", color: "var(--blood)" },
+];
+
+const MARK_BY_ID = new Map(MARKS.map((m) => [m.id, m]));
+
+/** 토큰에 얹히는 글. claim은 주장한 역할(한글), memo는 풀이자가 쓴 짧은 글. */
+export interface SeatAnnotation {
+  claim?: string;
+  memo?: string;
+  mark?: SeatMark;
 }
 
 interface TownSquareProps {
@@ -25,6 +48,7 @@ interface TownSquareProps {
   onSelect: (seat: number) => void;
   reveal?: TownSquareReveal | null;
   centerLabel: string;
+  annotations?: SeatAnnotation[];
 }
 
 const SIZE = 340;
@@ -32,6 +56,19 @@ const C = SIZE / 2;
 const RING_R = 158;
 const SEAT_R = 118;
 const TOKEN_R = 27;
+
+/**
+ * 글자 수에 맞춰 토큰 안에 들어가는 크기.
+ * 토큰 반지름 27의 원 안에서 글줄이 놓이는 높이(y)마다 쓸 수 있는 폭이 다르다 —
+ * 한글 자폭을 1em으로 잡고 가장 아래 줄(메모, y+13)까지 넘치지 않게 잡은 값이다.
+ */
+function labelSize(text: string): number {
+  if (text.length <= 3) return 9.5;
+  if (text.length <= 4) return 9;
+  if (text.length <= 5) return 8.2;
+  if (text.length <= 6) return 7.2;
+  return 6.2;
+}
 
 /** 서버/브라우저의 libm 차이로 인한 hydration 불일치 방지 — 좌표는 소수 2자리로 고정 */
 function r2(v: number): number {
@@ -50,6 +87,7 @@ export function TownSquare({
   onSelect,
   reveal,
   centerLabel,
+  annotations,
 }: TownSquareProps) {
   // 시계 눈금: 60개 분침 눈금 + 12개 시침 눈금
   const ticks = [];
@@ -105,6 +143,15 @@ export function TownSquare({
             ? "var(--brass)"
             : "var(--panel-edge)";
         const isDemonNow = reveal != null && reveal.demonSeat === i;
+        const note = annotations?.[i];
+        // 정답이 공개되면 토큰은 주장 대신 진짜 역할을 든다 —
+        // 링이 이미 진영색이라 주장을 그대로 두면 어느 쪽인지 읽히지 않는다.
+        const truth = reveal?.roles?.[i];
+        const claim = truth ?? note?.claim;
+        const memo = note?.memo;
+        const mark = note?.mark ? MARK_BY_ID.get(note.mark) : undefined;
+        // 한 줄일 때는 가운데, 주장·메모가 붙으면 위로 밀어 올린다
+        const letterY = memo ? y - 11 : claim ? y - 5 : y + 1;
         return (
           <g
             key={i}
@@ -118,7 +165,15 @@ export function TownSquare({
             tabIndex={0}
             role="button"
             aria-pressed={isSelected}
-            aria-label={`좌석 ${seatName(i)}${dead ? " (사망)" : ""}`}
+            aria-label={[
+              `좌석 ${seatName(i)}`,
+              truth ? `실제 ${truth}` : claim ? `${claim} 주장` : null,
+              dead ? "사망" : null,
+              mark ? `내 표시: ${mark.label}` : null,
+              memo ? `내 메모: ${memo}` : null,
+            ]
+              .filter(Boolean)
+              .join(", ")}
             className="cursor-pointer outline-none focus-visible:opacity-80"
           >
             <circle
@@ -132,16 +187,65 @@ export function TownSquare({
             />
             <text
               x={x}
-              y={y + 1}
+              y={letterY}
               textAnchor="middle"
               dominantBaseline="middle"
               fill={dead ? "var(--faded)" : "var(--parchment)"}
-              fontSize={17}
+              fontSize={!claim ? 17 : memo ? 13 : 14}
               fontWeight={700}
               className="font-display"
             >
               {seatName(i)}
             </text>
+            {claim && (
+              <text
+                x={x}
+                y={memo ? y + 1 : y + 9}
+                textAnchor="middle"
+                dominantBaseline="middle"
+                fill={truth ? ringColor : "var(--brass)"}
+                fontSize={labelSize(claim)}
+                fontWeight={truth ? 700 : 400}
+                opacity={dead ? 0.6 : 0.95}
+              >
+                {claim}
+              </text>
+            )}
+            {memo && (
+              <text
+                x={x}
+                y={y + 13}
+                textAnchor="middle"
+                dominantBaseline="middle"
+                fill="var(--faded)"
+                fontSize={labelSize(memo)}
+              >
+                {memo}
+              </text>
+            )}
+            {mark && (
+              <g>
+                <circle
+                  cx={x + 19.1}
+                  cy={y - 19.1}
+                  r={8}
+                  fill="var(--ink)"
+                  stroke={mark.color}
+                  strokeWidth={1.5}
+                />
+                <text
+                  x={x + 19.1}
+                  y={y - 18.6}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  fill={mark.color}
+                  fontSize={9}
+                  fontWeight={700}
+                >
+                  {mark.symbol}
+                </text>
+              </g>
+            )}
             {dead && (
               // 죽은 토큰의 수의(壽衣) 띠
               <line
