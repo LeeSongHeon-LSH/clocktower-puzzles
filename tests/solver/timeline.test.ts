@@ -24,6 +24,21 @@ describe("Schedule", () => {
     expect(sched.aliveNow().filter(Boolean).length).toBe(5);
   });
 
+  it("한 밤에 여러 명이 죽은 것도 그대로 담는다", () => {
+    const pz = makePuzzle({
+      assignmentLength: 7,
+      rolePool: ["imp"],
+      nights: 2,
+      events: [
+        { type: "death", night: 2, seat: 0 },
+        { type: "death", night: 2, seat: 3 },
+      ],
+    });
+    const sched = new Schedule(pz);
+    expect(sched.diedAtNight(2)).toEqual([0, 3]);
+    expect(sched.aliveNow().filter(Boolean).length).toBe(5);
+  });
+
   it("죽은 좌석의 중복 사망은 거부한다", () => {
     const pz = makePuzzle({
       assignmentLength: 7,
@@ -45,6 +60,20 @@ describe("demonScenarios", () => {
     const scs = demonScenarios(pz, new Schedule(pz), assignment);
     expect(scs).toHaveLength(1);
     expect(scs[0].poisonRequired.get(2)).toBe(0);
+  });
+
+  it("한 밤에 두 명이 죽는 시나리오는 없다 (임프 킬은 밤당 1명)", () => {
+    const assignment: RoleId[] = ["imp", "poisoner", TF, "chef", "fortuneteller", "librarian", "washerwoman"];
+    const pz = makePuzzle({
+      assignmentLength: 7,
+      rolePool: ["imp", "poisoner"],
+      nights: 2,
+      events: [
+        { type: "death", night: 2, seat: 3 },
+        { type: "death", night: 2, seat: 4 },
+      ],
+    });
+    expect(demonScenarios(pz, new Schedule(pz), assignment)).toHaveLength(0);
   });
 
   it("독살범 없이 킬 실패는 불가능하다", () => {

@@ -88,7 +88,7 @@ export function wakes(ctx: Ctx, seat: Seat, night: number): boolean {
     case "undertaker":
       return aliveAfter[seat] && ctx.sched.executedOnDay(night - 1) !== null;
     case "ravenkeeper":
-      return ctx.sched.diedAtNight(night) === seat;
+      return ctx.sched.diedAtNight(night).includes(seat);
     case "juggler":
       return night === 2 && aliveAfter[seat];
     case "seamstress": {

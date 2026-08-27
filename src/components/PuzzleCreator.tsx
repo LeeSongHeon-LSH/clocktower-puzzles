@@ -14,6 +14,7 @@ import { solve } from "@/lib/solver/solve";
 import {
   ROLE_IDS,
   SOLVER_ROLES,
+  type GameEvent,
   type InfoData,
   type RoleId,
   type Seat,
@@ -106,6 +107,76 @@ function blankInfo(role: RoleId, night: number, players: number): DraftInfo | nu
   }
 }
 
+// ── 사건 원장: 밤1 → 낮1 → 밤2 → … → 지금 ────────────────────────
+//
+// 화면과 buildShared가 같은 함수를 쓴다. 여기서 이미 죽은 좌석을 걸러 내므로
+// 인원수·밤 수를 줄였다 늘려도 솔버가 거부할 상태를 만들 수 없다.
+
+type LedgerRow =
+  | { kind: "night"; index: number; label: string; picked: Seat[]; selectable: boolean[]; alive: number }
+  | { kind: "day"; index: number; label: string; picked: Seat | null; selectable: boolean[]; alive: number }
+  | { kind: "now"; label: string; alive: number };
+
+function buildLedger(
+  nights: number,
+  playerCount: number,
+  deaths: Record<number, Seat[]>,
+  executions: Record<number, Seat>,
+): LedgerRow[] {
+  const rows: LedgerRow[] = [];
+  const alive = Array.from({ length: playerCount }, () => true);
+  const count = () => alive.filter(Boolean).length;
+
+  for (let n = 1; n <= nights; n++) {
+    const selectable = [...alive];
+    // 밤 1엔 악마가 죽이지 않는다 — 입력 자체를 받지 않는다
+    const picked = n === 1 ? [] : (deaths[n] ?? []).filter((s) => s < playerCount && alive[s]);
+    for (const s of picked) alive[s] = false;
+    rows.push({ kind: "night", index: n, label: `밤 ${n}`, picked, selectable, alive: count() });
+
+    if (n === nights) break;
+    const daySelectable = [...alive];
+    const ex = executions[n];
+    const picked2 = ex !== undefined && ex < playerCount && alive[ex] ? ex : null;
+    if (picked2 !== null) alive[picked2] = false;
+    rows.push({ kind: "day", index: n, label: `낮 ${n}`, picked: picked2, selectable: daySelectable, alive: count() });
+  }
+  rows.push({ kind: "now", label: `낮 ${nights}`, alive: count() });
+  return rows;
+}
+
+function ledgerEvents(rows: LedgerRow[]): GameEvent[] {
+  const events: GameEvent[] = [];
+  for (const row of rows) {
+    if (row.kind === "night") {
+      for (const seat of row.picked) events.push({ type: "death", night: row.index, seat });
+    } else if (row.kind === "day" && row.picked !== null) {
+      events.push({ type: "execution", day: row.index, seat: row.picked });
+    }
+  }
+  return events;
+}
+
+/** 원장 한 줄이 문제에 실릴 문장. 풀이 화면의 타임라인과 같은 말을 쓴다. */
+function ledgerLine(row: LedgerRow): string {
+  if (row.kind === "now") return "지금 — 처형 전, 여기서 추리가 시작된다.";
+  if (row.kind === "day") {
+    return row.picked === null ? "처형이 없었다." : `마을은 ${seatName(row.picked)}를 처형했다.`;
+  }
+  if (row.index === 1) return "첫 밤 — 악마는 죽이지 않는다.";
+  return row.picked.length === 0
+    ? "아무도 죽지 않았다."
+    : `${row.picked.map(seatName).join(", ")}가 죽은 채 발견됐다.`;
+}
+
+const CHIP_BASE =
+  "rounded-full border px-2.5 py-1 text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brass";
+const CHIP_OFF = "border-panel-edge text-faded hover:text-parchment";
+const CHIP_DEAD = "cursor-not-allowed border-panel-edge/50 text-faded/40 line-through";
+const CHIP_DEATH_ON = "border-blood bg-blood/20 text-parchment";
+const CHIP_EXEC_ON = "border-brass bg-brass/15 text-parchment";
+const CHIP_NONE_ON = "border-faded/70 text-parchment";
+
 const field = "rounded border border-panel-edge bg-ink px-2 py-1 text-sm text-parchment";
 const label = "block text-xs text-faded";
 
@@ -122,14 +193,42 @@ export function PuzzleCreator() {
     Array.from({ length: 7 }, () => ({ role: "chef" as RoleId, info: [] })),
   );
   const [solution, setSolution] = useState<RoleId[]>(() => Array.from({ length: 7 }, () => "chef" as RoleId));
-  const [execDay, setExecDay] = useState<string>("");
-  const [execSeat, setExecSeat] = useState(0);
-  const [deathNight, setDeathNight] = useState<string>("");
-  const [deathSeat, setDeathSeat] = useState(0);
+  const [deaths, setDeaths] = useState<Record<number, Seat[]>>({});
+  const [executions, setExecutions] = useState<Record<number, Seat>>({});
   const [verdict, setVerdict] = useState<Verdict>({ kind: "idle" });
 
   const seats = useMemo(() => Array.from({ length: playerCount }, (_, i) => i), [playerCount]);
+  const ledger = useMemo(
+    () => buildLedger(nights, playerCount, deaths, executions),
+    [nights, playerCount, deaths, executions],
+  );
+  const hasPoisoner = pool.includes("poisoner");
+
   const claimable = useMemo(() => pool.filter((r) => !UNCLAIMABLE.includes(r)), [pool]);
+
+  function toggleDeath(night: number, seat: Seat) {
+    setDeaths((prev) => {
+      const cur = prev[night] ?? [];
+      const next = cur.includes(seat) ? cur.filter((s) => s !== seat) : [...cur, seat].sort((a, b) => a - b);
+      return { ...prev, [night]: next };
+    });
+    setVerdict({ kind: "idle" });
+  }
+
+  function clearNight(night: number) {
+    setDeaths((prev) => ({ ...prev, [night]: [] }));
+    setVerdict({ kind: "idle" });
+  }
+
+  function pickExecution(day: number, seat: Seat | null) {
+    setExecutions((prev) => {
+      const next = { ...prev };
+      if (seat === null) delete next[day];
+      else next[day] = seat;
+      return next;
+    });
+    setVerdict({ kind: "idle" });
+  }
 
   /** 인원수가 바뀌면 좌석 배열들을 맞춘다 */
   function resizeTo(n: number) {
@@ -161,9 +260,7 @@ export function PuzzleCreator() {
   }
 
   function buildShared(): SharedPuzzle {
-    const events = [];
-    if (execDay !== "") events.push({ type: "execution" as const, day: Number(execDay), seat: execSeat });
-    if (deathNight !== "") events.push({ type: "death" as const, night: Number(deathNight), seat: deathSeat });
+    const events = ledgerEvents(ledger);
 
     const demonSeat = solution.findIndex((r) => ROLES[r].team === "demon");
     return {
@@ -403,40 +500,125 @@ export function PuzzleCreator() {
         })}
       </section>
 
-      {/* ── 사건 ── */}
+      {/* ── 사건 원장 ── */}
       <section className="space-y-3">
-        <h2 className="font-display text-lg font-bold">4. 사건</h2>
-        <p className="text-xs text-faded">처형은 낮에, 밤 사망은 밤 2 이후에 일어납니다. 없으면 비워 두세요.</p>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="rounded border border-panel-edge bg-panel p-3">
-            <p className="mb-2 text-xs text-faded">처형</p>
-            <div className="flex gap-2">
-              <select className={field} value={execDay} onChange={(e) => { setExecDay(e.target.value); setVerdict({ kind: "idle" }); }}>
-                <option value="">없음</option>
-                {Array.from({ length: Math.max(0, nights - 1) }, (_, i) => i + 1)
-                  .map((d) => <option key={d} value={d}>낮 {d}</option>)}
-              </select>
-              <select className={field} value={execSeat} disabled={execDay === ""}
-                onChange={(e) => { setExecSeat(Number(e.target.value)); setVerdict({ kind: "idle" }); }}>
-                {seats.map((s) => <option key={s} value={s}>{seatName(s)}</option>)}
-              </select>
-            </div>
-          </div>
-          <div className="rounded border border-panel-edge bg-panel p-3">
-            <p className="mb-2 text-xs text-faded">밤 사망</p>
-            <div className="flex gap-2">
-              <select className={field} value={deathNight} onChange={(e) => { setDeathNight(e.target.value); setVerdict({ kind: "idle" }); }}>
-                <option value="">없음</option>
-                {Array.from({ length: Math.max(0, nights - 1) }, (_, i) => i + 2)
-                  .map((n) => <option key={n} value={n}>밤 {n}</option>)}
-              </select>
-              <select className={field} value={deathSeat} disabled={deathNight === ""}
-                onChange={(e) => { setDeathSeat(Number(e.target.value)); setVerdict({ kind: "idle" }); }}>
-                {seats.map((s) => <option key={s} value={s}>{seatName(s)}</option>)}
-              </select>
-            </div>
-          </div>
-        </div>
+        <h2 className="font-display text-lg font-bold">4. 밤과 낮에 일어난 일</h2>
+        <p className="text-xs text-faded">
+          경과한 밤을 늘리면 칸도 따라 늘어납니다.{" "}
+          <strong className="text-parchment">아무 일도 없던 밤과 낮 역시 하나의 단서입니다</strong> — 비워 두면
+          “아무도 죽지 않았다”, “처형이 없었다”로 문제에 그대로 실립니다. 밤에는 여러 명을 고를 수 있습니다.
+        </p>
+
+        <ol className="overflow-hidden rounded border border-panel-edge bg-panel">
+          {ledger.map((row, i) => {
+            const last = i === ledger.length - 1;
+            const marker =
+              row.kind === "now"
+                ? "h-2.5 w-2.5 rounded-full border-2 border-brass"
+                : row.kind === "night"
+                  ? `h-2 w-2 rounded-full ${row.picked.length > 0 ? "bg-blood" : "border border-panel-edge bg-panel"}`
+                  : `h-2 w-2 rotate-45 ${row.picked !== null ? "bg-brass" : "border border-panel-edge bg-panel"}`;
+            return (
+              <li
+                key={row.kind === "now" ? "now" : `${row.kind}-${row.index}`}
+                className={`flex gap-2 px-3 py-3 ${i > 0 ? "border-t border-panel-edge/60" : ""} ${
+                  row.kind === "day" ? "bg-ink/40" : ""
+                }`}
+              >
+                <span
+                  className={`w-10 shrink-0 pt-px text-right font-display text-xs font-bold ${
+                    row.kind === "now" ? "text-brass" : "text-faded"
+                  }`}
+                >
+                  {row.label}
+                </span>
+                <span aria-hidden className="flex w-2 shrink-0 flex-col items-center pt-1.5">
+                  <span className={marker} />
+                  {!last && <span className="mt-1 w-px flex-1 bg-panel-edge" />}
+                </span>
+
+                <div className="min-w-0 flex-1 space-y-1.5">
+                  {row.kind === "night" && row.index > 1 && (
+                    <div className="flex flex-wrap gap-1.5" role="group" aria-label={`밤 ${row.index}에 죽은 좌석`}>
+                      <button
+                        type="button"
+                        aria-pressed={row.picked.length === 0}
+                        onClick={() => clearNight(row.index)}
+                        className={`${CHIP_BASE} ${row.picked.length === 0 ? CHIP_NONE_ON : CHIP_OFF}`}
+                      >
+                        없음
+                      </button>
+                      {seats.map((seat) => {
+                        const on = row.picked.includes(seat);
+                        const dead = !row.selectable[seat];
+                        return (
+                          <button
+                            key={seat}
+                            type="button"
+                            disabled={dead}
+                            aria-pressed={on}
+                            aria-label={dead ? `${seatName(seat)} — 이미 사망` : seatName(seat)}
+                            onClick={() => toggleDeath(row.index, seat)}
+                            className={`${CHIP_BASE} ${dead ? CHIP_DEAD : on ? CHIP_DEATH_ON : CHIP_OFF}`}
+                          >
+                            {seatName(seat)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {row.kind === "day" && (
+                    <div className="flex flex-wrap gap-1.5" role="group" aria-label={`낮 ${row.index}에 처형된 좌석`}>
+                      <button
+                        type="button"
+                        aria-pressed={row.picked === null}
+                        onClick={() => pickExecution(row.index, null)}
+                        className={`${CHIP_BASE} ${row.picked === null ? CHIP_NONE_ON : CHIP_OFF}`}
+                      >
+                        없음
+                      </button>
+                      {seats.map((seat) => {
+                        const on = row.picked === seat;
+                        const dead = !row.selectable[seat];
+                        return (
+                          <button
+                            key={seat}
+                            type="button"
+                            disabled={dead}
+                            aria-pressed={on}
+                            aria-label={dead ? `${seatName(seat)} — 이미 사망` : seatName(seat)}
+                            onClick={() => pickExecution(row.index, on ? null : seat)}
+                            className={`${CHIP_BASE} ${dead ? CHIP_DEAD : on ? CHIP_EXEC_ON : CHIP_OFF}`}
+                          >
+                            {seatName(seat)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <p className="flex flex-wrap items-baseline justify-between gap-x-3 text-xs">
+                    <span className={row.kind === "now" ? "text-parchment" : "text-brass"}>{ledgerLine(row)}</span>
+                    <span className="tabular-nums text-faded">생존 {row.alive}명</span>
+                  </p>
+
+                  {row.kind === "night" && row.picked.length > 1 && (
+                    <p className="text-[11px] text-blood">
+                      한 밤에 둘 이상을 죽이는 능력은 아직 솔버에 없습니다 — 이대로 검증하면 “해가 없습니다”가 나옵니다.
+                    </p>
+                  )}
+                  {row.kind === "night" && row.index > 1 && row.picked.length === 0 && !hasPoisoner && (
+                    <p className="text-[11px] text-faded">
+                      악마의 킬이 실패하려면 <span className="text-brass">{roleLabel("poisoner")}</span>이 필요합니다 — 지금
+                      역할 풀에 없습니다.
+                    </p>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ol>
       </section>
 
       {/* ── 정답 배치 ── */}

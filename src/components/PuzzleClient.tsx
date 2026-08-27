@@ -93,10 +93,12 @@ export function PuzzleClient({ puzzle }: { puzzle: Puzzle }) {
         text: exec ? `마을은 ${seatName(exec.seat)}를 처형했다.` : "처형이 없었다.",
         kind: "day",
       });
-      const death = puzzle.events.find((e) => e.type === "death" && e.night === d + 1);
+      const dead = puzzle.events.filter((e) => e.type === "death" && e.night === d + 1);
       items.push({
         label: `밤 ${d + 1}`,
-        text: death ? `${seatName(death.seat)}가 죽은 채 발견됐다.` : "아무도 죽지 않았다.",
+        text: dead.length
+          ? `${dead.map((e) => seatName(e.seat)).join(", ")}가 죽은 채 발견됐다.`
+          : "아무도 죽지 않았다.",
         kind: "night",
       });
     }

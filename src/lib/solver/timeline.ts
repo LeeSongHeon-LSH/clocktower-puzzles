@@ -2,6 +2,8 @@
 //
 // 진행 순서 모델: 밤1 → 낮1 → 밤2 → 낮2 → … → 밤k → (현재: k일차 낮, 처형 전).
 // - 처형(execution)은 낮 d (1 ≤ d ≤ k-1), 밤 사망(death)은 밤 n (2 ≤ n ≤ k).
+// - 한 밤에 사망 이벤트가 여러 건일 수 있다(타임라인은 그대로 담는다). 다만 지금 모델링된
+//   역할 중 한 밤에 둘 이상을 죽이는 능력은 없으므로, 그런 밤은 demonScenarios가 배제한다.
 // - 밤 정보는 그 밤의 킬 이후 상태를 본다 (밤 순서상 정보 역할이 임프보다 뒤).
 //
 // 생존 여부는 이벤트만으로 결정되므로 월드와 무관하게 한 번 계산한다(Schedule).
@@ -17,7 +19,7 @@ const MINION_ROLES: RoleId[] = ["poisoner", "spy", "baron", "scarletwoman"];
 
 export class Schedule {
   readonly nights: number;
-  private readonly deathAtNight = new Map<number, Seat>();
+  private readonly deathsAtNight = new Map<number, Seat[]>();
   private readonly execOnDay = new Map<number, Seat>();
   /** aliveStart[n] = 밤 n 시작 시점 생존 배열, aliveAfter[n] = 밤 n 킬 이후 */
   private readonly aliveStart: boolean[][] = [];
@@ -28,8 +30,10 @@ export class Schedule {
     for (const ev of pz.events) {
       if (ev.type === "death") {
         if (ev.night < 2 || ev.night > pz.nights) throw new Error(`밤 사망 시점이 범위 밖: 밤 ${ev.night}`);
-        if (this.deathAtNight.has(ev.night)) throw new Error(`밤 ${ev.night}에 사망 이벤트가 2건 (임프 킬은 밤당 1명)`);
-        this.deathAtNight.set(ev.night, ev.seat);
+        const same = this.deathsAtNight.get(ev.night) ?? [];
+        if (same.includes(ev.seat)) throw new Error(`밤 ${ev.night}: 좌석 ${ev.seat}의 사망이 중복`);
+        same.push(ev.seat);
+        this.deathsAtNight.set(ev.night, same);
       } else {
         if (ev.day < 1 || ev.day > pz.nights - 1) throw new Error(`처형 시점이 범위 밖: 낮 ${ev.day}`);
         if (this.execOnDay.has(ev.day)) throw new Error(`낮 ${ev.day}에 처형이 2건`);
@@ -39,11 +43,13 @@ export class Schedule {
     let alive = Array.from({ length: pz.playerCount }, () => true);
     for (let night = 1; night <= pz.nights; night++) {
       this.aliveStart[night] = [...alive];
-      const dead = this.deathAtNight.get(night);
-      if (dead !== undefined) {
-        if (!alive[dead]) throw new Error(`밤 ${night}: 이미 죽은 좌석 ${dead}이 또 사망`);
+      const dead = this.deathsAtNight.get(night);
+      if (dead !== undefined && dead.length > 0) {
         alive = [...alive];
-        alive[dead] = false;
+        for (const seat of dead) {
+          if (!alive[seat]) throw new Error(`밤 ${night}: 이미 죽은 좌석 ${seat}이 또 사망`);
+          alive[seat] = false;
+        }
       }
       this.aliveAfter[night] = [...alive];
       const executed = this.execOnDay.get(night);
@@ -55,8 +61,9 @@ export class Schedule {
     }
   }
 
-  diedAtNight(night: number): Seat | null {
-    return this.deathAtNight.get(night) ?? null;
+  /** 밤 night에 죽은 채 발견된 좌석들 (없으면 빈 배열) */
+  diedAtNight(night: number): Seat[] {
+    return this.deathsAtNight.get(night) ?? [];
   }
   executedOnDay(day: number): Seat | null {
     return this.execOnDay.get(day) ?? null;
@@ -137,11 +144,15 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
 
     for (let night = st.night; night <= pz.nights && valid; night++) {
       demonNights[night] = demon;
-      const dead = sched.diedAtNight(night);
+      const deaths = sched.diedAtNight(night);
       // ── 밤 night: 임프 킬 ──
       if (night === 1) {
-        if (dead !== null) { valid = false; break; }
+        if (deaths.length > 0) { valid = false; break; }
+      } else if (deaths.length > 1) {
+        // 임프의 킬은 밤당 1명. 두 번째 죽음을 설명할 능력이 아직 모델에 없다.
+        valid = false; break;
       } else {
+        const dead = deaths.length === 1 ? deaths[0] : null;
         if (!sched.aliveAtNightStart(night)[demon]) { valid = false; break; }
         if (dead === null) {
           // 킬 실패: 데몬이 중독됐어야 한다 (풀에 다른 실패 요인 없음)
