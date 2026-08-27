@@ -1,5 +1,6 @@
 // 테스트용 Ctx/퍼즐 구성 헬퍼.
 
+import { ROLES } from "@/data/roles";
 import type { Ctx } from "@/lib/solver/ctx";
 import { Schedule, DemonScenario } from "@/lib/solver/timeline";
 import type { Claim, GameEvent, RoleId, Seat, SolverPuzzle } from "@/lib/solver/types";
@@ -22,7 +23,7 @@ export function makePuzzle(opts: {
 
 /** 승계 없는 기본 시나리오 */
 export function plainScenario(assignment: RoleId[], nights: number): DemonScenario {
-  const impSeat = assignment.indexOf("imp");
+  const impSeat = assignment.findIndex((r) => ROLES[r].team === "demon");
   const demonNights: Seat[] = [];
   for (let n = 1; n <= nights; n++) demonNights[n] = impSeat;
   return {

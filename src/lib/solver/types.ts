@@ -130,6 +130,7 @@ export const SOLVER_ROLES: readonly RoleId[] = [
   "sweetheart", // 죽으면 그때부터 1명이 취한다 — 대상(또는 사망 시 중독으로 미발동)을 열거
   "mutant", // 외부인임을 숨기려 마을 사람을 사칭한다 — 주장 전체가 날조 (주정뱅이와 대칭, 밤에 깨지 않음)
   "vortox", // 임프 대체 데몬: 마을 사람 정보가 전부 거짓 + 처형 없는 낮이 지나면 악의 승리
+  "nodashii", // 임프 대체 데몬: 양옆의 가장 가까운 마을 사람 둘이 계속 중독 (timeline이 밤별 집합 계산)
   "clockmaker",
   "dreamer",
   "oracle",

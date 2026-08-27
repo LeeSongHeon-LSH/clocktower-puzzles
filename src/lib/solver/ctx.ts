@@ -30,6 +30,11 @@ export function isSweetDrunk(ctx: Ctx, seat: Seat, night: number): boolean {
   return ctx.sweet !== null && ctx.sweet.target === seat && ctx.sweet.since <= night;
 }
 
+/** 노 다시의 이웃 독 — 밤 night에 중독돼 있었을 수 있는가 (간격 추상화, timeline이 계산) */
+export function isNdPoisoned(ctx: Ctx, seat: Seat, night: number): boolean {
+  return ctx.sc.nodashiiPoisoned?.[night]?.has(seat) ?? false;
+}
+
 export function isPoisoned(ctx: Ctx, seat: Seat, night: number): boolean {
   return ctx.poison !== null && ctx.poison[night] === seat;
 }
@@ -128,7 +133,8 @@ export function wakes(ctx: Ctx, seat: Seat, night: number): boolean {
     case "spy":
       return aliveStart[seat];
     case "imp":
-    case "vortox": {
+    case "vortox":
+    case "nodashii": {
       // 구마사제가 악마를 지목한 밤에는 악마가 깨어나지 못한다
       if (ctx.sc.exorcistBlocked?.has(night)) return false;
       // 승계한 밤(스타 패스, 탕녀)에는 악마가 됐다고 통보받으며 깨어난다

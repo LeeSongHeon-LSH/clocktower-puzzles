@@ -113,6 +113,13 @@ export interface DemonScenario {
   impKillDuringNight?: (Seat | null)[];
   /** 음유시인 발동으로 전원이 취해 있던 밤들 — 그 밤의 정보·킬·독살은 모두 무효 */
   minstrelNights?: Set<number>;
+  /**
+   * 노 다시 세계: 밤 n에 노 다시의 독을 받고 '있었을 수 있는' 좌석들 (데몬 세계에서만).
+   * 간격 추상화의 관대한 쪽 — 첩자의 주민 오등록 흡수(∃), 밤중 사망으로 인한 이동을
+   * 전부 합집합으로 담는다. 여기 든 좌석의 정보는 무제약이고 비정상 동작 강제(require)를
+   * 만족시키지만, 정상 동작 강제(forbid)를 깨뜨리지는 않는다 — 확실한 중독이 아니기 때문.
+   */
+  nodashiiPoisoned?: Set<Seat>[];
 }
 
 /**
@@ -236,9 +243,33 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
 
   const results: DemonScenario[] = [];
 
-  /** 밤 night에 seat의 능력 비정상 동작을 강제 (스위트하트 취함 또는 독살). 모순이면 false */
+  /**
+   * 노 다시가 demonSeat에 앉은 밤 night에 그 독을 받고 있었을 수 있는 좌석들.
+   * 각 방향에서 죽은 좌석과 마을 사람 아닌 좌석을 건너뛰며 첫 마을 사람까지 —
+   * 도중의 첩자는 주민으로 오등록돼 독을 흡수했을 수도 있다(∃, 계속 진행).
+   * 밤 시작/킬 이후 두 생존 상태의 합집합 (밤중 사망으로 독이 옮겨 갔을 수 있다).
+   */
+  function ndPoisonedAt(demonSeat: Seat, night: number): Set<Seat> {
+    const out = new Set<Seat>();
+    const n = assignment.length;
+    for (const alive of [sched.aliveAtNightStart(night), sched.aliveAfterNight(night)]) {
+      for (const dir of [1, -1]) {
+        for (let step = 1; step < n; step++) {
+          const s = (demonSeat + dir * step + n) % n;
+          if (s === demonSeat) break;
+          if (!alive[s]) continue;
+          if (ROLES[assignment[s]].team === "townsfolk") { out.add(s); break; }
+          if (assignment[s] === "spy") out.add(s);
+        }
+      }
+    }
+    return out;
+  }
+
+  /** 밤 night에 seat의 능력 비정상 동작을 강제 (스위트하트 취함, 노 다시 독, 또는 독살). 모순이면 false */
   function require_(st: St, night: number, seat: Seat): boolean {
     if (sweetTarget === seat && sweetSince <= night) return true; // 이미 취해 있다 — 독살 불요
+    if (demonRole === "nodashii" && ndPoisonedAt(st.demonNights[night] ?? st.demon, night).has(seat)) return true;
     if (!hasPoisoner) return false;
     if (sweetTarget === poisonerSeat && sweetSince <= night) return false; // 취한 독살범의 독은 듣지 않는다
     if (st.minstrelNights.includes(night)) return false; // 그 밤엔 독살범도 취해 있다
@@ -287,6 +318,10 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
       exorcistBlocked: new Set(st.exorcistBlocked),
       impKillDuringNight: [...st.impKills],
       minstrelNights: new Set(st.minstrelNights),
+      nodashiiPoisoned: demonRole === "nodashii"
+        ? Array.from({ length: pz.nights + 1 }, (_, n) =>
+            n === 0 ? new Set<Seat>() : ndPoisonedAt(st.demonNights[n] ?? st.demon, n))
+        : undefined,
     });
   }
 
