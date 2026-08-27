@@ -5,6 +5,14 @@ import type { RoleId, Seat, SolverPuzzle } from "@/lib/solver/types";
 export type Difficulty = "easy" | "normal" | "hard";
 export type PuzzleEdition = "tb" | "bmr" | "sv" | "mixed";
 
+/**
+ * 출처. 난이도와는 **직교하는 축**이다 — 사설 문제도 쉬울 수 있고 어려울 수 있으므로
+ * 난이도 값에 "사설"을 섞지 않는다.
+ *   official  — 이 리포에 수록된 문제 (npm test가 유일해를 증명)
+ *   community — 사용자가 만든 문제 (에디터가 브라우저에서 유일해를 검증)
+ */
+export type PuzzleSource = "official" | "community";
+
 export interface PuzzleQuestion {
   /**
    * 관례: "demon"(현재 데몬 좌석) 또는 역할 id("drunk", "poisoner" 등 — 그 역할의 좌석).
@@ -20,6 +28,10 @@ export interface Puzzle extends SolverPuzzle {
   title: string;
   edition: PuzzleEdition;
   difficulty: Difficulty;
+  /** 기본 official. 공유 링크로 들어온 사설 문제는 community. */
+  source?: PuzzleSource;
+  /** 사설 문제 작성자 별명 (선택) */
+  author?: string;
   /** 상황 도입 서술 (선택) */
   intro?: string;
   questions: PuzzleQuestion[];

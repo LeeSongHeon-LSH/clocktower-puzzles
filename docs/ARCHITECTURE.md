@@ -25,7 +25,10 @@ src/
     rules/page.tsx        # 규칙 허브: 취함·중독 + 역할 목록 (§8)
     rules/drunk-and-poison/page.tsx  # 취함·중독 해설 + 알마낙 원문 출처
     rules/role/[id]/page.tsx         # 역할별 규칙 문서 (공식 능력 문구 + 해설)
-  components/             # TownSquare, InfoLog, QuestionPanel, HintBox, Walkthrough …
+    create/page.tsx       # 사설 문제 에디터 (브라우저 유일해 검증, §9)
+    play/page.tsx         # 공유 링크로 받은 사설 문제 풀이 (§9)
+    guide/page.tsx        # 문제 업로드 가이드 (경로 A/B 안내)
+  components/             # TownSquare, PuzzleCreator, SharedPuzzleLoader …
   lib/
     solver/               # 룰 엔진 (퍼즐 검증용, UI 비노출)
       types.ts            # World(그리모어 배정), 등록 시스템
@@ -41,6 +44,9 @@ src/
     puzzles/
       index.ts            # 퍼즐 레지스트리
       tb-01.ts …          # 문제당 1파일
+  lib/puzzles/
+    schema.ts             # Puzzle 타입 (difficulty ⟂ source 두 축)
+    codec.ts              # 사설 문제 ↔ 공유 링크 + 신뢰불가 입력 검증 (§9)
 scripts/
   fetch-rule-sources.ts   # 공식 위키 API에서 규칙 원문 대조·생성 (§8)
 tests/
@@ -145,7 +151,10 @@ clocktower-puzzles:progress = {
 
 - `tests/puzzles.test.ts`: 모든 퍼즐에 대해 (1) 스키마 유효, (2) 솔버 유일해, (3) solution·questions 정답 일치. **이 테스트가 깨지면 머지/배포 금지.**
 - `tests/solver/*`: 역할 로직 단위 테스트 (참/거짓 정보 케이스).
-- CI는 초기에 생략(개인 프로젝트) — `npm test`를 푸시 전 수동 실행. 필요해지면 GitHub Actions 추가.
+- `tests/codec.test.ts`, `tests/community-puzzle.test.ts`: 공유 링크 왕복·신뢰불가 입력 방어,
+  그리고 "링크는 유일해일 때만 나온다"는 에디터의 약속 (§9).
+- **CI: `.github/workflows/ci.yml`** — push·PR마다 test → typecheck → lint → build.
+  외부 기여(경로 B)의 관문이며, 유일해 검증에 실패하면 병합되지 않는다.
 
 ## 7. 배포
 
@@ -188,3 +197,44 @@ scripts/fetch-rule-sources.ts      두 공식 소스에서 대조·생성
   공식 아트/아이콘은 여전히 사용하지 않는다(불변 규칙).
 - `tests/rules.test.ts`, `tests/role-rules.test.ts`가 네트워크 없이 출처 누락·고아 출처·
   표기 일치·형식을 검사한다.
+
+## 9. 사설 문제 (사용자 제작)
+
+난이도와 **직교하는 축**으로 `source: "official" | "community"`를 둔다. 사설 문제도
+쉬움·보통·어려움을 그대로 가지므로 난이도 값에 "사설"을 섞지 않는다.
+
+경로는 둘이고, 관문은 **유일해 증명 하나로 같다**.
+
+### 경로 A — 링크 공유 (저장소 없음)
+
+```
+/create  에디터 → 브라우저에서 solve() 실행 → 유일해일 때만 링크 발급
+         → 퍼즐 전체를 deflate-raw + base64url로 압축해 URL 프래그먼트에 담음
+/play#…  프래그먼트 해독 → 재검증 → PuzzleClient로 풀이
+```
+
+- **서버 부하가 구조적으로 0이다.** 업로드 엔드포인트가 없고 저장도 하지 않는다.
+  프래그먼트(`#`)는 서버로 전송되지 않아 정적 배포·CDN 캐싱이 그대로 유지된다.
+  따라서 동시 제작자가 아무리 많아도 서버가 하는 일은 정적 페이지 서빙뿐이다.
+- 비용은 각 사용자의 CPU로 분산된다. 실측: 기존 퍼즐 0.4~6ms, 최악(10인·역할풀 18)도 14ms.
+  솔버가 자체적으로 10인을 상한으로 두어 탐색 공간이 유계다 (`composition.ts`).
+- 스팸·모더레이션·삭제 요청 문제가 애초에 생기지 않는다 — 남는 데이터가 없다.
+- 대가: **목록·검색이 없다.** 링크를 잃으면 문제도 사라진다. 보존하려면 경로 B.
+- `codec.ts`의 `validateShared()`는 **링크를 신뢰하지 않는다.** 좌석 범위·역할 id·
+  길이 상한·구조를 전부 검사하고 사람이 읽을 수 있는 오류를 던진다.
+
+### 경로 B — 정식 수록 (GitHub PR)
+
+```
+퍼즐 파일 PR → .github/workflows/ci.yml (npm test = 전 퍼즐 유일해 검증) → 병합 → 자동 배포
+```
+
+- CI가 관문이다. 유일해가 아니면 병합되지 않는다 — 사람 눈 검수를 대체한다.
+- 정식 수록 문제에는 해설(walkthrough)이 필요하다. 사설 링크 문제는 없어도 된다.
+- PR은 GitHub이 처리하므로 이쪽도 우리 서버 부하가 없다.
+
+### 스포일러에 대해
+
+공유 링크에는 정답이 들어 있다. 이는 공식 퍼즐도 마찬가지다 —
+프리렌더 HTML에 `solution`·`walkthrough`가 이미 포함된다. 즉 솔버를 클라이언트로
+내려도 스포일러 측면에서 새로 잃는 것은 없다. 가이드 페이지에 이 점을 명시한다.

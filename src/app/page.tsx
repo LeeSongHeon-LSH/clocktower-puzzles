@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { PUZZLES } from "@/data/puzzles";
 import { HomeClient, type PuzzleSummary } from "@/components/HomeClient";
 
@@ -9,6 +10,8 @@ export default function Home() {
     difficulty: p.difficulty,
     playerCount: p.playerCount,
     nights: p.nights,
+    source: p.source ?? "official",
+    author: p.author,
   }));
 
   return (
@@ -27,6 +30,28 @@ export default function Home() {
         </p>
       </section>
       <HomeClient puzzles={summaries} />
+
+      <section className="rounded-lg border border-panel-edge bg-panel p-4">
+        <p className="font-display text-lg font-bold">직접 만들어 볼 수도 있다</p>
+        <p className="mt-1 max-w-prose text-sm leading-relaxed text-faded">
+          브라우저가 그 자리에서 답이 하나뿐인지 검증해 주고, 통과하면 공유 링크가 나옵니다.
+          가입도 저장도 없습니다.
+        </p>
+        <p className="mt-3 flex flex-wrap gap-3 text-sm">
+          <Link
+            href="/create"
+            className="rounded-md bg-blood px-4 py-2 font-bold text-parchment transition-colors hover:bg-blood-deep"
+          >
+            문제 만들기
+          </Link>
+          <Link
+            href="/guide"
+            className="rounded-md border border-panel-edge px-4 py-2 text-faded transition-colors hover:text-parchment"
+          >
+            업로드 가이드
+          </Link>
+        </p>
+      </section>
     </div>
   );
 }

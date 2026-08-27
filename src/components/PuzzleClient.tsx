@@ -384,14 +384,19 @@ export function PuzzleClient({ puzzle }: { puzzle: Puzzle }) {
               );
             })}
           </ul>
-          <h3 className="font-display text-lg font-bold">추리의 길</h3>
-          <ol className="space-y-3 text-sm leading-relaxed">
-            {puzzle.walkthrough.map((w, i) => (
-              <li key={i} className="rounded-lg border border-panel-edge bg-panel/50 p-4">
-                {w}
-              </li>
-            ))}
-          </ol>
+          {/* 사설 문제는 해설이 없을 수 있다 */}
+          {puzzle.walkthrough.length > 0 && (
+            <>
+              <h3 className="font-display text-lg font-bold">추리의 길</h3>
+              <ol className="space-y-3 text-sm leading-relaxed">
+                {puzzle.walkthrough.map((w, i) => (
+                  <li key={i} className="rounded-lg border border-panel-edge bg-panel/50 p-4">
+                    {w}
+                  </li>
+                ))}
+              </ol>
+            </>
+          )}
         </section>
       )}
     </article>

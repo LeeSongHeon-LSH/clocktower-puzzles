@@ -4,7 +4,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import type { Difficulty, PuzzleEdition } from "@/lib/puzzles/schema";
+import type { Difficulty, PuzzleEdition, PuzzleSource } from "@/lib/puzzles/schema";
 import { EDITION_LABELS } from "@/data/roles";
 import { useProgress } from "@/lib/progress";
 
@@ -15,7 +15,15 @@ export interface PuzzleSummary {
   difficulty: Difficulty;
   playerCount: number;
   nights: number;
+  /** 난이도와 직교하는 축 — 두 필터가 각각 동작한다 */
+  source: PuzzleSource;
+  author?: string;
 }
+
+const SOURCE_LABELS: Record<PuzzleSource, string> = {
+  official: "수록",
+  community: "사설",
+};
 
 const DIFFICULTY_LABELS: Record<Difficulty, string> = {
   easy: "쉬움",
@@ -27,9 +35,14 @@ const DIFFICULTY_ORDER: Difficulty[] = ["easy", "normal", "hard"];
 
 export function HomeClient({ puzzles }: { puzzles: PuzzleSummary[] }) {
   const [filter, setFilter] = useState<Difficulty | "all">("all");
+  const [source, setSource] = useState<PuzzleSource | "all">("all");
   const progress = useProgress();
 
-  const shown = puzzles.filter((p) => filter === "all" || p.difficulty === filter);
+  const shown = puzzles.filter(
+    (p) => (filter === "all" || p.difficulty === filter) && (source === "all" || p.source === source),
+  );
+  // 사설 문제가 하나도 없으면 출처 필터를 띄우지 않는다
+  const hasCommunity = puzzles.some((p) => p.source === "community");
 
   return (
     <section className="space-y-4">
@@ -48,6 +61,24 @@ export function HomeClient({ puzzles }: { puzzles: PuzzleSummary[] }) {
           </button>
         ))}
       </div>
+
+      {hasCommunity && (
+        <div className="flex flex-wrap gap-2" role="group" aria-label="출처 필터">
+          {(["all", "official", "community"] as const).map((s) => (
+            <button
+              key={s}
+              onClick={() => setSource(s)}
+              className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                source === s
+                  ? "border-brass bg-brass/15 text-parchment"
+                  : "border-panel-edge text-faded hover:text-parchment"
+              }`}
+            >
+              {s === "all" ? "출처 전체" : SOURCE_LABELS[s]}
+            </button>
+          ))}
+        </div>
+      )}
 
       <ul className="space-y-3">
         {shown.map((p) => {
@@ -87,6 +118,11 @@ export function HomeClient({ puzzles }: { puzzles: PuzzleSummary[] }) {
                   <span>
                     {p.playerCount}인 · {p.nights}일차
                   </span>
+                  {p.source === "community" && (
+                    <span className="text-team-outsider">
+                      사설{p.author ? ` · ${p.author}` : ""}
+                    </span>
+                  )}
                 </p>
               </Link>
             </li>

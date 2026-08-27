@@ -1,0 +1,33 @@
+# 경로 B(정식 수록) 관문.
+#
+# 퍼즐 PR이 들어오면 솔버 전수 탐색으로 유일해를 다시 증명한다.
+# 이 검사가 통과하지 못하면 병합하지 않는다 — 사람 눈으로 검수하지 않는 대신 여기서 막는다.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # 전 퍼즐 유일해 검증 + 코덱/규칙 문서 정합성
+      - run: npm test
+
+      - run: npm run typecheck
+
+      - run: npm run lint
+
+      - run: npm run build
