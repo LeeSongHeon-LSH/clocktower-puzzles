@@ -9,9 +9,12 @@ export default definePuzzle({
   difficulty: "normal",
   playerCount: 7,
   nights: 2,
+  // 대본 — 풀이 화면에 공개된다. 이 목록 안에서만 역할이 배정된다.
   rolePool: [
-    "imp", "baron", "recluse", "drunk",
-    "washerwoman", "librarian", "investigator", "chef", "empath", "fortuneteller", "undertaker",
+    "washerwoman", "librarian", "investigator", "chef", "empath", "fortuneteller", "undertaker", "ravenkeeper",
+    "drunk", "recluse",
+    "poisoner", "spy", "baron", "scarletwoman",
+    "imp",
   ],
   intro:
     "7인 게임, 2일차 아침. 어제 낮, '인접한 악역 쌍이 둘이나 보인다'는 요리사 C의 수상한 정보에 " +

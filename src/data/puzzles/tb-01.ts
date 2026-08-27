@@ -8,7 +8,13 @@ export default definePuzzle({
   difficulty: "easy",
   playerCount: 5,
   nights: 1,
-  rolePool: ["imp", "scarletwoman", "washerwoman", "investigator", "chef", "empath", "fortuneteller"],
+  // 대본 — 풀이 화면에 공개된다. 이 목록 안에서만 역할이 배정된다.
+  rolePool: [
+    "washerwoman", "librarian", "investigator", "chef", "empath", "fortuneteller", "undertaker", "ravenkeeper",
+    "drunk", "recluse",
+    "baron", "scarletwoman",
+    "imp",
+  ],
   intro:
     "5인 게임의 첫날 아침. 밤에는 아무도 죽지 않았고, 다섯 명 전원이 자신의 역할과 밤 정보를 공개했다. " +
     "이 중 두 명 — 임프와 탕녀 — 는 거짓말을 하고 있다.",

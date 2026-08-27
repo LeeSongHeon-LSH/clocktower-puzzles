@@ -1,27 +1,23 @@
-// 좌석 메모. 풀이자가 타운스퀘어 좌석에 직접 붙이는 표시와 짧은 글.
+// 좌석 메모. 풀이자가 타운스퀘어 좌석에 직접 붙이는 표시와 역할 추측.
 //
 // 계정도 사용자 식별자도 없다 — 메모는 그 브라우저의 localStorage에만 있고
 // 서버로 나가지 않는다. 저장 실패(사생활 모드 등)는 무시하고 세션 안에서만 산다.
 // 저장 구조와 훅 형태는 progress.ts와 같다 (useSyncExternalStore).
 
 import { useSyncExternalStore } from "react";
+import type { RoleId } from "@/lib/solver/types";
 
-/** 좌석에 찍는 표시. 자유 메모보다 빠르게 누르는 용도. */
+/** 좌석에 찍는 표시. 역할 추측보다 빠르게 누르는 용도. */
 export type SeatMark = "trust" | "doubt" | "lie" | "evil";
 
 export interface SeatNote {
   mark?: SeatMark;
-  memo?: string;
+  /** 풀이자가 이 좌석의 진짜 역할이라고 보는 것. 문제의 대본 안에서만 고른다. */
+  guess?: RoleId;
 }
 
 /** 퍼즐 id → 좌석 번호 → 메모 */
 export type NotesMap = Record<string, Record<number, SeatNote>>;
-
-/**
- * 토큰 안에 그대로 들어가는 길이. 지름 54px 원 안에서 읽을 수 있는 크기로 넣을 수
- * 있는 한계가 4자다 — 잘라 보여주지 않고 입력에서 막는다.
- */
-export const MAX_MEMO = 4;
 
 const KEY = "clocktower-puzzles-notes-v1";
 
@@ -61,14 +57,13 @@ export function loadNotes(): NotesMap {
   return cache;
 }
 
-/** 좌석 하나의 메모를 갱신한다. 빈 메모는 항목째 지운다. */
+/** 좌석 하나의 메모를 갱신한다. 표시도 추측도 없으면 항목째 지운다. */
 export function saveNote(puzzleId: string, seat: number, note: SeatNote): void {
   if (typeof window === "undefined") return;
   const all = loadNotes();
   const seats = { ...(all[puzzleId] ?? {}) };
-  const memo = note.memo?.trim();
-  if (note.mark === undefined && !memo) delete seats[seat];
-  else seats[seat] = { ...(note.mark ? { mark: note.mark } : {}), ...(memo ? { memo } : {}) };
+  if (note.mark === undefined && note.guess === undefined) delete seats[seat];
+  else seats[seat] = { ...(note.mark ? { mark: note.mark } : {}), ...(note.guess ? { guess: note.guess } : {}) };
 
   const next = { ...all };
   if (Object.keys(seats).length === 0) delete next[puzzleId];

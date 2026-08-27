@@ -37,7 +37,7 @@ src/
       roles/              # 역할별 제약 로직 (1역할 1파일)
       solve.ts            # 전수 탐색 + 제약 평가
     progress.ts           # localStorage 풀이 기록
-    notes.ts              # localStorage 좌석 메모 (표시 + 4자 메모)
+    notes.ts              # localStorage 좌석 메모 (표시 + 역할 추측)
   data/
     roles.ts              # 역할 사전: id → { en, ko, team, edition } (공식 번역 고정)
     rules.ts              # 취함·중독 한국어 서술 (직접 작성, 출처 키 참조)
@@ -113,7 +113,7 @@ clocktower-puzzles-progress-v1 = {
   [puzzleId]: { status, hintsUsed, attempts }
 }
 clocktower-puzzles-notes-v1 = {
-  [puzzleId]: { [seat]: { mark?: "trust"|"doubt"|"lie"|"evil", memo?: string } }
+  [puzzleId]: { [seat]: { mark?: "trust"|"doubt"|"lie"|"evil", guess?: RoleId } }
 }
 ```
 
@@ -151,7 +151,8 @@ clocktower-puzzles-notes-v1 = {
 
 ### 4.3 성능 전제
 
-- 인원수 ≤ 10, 등장 역할 풀을 퍼즐마다 명시(스크립트 전체가 아니라 "이 퍼즐에 나올 수 있는 역할" 목록)하여 탐색 공간을 통제한다.
+- 인원수 ≤ 10, 등장 역할 풀을 퍼즐마다 명시하여 탐색 공간을 통제한다. 이 풀은 **퍼즐의 대본이며 풀이 화면에 공개된다**
+  (실제 게임에서도 대본은 공개 정보다) — 그래서 좌석 수보다 넉넉히 잡아야 답이 새지 않는다.
 - 전수 탐색으로 충분한 규모를 유지한다. 퍼즐이 커져서 느려지면 그때 가지치기 도입.
 
 ## 5. 역할명 변경 (런타임 편집 없음)

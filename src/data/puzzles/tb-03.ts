@@ -9,7 +9,13 @@ export default definePuzzle({
   difficulty: "easy",
   playerCount: 7,
   nights: 2,
-  rolePool: ["imp", "spy", "washerwoman", "investigator", "chef", "empath", "fortuneteller", "undertaker"],
+  // 대본 — 풀이 화면에 공개된다. 이 목록 안에서만 역할이 배정된다.
+  rolePool: [
+    "washerwoman", "librarian", "investigator", "chef", "empath", "fortuneteller", "undertaker", "ravenkeeper",
+    "drunk", "recluse",
+    "poisoner", "spy", "baron", "scarletwoman",
+    "imp",
+  ],
   intro:
     "7인 게임, 2일차 아침. 어제 낮 마을은 요리사를 주장하던 C를 처형했고, " +
     "밤사이 G가 죽은 채 발견됐다. 장의사는 'C의 역할은 요리사가 맞았다'고 말한다. " +

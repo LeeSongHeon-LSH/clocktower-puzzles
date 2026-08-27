@@ -5,13 +5,17 @@
 import { useMemo, useState } from "react";
 import type { Puzzle } from "@/lib/puzzles/schema";
 import { seatName } from "@/lib/puzzles/schema";
-import { EDITION_LABELS, ROLES, roleLabel } from "@/data/roles";
+import { EDITION_LABELS, ROLES, TEAM_LABELS, roleLabel } from "@/data/roles";
+import type { RoleId, Team } from "@/lib/solver/types";
 import { renderInfo } from "@/lib/render";
 import { loadProgress, saveProgress, useProgress } from "@/lib/progress";
-import { MAX_MEMO, clearNotes, saveNote, useSeatNotes } from "@/lib/notes";
+import { clearNotes, saveNote, useSeatNotes } from "@/lib/notes";
 import { MARKS, TownSquare, type SeatAnnotation, type TownSquareReveal } from "@/components/TownSquare";
 
 const DIFFICULTY_LABELS = { easy: "쉬움", normal: "보통", hard: "어려움" } as const;
+
+/** 대본 표시 순서 — 그리모어와 같은 순서다 */
+const TEAM_ORDER: Team[] = ["townsfolk", "outsider", "minion", "demon"];
 
 type Done = null | "solved" | "gaveup";
 
@@ -58,7 +62,7 @@ export function PuzzleClient({ puzzle }: { puzzle: Puzzle }) {
         const claim = claimBySeat.get(seat);
         return {
           claim: claim ? ROLES[claim.role].ko : undefined,
-          memo: notes[seat]?.memo,
+          guess: notes[seat]?.guess ? ROLES[notes[seat].guess].ko : undefined,
           mark: notes[seat]?.mark,
         };
       }),
@@ -240,26 +244,43 @@ export function PuzzleClient({ puzzle }: { puzzle: Puzzle }) {
                     );
                   })}
                 </div>
-                <div className="flex items-center gap-2">
-                  <label htmlFor="seat-memo" className="text-xs text-faded">
-                    메모
+                <div className="flex flex-wrap items-center gap-2">
+                  <label htmlFor="seat-guess" className="text-xs text-faded">
+                    내 추측
                   </label>
-                  <input
-                    id="seat-memo"
-                    value={note?.memo ?? ""}
-                    maxLength={MAX_MEMO}
-                    placeholder={`${MAX_MEMO}자까지 — 토큰에 그대로 보인다`}
+                  <select
+                    id="seat-guess"
+                    value={note?.guess ?? ""}
                     onChange={(e) =>
-                      saveNote(puzzle.id, selectedClaim.seat, { ...note, memo: e.target.value })
+                      saveNote(puzzle.id, selectedClaim.seat, {
+                        mark: note?.mark,
+                        guess: (e.target.value || undefined) as RoleId | undefined,
+                      })
                     }
-                    className="w-full max-w-56 rounded border border-panel-edge bg-ink px-2 py-1 text-sm text-parchment placeholder:text-faded/60"
-                  />
+                    className="rounded border border-panel-edge bg-ink px-2 py-1 text-sm text-parchment"
+                  >
+                    <option value="">고르지 않음</option>
+                    {TEAM_ORDER.map((team) => {
+                      const roles = puzzle.rolePool.filter((r) => ROLES[r].team === team);
+                      if (roles.length === 0) return null;
+                      return (
+                        <optgroup key={team} label={TEAM_LABELS[team].ko}>
+                          {roles.map((r) => (
+                            <option key={r} value={r}>
+                              {roleLabel(r)}
+                            </option>
+                          ))}
+                        </optgroup>
+                      );
+                    })}
+                  </select>
+                  <span className="text-xs text-faded">시계 밖에 토큰으로 놓인다</span>
                 </div>
               </div>
             </div>
           ) : (
             <p className="text-center text-faded">
-              좌석을 눌러 그 사람의 주장을 보고, 표시와 메모를 남겨라.
+              좌석을 눌러 그 사람의 주장을 보고, 표시와 추측을 남겨라.
             </p>
           )}
         </div>
@@ -289,6 +310,29 @@ export function PuzzleClient({ puzzle }: { puzzle: Puzzle }) {
             ))}
           </ul>
         </details>
+        <details className="rounded-lg border border-panel-edge bg-panel">
+          <summary className="cursor-pointer px-4 py-3 text-sm text-faded hover:text-parchment">
+            이 문제의 대본 ({puzzle.rolePool.length}종)
+          </summary>
+          <div className="space-y-2 px-4 pb-4 text-sm">
+            <p className="text-xs text-faded">
+              이 {puzzle.playerCount}명은 아래 {puzzle.rolePool.length}종 안에서 배정됐다. 실제로
+              쓰이지 않은 역할이 대부분이다.
+            </p>
+            {TEAM_ORDER.map((team) => {
+              const roles = puzzle.rolePool.filter((r) => ROLES[r].team === team);
+              if (roles.length === 0) return null;
+              return (
+                <div key={team} className="border-l-2 border-panel-edge pl-3">
+                  <p className="text-xs text-faded">
+                    {TEAM_LABELS[team].ko} {roles.length}
+                  </p>
+                  <p className="text-parchment/90">{roles.map((r) => ROLES[r].ko).join(" · ")}</p>
+                </div>
+              );
+            })}
+          </div>
+        </details>
         {Object.keys(notes).length > 0 && (
           <p className="text-right">
             <button
@@ -296,7 +340,7 @@ export function PuzzleClient({ puzzle }: { puzzle: Puzzle }) {
               onClick={() => clearNotes(puzzle.id)}
               className="text-xs text-faded underline-offset-4 hover:text-blood hover:underline"
             >
-              이 문제의 메모 {Object.keys(notes).length}개 지우기
+              이 문제의 표시·추측 {Object.keys(notes).length}개 지우기
             </button>
           </p>
         )}

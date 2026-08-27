@@ -203,6 +203,15 @@ export function PuzzleCreator() {
     [nights, playerCount, deaths, executions],
   );
   const hasPoisoner = pool.includes("poisoner");
+  const minionKinds = pool.filter((r) => ROLES[r].team === "minion").length;
+  /** 대본이 공개되므로 좌석 수에 비해 좁으면 그 자체가 답을 좁힌다 */
+  const narrowPool = pool.length < playerCount + 4;
+
+  /** 솔버가 능력을 아는 역할 전부 — 검증되는 가장 넓은 대본이다 */
+  function fillSolverPool() {
+    setPool([...SOLVER_ROLES]);
+    setVerdict({ kind: "idle" });
+  }
 
   const claimable = useMemo(() => pool.filter((r) => !UNCLAIMABLE.includes(r)), [pool]);
 
@@ -394,11 +403,37 @@ export function PuzzleCreator() {
 
       {/* ── 역할 풀 ── */}
       <section className="space-y-3">
-        <h2 className="font-display text-lg font-bold">2. 역할 풀</h2>
+        <h2 className="font-display text-lg font-bold">2. 대본 (역할 풀)</h2>
         <p className="text-xs text-faded">
-          이 문제에 등장할 수 있는 역할입니다. <strong className="text-parchment">좁게 잡을수록 추리가 선명해집니다.</strong>{" "}
+          이 문제에 등장할 수 있는 역할이고, <strong className="text-parchment">푸는 사람에게 그대로 공개됩니다.</strong>{" "}
+          실제 게임의 대본처럼 인원수보다 넉넉하게 담으세요 — 정답은 이 중 {playerCount}종만 씁니다.
           악마는 최소 1종 넣어야 합니다.
         </p>
+
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs">
+          <span className={narrowPool ? "text-brass" : "text-faded"}>
+            선택 <strong className="tabular-nums text-parchment">{pool.length}</strong>종 · 좌석{" "}
+            <strong className="tabular-nums text-parchment">{playerCount}</strong>명
+          </span>
+          <button
+            type="button"
+            onClick={fillSolverPool}
+            className="rounded border border-brass/60 px-2 py-1 text-brass hover:bg-brass/10"
+          >
+            검증되는 {SOLVER_ROLES.length}종 모두 담기
+          </button>
+        </div>
+        {narrowPool && (
+          <p className="text-xs text-brass">
+            대본이 좁습니다. {playerCount}자리에 {pool.length}종이면 어떤 역할이 쓰였는지 거의 다
+            드러나서, 공개된 대본만 보고도 답이 좁혀집니다.
+          </p>
+        )}
+        {minionKinds === 1 && (
+          <p className="text-xs text-brass">
+            하수인이 한 종뿐입니다 — 대본이 공개되므로 하수인의 정체를 알려주는 셈이 됩니다.
+          </p>
+        )}
 
         <p className="text-xs text-faded">
           <span className="mr-1.5 inline-block rounded-full border border-dashed border-faded px-2 py-0.5 align-middle text-[11px]">
@@ -625,7 +660,9 @@ export function PuzzleCreator() {
       <section className="space-y-3">
         <h2 className="font-display text-lg font-bold">5. 정답 그리모어</h2>
         <p className="text-xs text-faded">
-          좌석별 <strong className="text-parchment">실제</strong> 역할입니다. 악마는 정확히 1명이어야 합니다.
+          좌석별 <strong className="text-parchment">실제</strong> 역할입니다. 대본 {pool.length}종 중
+          이 {playerCount}자리에 쓰인 것만 고릅니다 — 나머지는 쓰이지 않은 채 대본에만 남습니다.
+          악마는 정확히 1명이어야 합니다.
         </p>
         <div className="grid gap-2 sm:grid-cols-2">
           {seats.map((seat) => (

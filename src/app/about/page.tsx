@@ -27,7 +27,7 @@ export default function AboutPage() {
           </li>
           <li>
             게임의 역할 구성 규칙(인원수별 마을 주민·외지인·하수인·악마 수)도
-            추리의 단서입니다. 각 퍼즐에 등장할 수 있는 역할은 역할 풀로 제한됩니다.
+            추리의 단서입니다. 각 퍼즐에 등장할 수 있는 역할은 대본으로 공개되며, 그중 일부만 실제로 쓰입니다.
           </li>
           <li>
             질문에 좌석을 골라 답하세요. 재시도는 무제한이고, 힌트는 퍼즐당 최대
@@ -43,7 +43,7 @@ export default function AboutPage() {
       <section className="space-y-3">
         <h2 className="font-display text-xl font-bold">기록</h2>
         <p className="max-w-prose text-faded">
-          풀이 기록(해결 배지, 힌트 사용)과 좌석에 남긴 메모는 이 브라우저의
+          풀이 기록(해결 배지, 힌트 사용)과 좌석에 남긴 표시·추측은 이 브라우저의
           localStorage에만 저장됩니다. 서버에는 아무것도 저장되지 않고, 계정도
           이용자 구분도 없어서 같은 기기를 함께 쓰지 않는 한 다른 사람의 화면에
           나타나지 않습니다.
