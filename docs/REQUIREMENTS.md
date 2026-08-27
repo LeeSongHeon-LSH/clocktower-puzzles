@@ -36,6 +36,11 @@
 - TB 교란원·악역: Drunk, Recluse, Poisoner, Spy, Baron, Scarlet Woman, Imp
 - 어려움 문제용 SV/BMR: Clockmaker, Seamstress, Juggler, Mathematician, Chambermaid
 
+**역할 사전과는 별개다.** 사전(`src/data/roles.ts`)에는 3개 판본 전 역할 72종이 있고 사설
+문제 편집기에서 무엇이든 고를 수 있지만, 위 목록(`SOLVER_ROLES`)에 없는 역할이 좌석에
+배정되면 솔버가 검증을 거부한다 — 모르는 능력을 없는 셈 치고 세면 유일해 증명이 거짓이 된다.
+능력을 구현할 때마다 이 목록에 추가한다.
+
 ### 2.5 정합성 검증 (핵심 요구사항)
 - 모든 퍼즐은 **솔버가 전수 탐색으로 유일해임을 기계 증명**해야 한다.
 - 퍼즐별 검증이 테스트 스위트로 돌며, 실패하면 배포 불가.

@@ -104,7 +104,7 @@ export function SharedPuzzleLoader() {
           메신저가 긴 주소를 자르는 경우가 있습니다. 링크 전체가 전달됐는지 확인해 주세요.
         </p>
         <Link href="/create" className="inline-block rounded-md border border-panel-edge px-4 py-2 text-faded hover:text-parchment">
-          문제 만들기로 가기
+          문제 업로드로 가기
         </Link>
       </div>
     );

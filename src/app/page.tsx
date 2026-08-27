@@ -42,7 +42,7 @@ export default function Home() {
             href="/create"
             className="rounded-md bg-blood px-4 py-2 font-bold text-parchment transition-colors hover:bg-blood-deep"
           >
-            문제 만들기
+            문제 업로드
           </Link>
           <Link
             href="/guide"

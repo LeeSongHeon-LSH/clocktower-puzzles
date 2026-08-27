@@ -47,10 +47,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
                 퍼즐
               </Link>
               <Link href="/create" className="hover:text-parchment">
-                만들기
-              </Link>
-              <Link href="/guide" className="hover:text-parchment">
-                가이드
+                업로드
               </Link>
               <Link href="/rules" className="hover:text-parchment">
                 규칙

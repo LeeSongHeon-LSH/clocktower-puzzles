@@ -11,7 +11,7 @@ import { checkContent } from "./roles";
 import { Ctx, isDrunk, wakes } from "./ctx";
 import { DemonScenario, demonScenarios, Schedule } from "./timeline";
 import type { Claim, InfoData, RoleId, Seat, SolverPuzzle, World } from "./types";
-import { worldKey } from "./types";
+import { SOLVER_ROLES, worldKey } from "./types";
 
 function combinations<T>(arr: T[], k: number): T[][] {
   if (k === 0) return [[]];
@@ -33,10 +33,30 @@ function permutations<T>(arr: T[], k: number): T[][] {
   return out;
 }
 
+/**
+ * 어떤 월드에서든 좌석에 **배정될 수 있는** 역할을 모은다.
+ * - 풀 안의 하수인: 하수인 자리에 순열로 들어간다
+ * - 주장 역할: 선하고 정직한 좌석의 토큰이 된다
+ * - 주정뱅이: 풀에 있으면 선한 좌석 하나가 될 수 있다
+ * 여기에 능력이 모델링되지 않은 역할이 섞이면 탐색이 그 능력을 없는 셈 치므로
+ * "유일해"라는 결론 자체가 거짓이 된다. 그래서 세는 대신 거부한다.
+ */
+function assignableRoles(pz: SolverPuzzle): RoleId[] {
+  const out = new Set<RoleId>(pz.rolePool.filter((r) => ROLES[r].team === "minion"));
+  for (const c of pz.claims) out.add(c.role);
+  if (pz.rolePool.includes("drunk")) out.add("drunk");
+  out.add("imp"); // 데몬 자리는 항상 임프로 탐색한다
+  return [...out];
+}
+
 function validatePuzzle(pz: SolverPuzzle): Claim[] {
   const claimBySeat: Claim[] = [];
   if (new Set(pz.rolePool).size !== pz.rolePool.length) throw new Error("역할 풀에 중복이 있습니다");
   if (!pz.rolePool.includes("imp")) throw new Error("역할 풀에 임프가 없습니다");
+  const unmodeled = assignableRoles(pz).filter((r) => !SOLVER_ROLES.includes(r));
+  if (unmodeled.length > 0) {
+    throw new Error(`솔버가 아직 모르는 역할입니다: ${unmodeled.map((r) => ROLES[r].ko).join(", ")}`);
+  }
   for (const c of pz.claims) {
     if (c.seat < 0 || c.seat >= pz.playerCount) throw new Error(`잘못된 좌석: ${c.seat}`);
     if (claimBySeat[c.seat]) throw new Error(`좌석 ${c.seat}의 주장이 중복`);

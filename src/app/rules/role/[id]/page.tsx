@@ -69,38 +69,50 @@ export default async function RoleRulePage({ params }: PageProps<"/rules/role/[i
         <p className="text-xs text-faded">공식 한국어 번역 원문.</p>
       </section>
 
-      <section className="space-y-2">
-        <h2 className="font-display text-lg font-bold">추리에서 뜻하는 것</h2>
-        <p className="max-w-prose">{note.whatItMeans}</p>
-      </section>
+      {note ? (
+        <>
+          <section className="space-y-2">
+            <h2 className="font-display text-lg font-bold">추리에서 뜻하는 것</h2>
+            <p className="max-w-prose">{note.whatItMeans}</p>
+          </section>
 
-      <section className="space-y-2">
-        <h2 className="font-display text-lg font-bold">취하거나 중독되면</h2>
-        <p className="max-w-prose">{note.whenBroken}</p>
-        <p className="max-w-prose text-xs text-faded">
-          이 상태의 정보는 거짓이 아니라 <em>임의</em>라는 점이 중요합니다 —{" "}
-          <Link
-            href="/rules/drunk-and-poison"
-            className="text-brass underline underline-offset-2 hover:text-parchment"
-          >
-            취함과 중독
-          </Link>
-          에서 근거와 함께 설명합니다.
-        </p>
-      </section>
+          <section className="space-y-2">
+            <h2 className="font-display text-lg font-bold">취하거나 중독되면</h2>
+            <p className="max-w-prose">{note.whenBroken}</p>
+            <p className="max-w-prose text-xs text-faded">
+              이 상태의 정보는 거짓이 아니라 <em>임의</em>라는 점이 중요합니다 —{" "}
+              <Link
+                href="/rules/drunk-and-poison"
+                className="text-brass underline underline-offset-2 hover:text-parchment"
+              >
+                취함과 중독
+              </Link>
+              에서 근거와 함께 설명합니다.
+            </p>
+          </section>
 
-      {note.watchOut && (
+          {note.watchOut && (
+            <section className="space-y-2">
+              <h2 className="font-display text-lg font-bold">놓치기 쉬운 점</h2>
+              <p className="max-w-prose border-l-2 border-blood/60 pl-3">{note.watchOut}</p>
+            </section>
+          )}
+        </>
+      ) : (
         <section className="space-y-2">
-          <h2 className="font-display text-lg font-bold">놓치기 쉬운 점</h2>
-          <p className="max-w-prose border-l-2 border-blood/60 pl-3">{note.watchOut}</p>
+          <h2 className="font-display text-lg font-bold">해설 준비 중</h2>
+          <p className="max-w-prose text-faded">
+            이 역할은 사전에는 있지만 아직 해설을 쓰지 않았고, 솔버도 능력을 모델링하지
+            않았습니다. 지금은 위 공식 능력 문구와 아래 알마낙 링크를 참고해 주세요.
+          </p>
         </section>
       )}
 
       <section className="space-y-3 border-t border-panel-edge pt-8">
         <h2 className="font-display text-base font-bold">출처 · 정합성 검증</h2>
         <p className="max-w-prose text-xs text-faded">
-          위 해설은 직접 쓴 것이고, 능력 문구는 공식 번역을 그대로 옮긴 것입니다. 원문과
-          대조하려면 아래 링크를 확인하세요.
+          능력 문구는 공식 번역을 그대로 옮긴 것이고, 해설이 있다면 그건 직접 쓴 것입니다.
+          원문과 대조하려면 아래 링크를 확인하세요.
         </p>
         <ul className="space-y-2 text-xs">
           <li className="rounded border border-panel-edge bg-panel px-3 py-2">

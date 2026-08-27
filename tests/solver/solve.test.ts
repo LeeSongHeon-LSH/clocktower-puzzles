@@ -77,3 +77,39 @@ describe("solve: 독살범 5인, 밤2 킬 실패", () => {
     ].sort());
   });
 });
+
+describe("solve: 솔버가 모르는 역할 거부", () => {
+  // 사전에는 3개 판본 72종이 다 있지만 능력이 구현된 건 그 일부다.
+  // 모르는 능력을 없는 셈 치고 세면 "유일해"가 거짓이 되므로, 세지 않고 거부해야 한다.
+  const base: SolverPuzzle = {
+    playerCount: 5,
+    rolePool: ["imp", "scarletwoman", "washerwoman", "empath", "chef", "fortuneteller", "librarian"],
+    nights: 1,
+    events: [],
+    claims: [
+      { seat: 0, role: "washerwoman", info: [] },
+      { seat: 1, role: "empath", info: [] },
+      { seat: 2, role: "chef", info: [] },
+      { seat: 3, role: "fortuneteller", info: [] },
+      { seat: 4, role: "librarian", info: [] },
+    ],
+  };
+
+  it("주장 역할이 미구현이면 거부한다", () => {
+    const pz: SolverPuzzle = {
+      ...base,
+      rolePool: [...base.rolePool, "soldier"],
+      claims: base.claims.map((c, i) => (i === 2 ? { ...c, role: "soldier" as const } : c)),
+    };
+    expect(() => solve(pz)).toThrow(/모르는 역할/);
+  });
+
+  it("풀에 든 하수인이 미구현이면 거부한다", () => {
+    expect(() => solve({ ...base, rolePool: [...base.rolePool, "godfather"] })).toThrow(/모르는 역할/);
+  });
+
+  it("배정되지 않는 역할은 풀에 있어도 통과한다 (은둔자 오등록 대상)", () => {
+    // 보르톡스는 데몬 자리에 들어가지 않는다 — 은둔자가 그 토큰으로 등록될 수 있을 뿐이다.
+    expect(() => solve({ ...base, rolePool: [...base.rolePool, "vortox"] })).not.toThrow();
+  });
+});

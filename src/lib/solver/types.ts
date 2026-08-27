@@ -3,8 +3,96 @@
 export type Team = "townsfolk" | "outsider" | "minion" | "demon";
 export type Edition = "tb" | "bmr" | "sv";
 
+// 역할 사전 전체 (3개 기본 판본, 여행자 제외). 표기는 src/data/roles.ts.
 export const ROLE_IDS = [
-  // TB 정보 역할
+  // ── 점철되는 혼란 (Trouble Brewing) ──
+  "washerwoman",
+  "librarian",
+  "investigator",
+  "chef",
+  "empath",
+  "fortuneteller",
+  "undertaker",
+  "monk",
+  "ravenkeeper",
+  "virgin",
+  "slayer",
+  "soldier",
+  "mayor",
+  "butler",
+  "drunk",
+  "recluse",
+  "saint",
+  "poisoner",
+  "spy",
+  "scarletwoman",
+  "baron",
+  "imp",
+  // ── 피로 물든 달 (Bad Moon Rising) ──
+  "grandmother",
+  "sailor",
+  "chambermaid",
+  "exorcist",
+  "innkeeper",
+  "gambler",
+  "gossip",
+  "courtier",
+  "professor",
+  "minstrel",
+  "tealady",
+  "pacifist",
+  "fool",
+  "tinker",
+  "moonchild",
+  "goon",
+  "lunatic",
+  "godfather",
+  "devilsadvocate",
+  "assassin",
+  "mastermind",
+  "zombuul",
+  "pukka",
+  "shabaloth",
+  "po",
+  // ── 화단에 꽃피운 이단 (Sects & Violets) ──
+  "clockmaker",
+  "dreamer",
+  "snakecharmer",
+  "mathematician",
+  "flowergirl",
+  "towncrier",
+  "oracle",
+  "savant",
+  "seamstress",
+  "philosopher",
+  "artist",
+  "juggler",
+  "sage",
+  "mutant",
+  "sweetheart",
+  "barber",
+  "klutz",
+  "eviltwin",
+  "witch",
+  "cerenovus",
+  "pithag",
+  "fanggu",
+  "vigormortis",
+  "nodashii",
+  "vortox",
+] as const;
+
+export type RoleId = (typeof ROLE_IDS)[number];
+
+/**
+ * 솔버가 능력을 실제로 모델링하는 역할.
+ *
+ * ROLE_IDS는 사전 전체(편집기에서 고를 수 있는 역할)이고, 이쪽은 그중 **검증이 성립하는**
+ * 부분집합이다. 여기 없는 역할이 배정될 수 있는 자리에 들어가면 solve()가 거부한다 —
+ * 모르는 능력을 없는 셈 치고 세면 "유일해"가 거짓이 되기 때문이다 (solve.ts의 validatePuzzle).
+ * 능력을 구현할 때마다 여기에 한 줄씩 추가한다.
+ */
+export const SOLVER_ROLES: readonly RoleId[] = [
   "washerwoman",
   "librarian",
   "investigator",
@@ -13,7 +101,6 @@ export const ROLE_IDS = [
   "fortuneteller",
   "undertaker",
   "ravenkeeper",
-  // TB 외부인/악역
   "drunk",
   "recluse",
   "poisoner",
@@ -21,15 +108,12 @@ export const ROLE_IDS = [
   "baron",
   "scarletwoman",
   "imp",
-  // SV/BMR (어려움 문제용)
   "clockmaker",
   "seamstress",
   "juggler",
   "mathematician",
   "chambermaid",
-] as const;
-
-export type RoleId = (typeof ROLE_IDS)[number];
+];
 
 /** 좌석 번호 = players 배열 인덱스 (0-based, 원형 순서) */
 export type Seat = number;

@@ -54,8 +54,9 @@ export default function RulesIndexPage() {
         <div className="space-y-2">
           <h2 className="font-display text-xl font-bold">역할</h2>
           <p className="max-w-prose text-faded">
-            이 사이트의 퍼즐에 등장하는 {ROLE_IDS.length}종입니다. 각 문서에는 공식 능력
-            문구와, 그 능력이 추리에서 실제로 무엇을 확정해 주는지를 함께 적었습니다.
+            3개 기본 판본의 전 역할 {ROLE_IDS.length}종입니다(여행자 제외). 모든 문서에 공식 능력
+            문구와 알마낙 링크가 있고, 퍼즐에 실제로 쓰이는 역할에는 그 능력이 추리에서 무엇을
+            확정해 주는지에 대한 해설이 함께 붙습니다.
           </p>
         </div>
 

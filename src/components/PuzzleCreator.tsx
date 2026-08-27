@@ -7,11 +7,19 @@
 // 실측상 솔버는 최악의 경우도 15ms 미만이라 동기 실행으로 충분하다.
 
 import { useMemo, useState } from "react";
-import { ROLES, roleLabel } from "@/data/roles";
+import { EDITION_LABELS, ROLES, TEAM_LABELS, roleLabel } from "@/data/roles";
 import { LIMITS, encodePuzzle, toPuzzle, type SharedPuzzle } from "@/lib/puzzles/codec";
 import { seatName, type Difficulty } from "@/lib/puzzles/schema";
 import { solve } from "@/lib/solver/solve";
-import { ROLE_IDS, type InfoData, type RoleId, type Seat } from "@/lib/solver/types";
+import {
+  ROLE_IDS,
+  SOLVER_ROLES,
+  type Edition,
+  type InfoData,
+  type RoleId,
+  type Seat,
+  type Team,
+} from "@/lib/solver/types";
 import { renderInfo } from "@/lib/render";
 
 const DIFFICULTIES: { value: Difficulty; label: string }[] = [
@@ -22,6 +30,40 @@ const DIFFICULTIES: { value: Difficulty; label: string }[] = [
 
 /** 주장할 수 없는 역할: 주정뱅이(자신을 모름)와 악마 */
 const UNCLAIMABLE: RoleId[] = ["drunk", ...(ROLE_IDS as readonly RoleId[]).filter((r) => ROLES[r].team === "demon")];
+
+/** 그리모어 순서 — 규칙 문서(/rules)와 같은 배열을 쓴다 */
+const TEAM_ORDER: Team[] = ["townsfolk", "outsider", "minion", "demon"];
+
+const POOL_BY_TEAM = TEAM_ORDER.map((team) => ({
+  team,
+  roles: (ROLE_IDS as readonly RoleId[]).filter((r) => ROLES[r].team === team),
+}));
+
+/** 진영색은 팔레트의 team 토큰을 그대로 쓴다 — 마을 광장·규칙 문서와 같은 색이다. */
+const TEAM_STYLE: Record<Team, { rail: string; text: string; chipOn: string }> = {
+  townsfolk: {
+    rail: "border-team-townsfolk/40",
+    text: "text-team-townsfolk",
+    chipOn: "border-team-townsfolk bg-team-townsfolk/15 text-parchment",
+  },
+  outsider: {
+    rail: "border-team-outsider/40",
+    text: "text-team-outsider",
+    chipOn: "border-team-outsider bg-team-outsider/15 text-parchment",
+  },
+  minion: {
+    rail: "border-team-minion/40",
+    text: "text-team-minion",
+    chipOn: "border-team-minion bg-team-minion/15 text-parchment",
+  },
+  demon: {
+    rail: "border-team-demon/40",
+    text: "text-team-demon",
+    chipOn: "border-team-demon bg-team-demon/15 text-parchment",
+  },
+};
+
+const EDITIONS: Edition[] = ["tb", "bmr", "sv"];
 
 /** 정보를 만들어 내는 역할 = 정보 입력칸이 있는 역할 */
 const INFO_ROLES: RoleId[] = [
@@ -44,6 +86,7 @@ type Verdict =
   | { kind: "error"; message: string }
   | { kind: "multiple"; count: number }
   | { kind: "none" }
+  | { kind: "unsupported"; roles: RoleId[] }
   | { kind: "unique"; link: string };
 
 /** 역할에 맞는 기본 정보값 */
@@ -87,6 +130,8 @@ export function PuzzleCreator() {
   const [deathNight, setDeathNight] = useState<string>("");
   const [deathSeat, setDeathSeat] = useState(0);
   const [verdict, setVerdict] = useState<Verdict>({ kind: "idle" });
+  /** 역할 풀 표시 필터. 사전이 72종이라 판본으로 좁혀 보여준다 (고른 역할은 항상 보인다). */
+  const [poolEdition, setPoolEdition] = useState<Edition | "all">("tb");
 
   const seats = useMemo(() => Array.from({ length: playerCount }, (_, i) => i), [playerCount]);
   const claimable = useMemo(() => pool.filter((r) => !UNCLAIMABLE.includes(r)), [pool]);
@@ -125,7 +170,7 @@ export function PuzzleCreator() {
     if (execDay !== "") events.push({ type: "execution" as const, day: Number(execDay), seat: execSeat });
     if (deathNight !== "") events.push({ type: "death" as const, night: Number(deathNight), seat: deathSeat });
 
-    const demonSeat = solution.findIndex((r) => r === "imp");
+    const demonSeat = solution.findIndex((r) => ROLES[r].team === "demon");
     return {
       title: title.trim() || "이름 없는 문제",
       author: author.trim() || undefined,
@@ -150,11 +195,26 @@ export function PuzzleCreator() {
       return;
     }
 
-    if (!shared.solution.includes("imp")) {
-      setVerdict({ kind: "error", message: "정답 배치에 임프가 정확히 1명 있어야 합니다." });
+    // 솔버가 능력을 모르는 역할이 좌석에 배정되면 그 능력을 없는 셈 치고 세게 된다.
+    // 그러면 "유일해"라는 결론 자체가 거짓이 되므로, 세는 대신 어떤 역할이 걸렸는지 알린다.
+    const unmodeled = [
+      ...new Set([
+        ...pool.filter((r) => ROLES[r].team === "minion"),
+        ...(pool.includes("drunk") ? (["drunk"] as RoleId[]) : []),
+        ...claims.map((c) => c.role),
+        ...shared.solution,
+      ]),
+    ].filter((r) => !SOLVER_ROLES.includes(r));
+    if (unmodeled.length > 0) {
+      setVerdict({ kind: "unsupported", roles: unmodeled });
       return;
     }
 
+    const demons = shared.solution.filter((r) => ROLES[r].team === "demon");
+    if (demons.length !== 1) {
+      setVerdict({ kind: "error", message: "정답 배치에 악마가 정확히 1명 있어야 합니다." });
+      return;
+    }
     let worlds;
     try {
       worlds = solve(toPuzzle(shared, "draft"));
@@ -241,23 +301,74 @@ export function PuzzleCreator() {
       </section>
 
       {/* ── 역할 풀 ── */}
-      <section className="space-y-2">
+      <section className="space-y-3">
         <h2 className="font-display text-lg font-bold">2. 역할 풀</h2>
         <p className="text-xs text-faded">
           이 문제에 등장할 수 있는 역할입니다. <strong className="text-parchment">좁게 잡을수록 추리가 선명해집니다.</strong>{" "}
-          임프는 반드시 포함해야 합니다.
+          악마는 최소 1종 넣어야 합니다.
         </p>
-        <div className="flex flex-wrap gap-1.5">
-          {(ROLE_IDS as readonly RoleId[]).map((r) => (
-            <button key={r} type="button" onClick={() => togglePool(r)}
-              className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
-                pool.includes(r) ? "border-brass bg-brass/15 text-parchment" : "border-panel-edge text-faded hover:text-parchment"
+
+        <div className="flex flex-wrap gap-2" role="group" aria-label="판본 필터">
+          {(["all", ...EDITIONS] as const).map((e) => (
+            <button key={e} type="button" onClick={() => setPoolEdition(e)} aria-pressed={poolEdition === e}
+              className={`rounded-full border px-3 py-1 text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brass ${
+                poolEdition === e
+                  ? "border-brass bg-brass/15 text-parchment"
+                  : "border-panel-edge text-faded hover:text-parchment"
               }`}>
-              {ROLES[r].ko}
+              {e === "all" ? "전체" : EDITION_LABELS[e].ko}
             </button>
           ))}
         </div>
-        {!pool.includes("imp") && <p className="text-xs text-blood">임프가 빠져 있습니다.</p>}
+
+        <p className="text-xs text-faded">
+          <span className="mr-1.5 inline-block rounded-full border border-dashed border-faded px-2 py-0.5 align-middle text-[11px]">
+            점선
+          </span>
+          은 솔버가 아직 능력을 모르는 역할입니다. 풀에 넣어도 되지만, 그 역할이 좌석에 배정되면
+          유일해 검증과 공유 링크가 나오지 않습니다.
+        </p>
+
+        <div className="space-y-3" role="group" aria-label="역할 풀">
+          {POOL_BY_TEAM.map(({ team, roles }) => {
+            const picked = roles.filter((r) => pool.includes(r)).length;
+            // 고른 역할을 숨기면 풀에 뭐가 들었는지 모르게 된다 — 필터는 안 고른 역할만 접는다.
+            const shown = roles.filter(
+              (r) => poolEdition === "all" || ROLES[r].edition === poolEdition || pool.includes(r),
+            );
+            const style = TEAM_STYLE[team];
+            return (
+              <div key={team} className={`border-l-2 pl-3 ${style.rail}`}>
+                <div className="flex items-baseline gap-2">
+                  <h3 className={`font-display text-sm font-bold ${style.text}`}>{TEAM_LABELS[team].ko}</h3>
+                  <span className="text-[11px] text-faded">{TEAM_LABELS[team].en}</span>
+                  <span className={`ml-auto text-[11px] tabular-nums ${picked > 0 ? style.text : "text-faded"}`}>
+                    {picked}/{roles.length}
+                  </span>
+                </div>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {shown.map((r) => {
+                    const on = pool.includes(r);
+                    const modeled = SOLVER_ROLES.includes(r);
+                    return (
+                      <button key={r} type="button" onClick={() => togglePool(r)} aria-pressed={on}
+                        aria-label={modeled ? ROLES[r].ko : `${ROLES[r].ko} (솔버 미구현)`}
+                        className={`rounded-full border px-2.5 py-1 text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brass ${
+                          modeled ? "" : "border-dashed"
+                        } ${on ? style.chipOn : "border-panel-edge text-faded hover:text-parchment"}`}>
+                        {ROLES[r].ko}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {!pool.some((r) => ROLES[r].team === "demon") && (
+          <p className="text-xs text-blood">악마가 하나도 없습니다.</p>
+        )}
       </section>
 
       {/* ── 좌석별 주장 ── */}
@@ -354,7 +465,7 @@ export function PuzzleCreator() {
       <section className="space-y-3">
         <h2 className="font-display text-lg font-bold">5. 정답 그리모어</h2>
         <p className="text-xs text-faded">
-          좌석별 <strong className="text-parchment">실제</strong> 역할입니다. 임프는 정확히 1명이어야 합니다.
+          좌석별 <strong className="text-parchment">실제</strong> 역할입니다. 악마는 정확히 1명이어야 합니다.
         </p>
         <div className="grid gap-2 sm:grid-cols-2">
           {seats.map((seat) => (
@@ -382,6 +493,23 @@ export function PuzzleCreator() {
 
         {verdict.kind === "error" && (
           <p className="rounded border border-blood/60 bg-panel p-3 text-blood">{verdict.message}</p>
+        )}
+        {verdict.kind === "unsupported" && (
+          <div className="space-y-2 rounded border border-brass/60 bg-panel p-3">
+            <p className="font-bold text-brass">솔버가 아직 모르는 역할이 있습니다.</p>
+            <ul className="flex flex-wrap gap-1.5">
+              {verdict.roles.map((r) => (
+                <li key={r} className="rounded-full border border-brass/50 px-2.5 py-0.5 text-xs text-brass">
+                  {roleLabel(r)}
+                </li>
+              ))}
+            </ul>
+            <p className="max-w-prose text-faded">
+              이 역할들의 능력이 솔버에 들어가기 전까지는 답이 하나인지 증명할 수 없어서 링크를 내주지
+              않습니다. 능력을 모르는 채로 세면 “유일해”가 거짓이 되기 때문입니다. 지금 입력한 내용은
+              그대로 두고 위 역할만 검증되는 역할로 바꾸면 바로 확인할 수 있습니다.
+            </p>
+          </div>
         )}
         {verdict.kind === "none" && (
           <div className="rounded border border-blood/60 bg-panel p-3">

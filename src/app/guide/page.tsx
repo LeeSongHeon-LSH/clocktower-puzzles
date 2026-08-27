@@ -2,16 +2,15 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ROLES } from "@/data/roles";
 import { LIMITS } from "@/lib/puzzles/codec";
-import { ROLE_IDS, type RoleId } from "@/lib/solver/types";
+import { ROLE_IDS, SOLVER_ROLES, type RoleId } from "@/lib/solver/types";
 
 export const metadata: Metadata = {
   title: "문제 업로드 가이드",
   description: "직접 만든 시계탑 추리 문제를 검증하고 공유하는 방법, 그리고 사이트에 정식 수록하는 방법.",
 };
 
-const UNCLAIMABLE = (ROLE_IDS as readonly RoleId[]).filter(
-  (r) => r === "drunk" || ROLES[r].team === "demon",
-);
+const DEMON_COUNT = (ROLE_IDS as readonly RoleId[]).filter((r) => ROLES[r].team === "demon").length;
+const SOLVER_COUNT = SOLVER_ROLES.length;
 
 const REPO = "https://github.com/LeeSongHeon-LSH/clocktower-puzzles";
 
@@ -86,7 +85,7 @@ export default function GuidePage() {
           href="/create"
           className="inline-block rounded-md bg-blood px-5 py-2.5 font-bold text-parchment transition-colors hover:bg-blood-deep"
         >
-          지금 만들러 가기
+          지금 업로드하러 가기
         </Link>
       </section>
 
@@ -110,7 +109,7 @@ export default function GuidePage() {
               d: "거짓말도 판에 있을 법한 역할로 해야 합니다. 풀에 없는 역할을 주장하면 검증이 거부됩니다.",
             },
             {
-              t: `주정뱅이와 악마는 주장할 수 없습니다 (${UNCLAIMABLE.map((r) => ROLES[r].ko).join(", ")})`,
+              t: `주정뱅이(${ROLES.drunk.ko})와 악마 ${DEMON_COUNT}종은 주장할 수 없습니다`,
               d: "주정뱅이는 자기가 주민이라고 믿으므로, 그가 믿는 그 주민 역할을 주장하게 하면 됩니다. 악마는 자기 정체를 밝히지 않습니다.",
             },
             {
@@ -120,6 +119,10 @@ export default function GuidePage() {
             {
               t: "밤 사망은 밤 2부터입니다",
               d: "첫날 밤에는 악마가 아무도 죽이지 않습니다.",
+            },
+            {
+              t: `검증되는 역할은 ${ROLE_IDS.length}종 중 ${SOLVER_COUNT}종입니다`,
+              d: "역할 사전에는 3개 판본이 다 들어 있어서 무엇이든 풀에 넣고 배치할 수 있지만, 솔버가 능력을 아는 역할은 그 일부입니다. 모르는 능력을 없는 셈 치고 세면 ‘답이 하나’라는 결론이 거짓이 되므로, 그런 문제는 검증하지 않고 어떤 역할이 걸렸는지 알려 줍니다. 능력은 하나씩 구현해 넣는 중입니다.",
             },
           ].map((r) => (
             <div key={r.t} className="rounded border border-panel-edge bg-panel px-4 py-3">
