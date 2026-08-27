@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/assets/social-preview.png" alt="시계탑 퍼즐 — 논리로 악마를 찾아라" width="100%">
+
 # 🕰️ 시계탑 퍼즐
 
 **Blood on the Clocktower의 한 장면을 순수 논리 퍼즐로 바꾼 비공식 팬 사이트**
