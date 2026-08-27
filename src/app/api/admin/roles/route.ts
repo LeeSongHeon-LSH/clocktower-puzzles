@@ -4,6 +4,7 @@
 
 import { createHash, timingSafeEqual } from "node:crypto";
 import { ROLES } from "@/data/roles";
+import { checkRateLimit, recordFailure } from "@/lib/rate-limit";
 import { ROLE_IDS, type RoleId } from "@/lib/solver/types";
 
 const ROLES_PATH = "src/data/roles.ts";
@@ -25,6 +26,16 @@ export async function POST(request: Request) {
   if (!process.env.ADMIN_PASSWORD) {
     return Response.json({ error: "관리자 기능이 설정되지 않았습니다 (ADMIN_PASSWORD 없음)." }, { status: 503 });
   }
+  // Vercel이 신뢰할 수 있는 클라이언트 IP를 x-forwarded-for 맨 앞에 넣어준다.
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const limit = checkRateLimit(ip);
+  if (limit.blocked) {
+    return Response.json(
+      { error: `시도가 너무 많습니다. ${Math.ceil(limit.retryAfterSec / 60)}분 후 다시 시도하세요.` },
+      { status: 429, headers: { "Retry-After": String(limit.retryAfterSec) } },
+    );
+  }
+
   let body: { password?: unknown; changes?: unknown };
   try {
     body = await request.json();
@@ -32,6 +43,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "잘못된 요청 형식입니다." }, { status: 400 });
   }
   if (!passwordOk(body.password)) {
+    recordFailure(ip);
     return Response.json({ error: "비밀번호가 틀렸습니다." }, { status: 401 });
   }
 
