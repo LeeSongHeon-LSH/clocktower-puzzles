@@ -21,6 +21,9 @@
 // - Po의 3킬 밤(직전 선택이 '아무도 안 함')은 죽은 좌석 선택이 허용되므로 실제 사망
 //   0~3건이 전부 설명 없이 성립한다 (관대한 방향). 구마사제 봉쇄 밤은 선택 자체가 없던
 //   밤이라 '아무도 안 함'으로 치지 않는다 — 다음 밤 3킬이 열리지 않는다.
+// - 샤바로스는 밤마다 2명을 고르는데 시신도 고를 수 있어 실제 사망 0~2건이 전부 설명
+//   없이 성립한다 (관대한 방향). 역류(부활)는 이벤트로 표현 불가 — "might"라 비발동 ∃가
+//   항상 성립하고, 역류가 발동한 게임은 입력될 수 없다.
 
 import { ROLES } from "@/data/roles";
 import { canShowAsRole } from "./registration";
@@ -500,10 +503,12 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
       return nb !== null && nb.every((x) => isGoodTeam(assignment[x]) || assignment[x] === "spy");
     })();
 
-    // 데몬 킬 집합: 보통은 0~1건, Po의 3킬 밤(직전 선택이 '아무도 안 함')에는 최대 3건.
+    // 데몬 킬 집합: 보통은 0~1건, Po의 3킬 밤(직전 선택이 '아무도 안 함')에는 최대 3건,
+    // 샤바로스는 매밤 2명 선택(시신 포함 가능)이라 최대 2건.
     const poTriple = demonRole === "po" && st.poChoseNone;
     const killSets: Seat[][] = demonless ? [[]]
       : poTriple ? subsetsUpTo(deaths, 3)
+      : demonRole === "shabaloth" ? subsetsUpTo(deaths, 2)
       : [[], ...deaths.map((d) => [d])];
     for (const demonKills of killSets) {
       const rest = deaths.filter((d) => !demonKills.includes(d));
@@ -622,6 +627,10 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
           });
         } else {
           // 데몬 킬 부재 — 설명이 하나는 있어야 한다 (Po의 조용한 밤은 자발적 선택이라 공짜)
+          if (demonRole === "shabaloth") {
+            // 시신 2명을 골랐을 수 있다 — 킬 부재가 설명 없이 성립한다 (관대한 방향)
+            impVariants.push(() => true);
+          }
           if (demonRole === "po") {
             if (st.poChoseNone) {
               // 3킬 밤: 반드시 3명을 고르지만 죽은 좌석도 고를 수 있어

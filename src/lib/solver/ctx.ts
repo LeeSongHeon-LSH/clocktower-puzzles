@@ -142,6 +142,7 @@ export function wakes(ctx: Ctx, seat: Seat, night: number): boolean {
     case "imp":
     case "vortox":
     case "nodashii":
+    case "shabaloth": // 밤2부터 매밤 2명을 고른다 (시신 포함 가능)
     case "po": { // 조용한 밤에도 깨어난다 — '아무도 안 함'도 선택하러 깬다
       // 구마사제가 악마를 지목한 밤에는 악마가 깨어나지 못한다
       if (ctx.sc.exorcistBlocked?.has(night)) return false;
