@@ -8,6 +8,9 @@
 
 [**▶ 사이트 열기**](https://clocktower-fan-puzzles.vercel.app)
 
+[![CI](https://github.com/LeeSongHeon-LSH/clocktower-puzzles/actions/workflows/ci.yml/badge.svg)](https://github.com/LeeSongHeon-LSH/clocktower-puzzles/actions/workflows/ci.yml)
+![License](https://img.shields.io/badge/code-MIT-blue)
+
 ![Next.js](https://img.shields.io/badge/Next.js-16-000?logo=nextdotjs&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-087EA4?logo=react&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
