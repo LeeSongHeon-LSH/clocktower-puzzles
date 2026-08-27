@@ -8,6 +8,7 @@
 //
 // decode 입력은 **신뢰할 수 없는 외부 입력**이다. 반드시 validate를 거친다.
 
+import { ROLES } from "@/data/roles";
 import { ROLE_IDS, type Claim, type ClaimInfo, type GameEvent, type InfoData, type RoleId, type Seat } from "@/lib/solver/types";
 import type { Difficulty, Puzzle, PuzzleEdition, PuzzleQuestion } from "./schema";
 
@@ -244,7 +245,7 @@ export function validateShared(v: unknown): SharedPuzzle {
   if (!Array.isArray(v.rolePool) || v.rolePool.length === 0) throw new Error("역할 풀이 비어 있습니다.");
   const rolePool = v.rolePool.map((r) => roleId(r, "역할 풀"));
   if (new Set(rolePool).size !== rolePool.length) throw new Error("역할 풀에 중복이 있습니다.");
-  if (!rolePool.includes("imp")) throw new Error("역할 풀에 임프가 있어야 합니다.");
+  if (!rolePool.some((r) => ROLES[r].team === "demon")) throw new Error("역할 풀에 악마가 있어야 합니다.");
 
   if (!Array.isArray(v.claims) || v.claims.length !== playerCount) {
     throw new Error(`주장이 인원수(${playerCount}명)와 맞지 않습니다.`);
@@ -281,7 +282,7 @@ export function validateShared(v: unknown): SharedPuzzle {
     throw new Error(`정답 배치가 인원수(${playerCount}명)와 맞지 않습니다.`);
   }
   const solution = v.solution.map((r) => roleId(r, "정답 배치"));
-  if (solution.filter((r) => r === "imp").length !== 1) throw new Error("정답 배치에 임프가 정확히 1명이어야 합니다.");
+  if (solution.filter((r) => ROLES[r].team === "demon").length !== 1) throw new Error("정답 배치에 악마가 정확히 1명이어야 합니다.");
   for (const r of solution) {
     if (!rolePool.includes(r)) throw new Error(`정답 배치의 ${r}이(가) 역할 풀에 없습니다.`);
   }

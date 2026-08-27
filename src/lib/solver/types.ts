@@ -128,6 +128,8 @@ export const SOLVER_ROLES: readonly RoleId[] = [
   "assassin", // 1회, 밤에 무조건 킬 (보호 무시) — 한 밤 2사망의 주 설명 수단
   // ── SV ──
   "sweetheart", // 죽으면 그때부터 1명이 취한다 — 대상(또는 사망 시 중독으로 미발동)을 열거
+  "mutant", // 외부인임을 숨기려 마을 사람을 사칭한다 — 주장 전체가 날조 (주정뱅이와 대칭, 밤에 깨지 않음)
+  "vortox", // 임프 대체 데몬: 마을 사람 정보가 전부 거짓 + 처형 없는 낮이 지나면 악의 승리
   "clockmaker",
   "dreamer",
   "oracle",

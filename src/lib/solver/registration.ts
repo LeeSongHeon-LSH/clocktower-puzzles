@@ -30,6 +30,18 @@ export function canShowAsRole(view: TokenView, seat: Seat, shown: RoleId): boole
   return false;
 }
 
+/**
+ * 이 좌석이 주어진 역할들 중 무엇도 아닌 것으로 등록될 수 있는가 (Vortox 거짓 정보용).
+ * 은둔자·첩자는 자기 자신으로도 등록될 수 있으므로 선택지가 하나라도 excluded 밖이면 참.
+ */
+export function canShowAsOtherThan(view: TokenView, seat: Seat, excluded: RoleId[]): boolean {
+  const actual = view.tokenRole(seat);
+  const options: RoleId[] = [actual];
+  if (actual === "recluse") options.push(...view.rolePool.filter(isEvilRole));
+  if (actual === "spy") options.push(...view.rolePool.filter((r) => !isEvilRole(r)));
+  return options.some((r) => !excluded.includes(r));
+}
+
 /** 이 좌석이 악한 진영으로 등록될 수 '있는가' */
 export function canRegisterEvil(view: TokenView, seat: Seat): boolean {
   const actual = view.tokenRole(seat);

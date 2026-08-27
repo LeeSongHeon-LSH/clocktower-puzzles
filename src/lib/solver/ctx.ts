@@ -127,10 +127,11 @@ export function wakes(ctx: Ctx, seat: Seat, night: number): boolean {
     case "poisoner":
     case "spy":
       return aliveStart[seat];
-    case "imp": {
+    case "imp":
+    case "vortox": {
       // 구마사제가 악마를 지목한 밤에는 악마가 깨어나지 못한다
       if (ctx.sc.exorcistBlocked?.has(night)) return false;
-      // 승계한 밤(스타 패스)에는 임프가 됐다고 통보받으며 깨어난다
+      // 승계한 밤(스타 패스, 탕녀)에는 악마가 됐다고 통보받으며 깨어난다
       const since = ctx.sc.becameDemonAt.get(seat);
       if (since === night) return true;
       return night >= 2 && aliveStart[seat];

@@ -1,5 +1,6 @@
 // 퍼즐 파일 스키마. 문제 1개 = src/data/puzzles/의 TS 파일 1개.
 
+import { ROLES } from "@/data/roles";
 import type { RoleId, Seat, SolverPuzzle } from "@/lib/solver/types";
 
 export type Difficulty = "easy" | "normal" | "hard";
@@ -50,7 +51,7 @@ export function definePuzzle(p: Puzzle): Puzzle {
   if (p.walkthrough.length === 0) throw new Error(`${p.id}: 해설(walkthrough)이 비어 있음`);
   if (p.questions.length === 0) throw new Error(`${p.id}: 질문이 비어 있음`);
   if (p.solution.length !== p.playerCount) throw new Error(`${p.id}: solution 길이가 인원수와 다름`);
-  if (p.solution.filter((r) => r === "imp").length !== 1) throw new Error(`${p.id}: solution에 임프가 정확히 1명이어야 함`);
+  if (p.solution.filter((r) => ROLES[r].team === "demon").length !== 1) throw new Error(`${p.id}: solution에 악마가 정확히 1명이어야 함`);
   return p;
 }
 

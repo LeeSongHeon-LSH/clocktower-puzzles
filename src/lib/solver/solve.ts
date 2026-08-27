@@ -8,6 +8,7 @@
 import { ROLES } from "@/data/roles";
 import { composition } from "./composition";
 import { checkContent } from "./roles";
+import { checkContentFalse } from "./roles/false-info";
 import { Ctx, isDrunk, isSweetDrunk, wakes } from "./ctx";
 import { DemonScenario, demonScenarios, Schedule, SweetheartCase } from "./timeline";
 import type { Claim, InfoData, RoleId, Seat, SolverPuzzle, World } from "./types";
@@ -42,17 +43,20 @@ function permutations<T>(arr: T[], k: number): T[][] {
  * "유일해"라는 결론 자체가 거짓이 된다. 그래서 세는 대신 거부한다.
  */
 function assignableRoles(pz: SolverPuzzle): RoleId[] {
-  const out = new Set<RoleId>(pz.rolePool.filter((r) => ROLES[r].team === "minion"));
+  const out = new Set<RoleId>(pz.rolePool.filter((r) => {
+    const t = ROLES[r].team;
+    return t === "minion" || t === "demon"; // 데몬 자리는 풀의 데몬들로 탐색한다
+  }));
   for (const c of pz.claims) out.add(c.role);
   if (pz.rolePool.includes("drunk")) out.add("drunk");
-  out.add("imp"); // 데몬 자리는 항상 임프로 탐색한다
+  if (pz.rolePool.includes("mutant")) out.add("mutant");
   return [...out];
 }
 
 function validatePuzzle(pz: SolverPuzzle): Claim[] {
   const claimBySeat: Claim[] = [];
   if (new Set(pz.rolePool).size !== pz.rolePool.length) throw new Error("역할 풀에 중복이 있습니다");
-  if (!pz.rolePool.includes("imp")) throw new Error("역할 풀에 임프가 없습니다");
+  if (!pz.rolePool.some((r) => ROLES[r].team === "demon")) throw new Error("역할 풀에 악마가 없습니다");
   const unmodeled = assignableRoles(pz).filter((r) => !SOLVER_ROLES.includes(r));
   if (unmodeled.length > 0) {
     throw new Error(`솔버가 아직 모르는 역할입니다: ${unmodeled.map((r) => ROLES[r].ko).join(", ")}`);
@@ -61,7 +65,8 @@ function validatePuzzle(pz: SolverPuzzle): Claim[] {
     if (c.seat < 0 || c.seat >= pz.playerCount) throw new Error(`잘못된 좌석: ${c.seat}`);
     if (claimBySeat[c.seat]) throw new Error(`좌석 ${c.seat}의 주장이 중복`);
     if (!pz.rolePool.includes(c.role)) throw new Error(`풀에 없는 역할 주장: ${c.role}`);
-    if (c.role === "drunk" || ROLES[c.role].team === "demon") {
+    if (c.role === "drunk" || c.role === "mutant" || ROLES[c.role].team === "demon") {
+      // 광인은 외부인임을 감추려 마을 사람을 사칭한다 — 광인이라고 공개 주장하지 않는다
       throw new Error(`주장할 수 없는 역할: ${c.role}`);
     }
     for (const info of c.info) {
@@ -90,6 +95,11 @@ export function solve(pz: SolverPuzzle): World[] {
   const N = pz.playerCount;
   const seats = Array.from({ length: N }, (_, i) => i);
   const minionsInPool = pz.rolePool.filter((r) => ROLES[r].team === "minion");
+  const demonsInPool = pz.rolePool.filter((r) => ROLES[r].team === "demon");
+  // Vortox 세계는 처형 없는 낮이 지나는 순간 악의 승리로 끝났어야 한다 —
+  // 지나간 낮(1 ~ nights-1) 전부에 처형이 있어야만 성립한다 (현재 낮은 처형 전이라 제외)
+  const vortoxViable = Array.from({ length: pz.nights - 1 }, (_, i) => i + 1)
+    .every((d) => sched.executedOnDay(d) !== null);
   const baseComp = composition(N, false);
   const found = new Map<string, World>();
 
@@ -109,16 +119,23 @@ export function solve(pz: SolverPuzzle): World[] {
           const outsiderClaims = goodSeats.filter((s) => ROLES[claimBySeat[s].role].team === "outsider");
           const need = comp.outsider - outsiderClaims.length;
           if (need < 0 || need > 1) continue;
-          if (need === 1 && !pz.rolePool.includes("drunk")) continue;
-          const drunkChoices: (Seat | null)[] = need === 1
-            ? goodSeats.filter((s) => ROLES[claimBySeat[s].role].team === "townsfolk")
+          // 숨은 외부인: 주정뱅이(자기 역할을 믿음) 또는 광인(외부인임을 알고 사칭) —
+          // 마을 사람을 주장하는 선한 좌석 하나가 실제로는 이들일 수 있다
+          const hiddenRoles = (["drunk", "mutant"] as RoleId[]).filter((r) => pz.rolePool.includes(r));
+          if (need === 1 && hiddenRoles.length === 0) continue;
+          const hiddenChoices: ({ seat: Seat; role: RoleId } | null)[] = need === 1
+            ? goodSeats
+                .filter((s) => ROLES[claimBySeat[s].role].team === "townsfolk")
+                .flatMap((s) => hiddenRoles.map((role) => ({ seat: s, role })))
             : [null];
 
-          for (const drunkSeat of drunkChoices) {
+          for (const hidden of hiddenChoices) {
+          for (const demonRole of demonsInPool) {
+            if (demonRole === "vortox" && !vortoxViable) continue;
             const assignment: RoleId[] = new Array(N);
-            assignment[demonSeat] = "imp";
+            assignment[demonSeat] = demonRole;
             minionSeats.forEach((s, i) => { assignment[s] = minionRoles[i]; });
-            for (const s of goodSeats) assignment[s] = s === drunkSeat ? "drunk" : claimBySeat[s].role;
+            for (const s of goodSeats) assignment[s] = s === hidden?.seat ? hidden.role : claimBySeat[s].role;
 
             const goodTokens = goodSeats.map((s) => assignment[s]);
             if (new Set(goodTokens).size !== goodTokens.length) continue; // 실물 토큰 중복 불가
@@ -135,6 +152,7 @@ export function solve(pz: SolverPuzzle): World[] {
                 }
               }
             }
+          }
           }
         }
       }
@@ -183,6 +201,7 @@ function tryWorld(
   // 선한 좌석(주정뱅이 포함)의 정보 수집 + 구조 검증 (깨어날 수 없었다면 그 주장은 참일 수 없다)
   const infos: GoodInfo[] = [];
   for (const s of goodSeats) {
+    if (assignment[s] === "mutant") continue; // 광인의 주장은 전부 날조 — 구조도 내용도 검증하지 않는다
     for (const info of claimBySeat[s].info) {
       if (!info.data) continue;
       if (!wakes(ctx, s, info.night)) return null;
@@ -192,18 +211,49 @@ function tryWorld(
 
   const soberInfos = infos.filter((i) => !isDrunk(ctx, i.seat));
   const poisonerSeat = assignment.indexOf("poisoner");
+  const vortoxSeat = assignment.indexOf("vortox");
   const needsExactPoison = soberInfos.some((i) => i.data.type === "mathematician");
 
   if (!needsExactPoison) {
-    // 빠른 경로: 술/독 없이 설명 안 되는 정보는 그 밤 그 좌석의 독살을 강제한다
+    // 빠른 경로: 술/독 없이 설명 안 되는 정보는 그 밤 그 좌석의 독살을 강제한다.
+    // Vortox 세계에서는 반대로 "거짓일 수 없는" 정보가 독살을 강제한다 — 그 좌석의 독살,
+    // 또는 Vortox 자신의 독살(그 밤 능력 정지 → 그 밤 정보 전체가 무제약, 관대한 근사).
     const required = new Map(sc.poisonRequired);
-    for (const i of soberInfos) {
-      if (sc.minstrelNights?.has(i.night)) continue; // 전원 취함 밤의 정보는 무제약
-      if (isSweetDrunk(ctx, i.seat, i.night)) continue; // 스위트하트 취함 — 정보 무제약
-      if (checkContent(ctx, i.seat, i.data, i.night)) continue;
-      const existing = required.get(i.night);
-      if (existing !== undefined && existing !== i.seat) return null;
-      required.set(i.night, i.seat);
+    if (vortoxSeat < 0) {
+      for (const i of soberInfos) {
+        if (sc.minstrelNights?.has(i.night)) continue; // 전원 취함 밤의 정보는 무제약
+        if (isSweetDrunk(ctx, i.seat, i.night)) continue; // 스위트하트 취함 — 정보 무제약
+        if (checkContent(ctx, i.seat, i.data, i.night)) continue;
+        const existing = required.get(i.night);
+        if (existing !== undefined && existing !== i.seat) return null;
+        required.set(i.night, i.seat);
+      }
+    } else {
+      const failing = new Map<number, Set<Seat>>();
+      for (const i of soberInfos) {
+        if (sc.minstrelNights?.has(i.night)) continue;
+        if (isSweetDrunk(ctx, i.seat, i.night)) continue;
+        if (required.get(i.night) === vortoxSeat) continue; // 그 밤 Vortox가 중독 — 무제약
+        if (checkContentFalse(ctx, i.seat, i.data, i.night)) continue;
+        if (!failing.has(i.night)) failing.set(i.night, new Set());
+        failing.get(i.night)!.add(i.seat);
+      }
+      for (const [night, seatsFailing] of failing) {
+        const uniq = [...seatsFailing];
+        const ex = required.get(night);
+        // 한 좌석 실패 → 그 좌석 또는 Vortox 독살, 여럿 실패 → Vortox 독살만이 전부를 구제
+        const cands = ex !== undefined
+          ? (uniq.length === 1 && ex === uniq[0] ? [ex] : [])
+          : uniq.length === 1 ? [uniq[0], vortoxSeat] : [vortoxSeat];
+        const pick = cands.find((t) =>
+          poisonerSeat >= 0 &&
+          !isSweetDrunk(ctx, poisonerSeat, night) &&
+          sched.aliveAtNightStart(night)[poisonerSeat] &&
+          sched.aliveAtNightStart(night)[t] &&
+          !sc.poisonForbidden.get(night)?.has(t));
+        if (pick === undefined) return null;
+        required.set(night, pick);
+      }
     }
     for (const [night, target] of required) {
       if (poisonerSeat < 0) return null;
@@ -249,7 +299,10 @@ function tryWorld(
         if (vector[i.night] === i.seat) continue; // 그 밤 중독 → 정보 무제약
         if (sc.minstrelNights?.has(i.night)) continue; // 전원 취함 밤
         if (isSweetDrunk(pctx, i.seat, i.night)) continue; // 스위트하트 취함
-        if (!checkContent(pctx, i.seat, i.data, i.night)) return null;
+        if (vortoxSeat >= 0) {
+          if (vector[i.night] === vortoxSeat) continue; // Vortox가 중독된 밤 — 무제약 (관대한 근사)
+          if (!checkContentFalse(pctx, i.seat, i.data, i.night)) return null;
+        } else if (!checkContent(pctx, i.seat, i.data, i.night)) return null;
       }
       return { assignment: [...assignment], currentDemonSeat: sc.currentDemonSeat, poisonTargets: [...vector], redHerring, sweetheartDrunk: sweetDrunk?.target ?? null };
     }

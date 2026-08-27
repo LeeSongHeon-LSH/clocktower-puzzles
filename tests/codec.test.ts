@@ -66,8 +66,8 @@ describe("검증 — 신뢰할 수 없는 입력", () => {
     expect(() => validateShared({ ...base(), rolePool: ["imp", "해커"] })).toThrow(/역할/);
   });
 
-  it("임프 없는 역할 풀은 거부한다", () => {
-    expect(() => validateShared({ ...base(), rolePool: ["chef", "empath"] })).toThrow(/임프/);
+  it("악마 없는 역할 풀은 거부한다", () => {
+    expect(() => validateShared({ ...base(), rolePool: ["chef", "empath"] })).toThrow(/악마/);
   });
 
   it("주장 수가 인원수와 다르면 거부한다", () => {
@@ -81,10 +81,10 @@ describe("검증 — 신뢰할 수 없는 입력", () => {
     expect(() => validateShared({ ...b, claims })).toThrow(/좌석/);
   });
 
-  it("정답 배치에 임프가 없으면 거부한다", () => {
+  it("정답 배치에 악마가 없으면 거부한다", () => {
     const b = base();
     const solution = (b.solution as string[]).map((r) => (r === "imp" ? "chef" : r));
-    expect(() => validateShared({ ...b, solution })).toThrow(/임프/);
+    expect(() => validateShared({ ...b, solution })).toThrow(/악마/);
   });
 
   it("지나치게 긴 제목은 거부한다", () => {

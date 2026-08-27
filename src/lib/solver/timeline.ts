@@ -198,8 +198,9 @@ function neighborsOf(alive: boolean[], seat: Seat): [Seat, Seat] | null {
  * 빈 배열 = 이 배정은 이벤트와 모순.
  */
 export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: RoleId[], sweet?: SweetheartCase | null): DemonScenario[] {
-  const impSeat = assignment.indexOf("imp");
-  if (impSeat < 0) return [];
+  const origDemonSeat = assignment.findIndex((r) => ROLES[r].team === "demon");
+  if (origDemonSeat < 0) return [];
+  const demonRole = assignment[origDemonSeat]; // 승계자의 토큰도 이 역할이 된다 (탕녀는 '그 악마'가 된다)
   const poisonerSeat = assignment.indexOf("poisoner");
   const hasPoisoner = poisonerSeat >= 0;
   // 스위트하트 취함: since 이후의 그 좌석은 능력이 비정상 동작한다 (독살과 같은 효과, 영구)
@@ -259,7 +260,7 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
 
   function tokenAt(became: Map<Seat, number>, seat: Seat, time: number): RoleId {
     const since = became.get(seat);
-    if (since !== undefined && since <= time) return "imp";
+    if (since !== undefined && since <= time) return demonRole;
     return assignment[seat];
   }
 
@@ -524,8 +525,8 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
 
           // ── 데몬 사망 → 승계 ──
           let nexts: St[];
-          if (impKill === demon) {
-            // 스타 패스: 텔러가 생존 하수인 중 하나를 임프로 만든다
+          if (impKill === demon && demonRole === "imp") {
+            // 스타 패스 (임프 전용): 텔러가 생존 하수인 중 하나를 임프로 만든다
             const eligible: Seat[] = [];
             for (let x = 0; x < assignment.length; x++) {
               if (aliveAfter[x] && !s2.became.has(x) && ROLES[assignment[x]].team === "minion") eligible.push(x);
@@ -536,7 +537,7 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
               c.became.set(e, night);
               return c;
             });
-          } else if (plan.demonByOther) {
+          } else if (impKill === demon || plan.demonByOther) {
             // 밤에 데몬이 살해당함 → 탕녀만이 게임을 지속시킨다 (생존 5인 이상)
             nexts = [];
             if (swSeat >= 0 && !s2.became.has(swSeat) && aliveAfter[swSeat] && countTrue(aliveStart) >= 5) {
@@ -559,8 +560,8 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
   }
 
   const st0: St = {
-    demon: impSeat,
-    became: new Map([[impSeat, 0]]),
+    demon: origDemonSeat,
+    became: new Map([[origDemonSeat, 0]]),
     demonNights: [],
     required: new Map(),
     forbidden: new Map(),
@@ -582,8 +583,9 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
     if (!ok) return results;
   }
 
-  // 할머니 밤1 정보의 취함/중독 여부가 손주 확정을 좌우하므로 최상위에서 분기한다
-  if (gmSeat >= 0 && gmClaimTarget !== null) {
+  // 할머니 밤1 정보의 취함/중독 여부가 손주 확정을 좌우하므로 최상위에서 분기한다.
+  // Vortox 세계에서는 멀쩡한 할머니의 정보도 거짓이라 손주가 확정되지 않는다 — 미확정(∃)으로 둔다.
+  if (gmSeat >= 0 && gmClaimTarget !== null && demonRole !== "vortox") {
     const target = gmClaimTarget;
     const canBeGrandchild = target !== gmSeat && (isGoodTeam(assignment[target]) || assignment[target] === "spy");
     if (canBeGrandchild) {
@@ -602,9 +604,11 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
   return results;
 }
 
-/** 밤 night 시점의 토큰 역할 (데몬 승계 반영) */
+/** 밤 night 시점의 토큰 역할 (데몬 승계 반영 — 승계자는 그 판의 데몬 역할이 된다) */
 export function tokenRoleAt(assignment: RoleId[], sc: DemonScenario, seat: Seat, night: number): RoleId {
   const since = sc.becameDemonAt.get(seat);
-  if (since !== undefined && since <= night) return "imp";
+  if (since !== undefined && since <= night) {
+    return assignment.find((r) => ROLES[r].team === "demon") ?? "imp";
+  }
   return assignment[seat];
 }

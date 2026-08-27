@@ -50,7 +50,7 @@ export function PuzzleClient({ puzzle }: { puzzle: Puzzle }) {
   }, [puzzle.claims]);
 
   const demonSeat =
-    puzzle.currentDemonSeat ?? puzzle.solution.findIndex((r) => r === "imp");
+    puzzle.currentDemonSeat ?? puzzle.solution.findIndex((r) => ROLES[r].team === "demon");
 
   /**
    * 토큰에 얹는 글. 주장 역할은 한글만 쓴다 — 토큰이 좁아 병기가 안 들어간다

@@ -9,8 +9,8 @@ type Data = Extract<InfoData, { type: "librarian" }>;
 
 export function librarian(ctx: Ctx, _seat: Seat, data: Data, night: number): boolean {
   if (data.targets === null) {
-    // "외지인 없음": 주정뱅이는 숨길 수 없고, 은둔자는 하수인으로 오등록될 수 있다
-    return !ctx.assignment.includes("drunk");
+    // "외지인 없음": 주정뱅이·광인은 숨길 수 없고, 은둔자는 하수인으로 오등록될 수 있다
+    return !ctx.assignment.includes("drunk") && !ctx.assignment.includes("mutant");
   }
   if (ROLES[data.shownRole].team !== "outsider") return false;
   const v = view(ctx, night);
