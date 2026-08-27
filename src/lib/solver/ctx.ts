@@ -108,8 +108,8 @@ export function wakes(ctx: Ctx, seat: Seat, night: number): boolean {
     case "gambler":
       return night >= 2 && aliveStart[seat];
     case "sage":
-      // 임프에게 죽은 그 밤에만 깨어난다 (암살자·대부의 킬은 트리거가 아니다)
-      return ctx.sc.impKillDuringNight?.[night] === seat;
+      // 데몬에게 죽은 그 밤에만 깨어난다 (암살자·대부의 킬은 트리거가 아니다)
+      return ctx.sc.impKillDuringNight?.[night]?.includes(seat) ?? false;
     case "butler":
       return aliveAfter[seat];
     case "dreamer":
@@ -141,7 +141,8 @@ export function wakes(ctx: Ctx, seat: Seat, night: number): boolean {
       return night >= 2 && aliveStart[seat];
     case "imp":
     case "vortox":
-    case "nodashii": {
+    case "nodashii":
+    case "po": { // 조용한 밤에도 깨어난다 — '아무도 안 함'도 선택하러 깬다
       // 구마사제가 악마를 지목한 밤에는 악마가 깨어나지 못한다
       if (ctx.sc.exorcistBlocked?.has(night)) return false;
       // 승계한 밤(스타 패스, 탕녀)에는 악마가 됐다고 통보받으며 깨어난다

@@ -18,6 +18,9 @@
 // - 대부·음유시인 트리거는 "낮 처형으로 죽은" 외부인/하수인만 본다 (이 모델의 낮 사망은 처형뿐).
 // - 어릿광대·찻집 여인의 "처형됐지만 살아남음"은 이벤트로 표현할 수 없으므로 등장하지 않는다 —
 //   처형 이벤트는 언제나 죽음이고, 이들이 처형돼 죽었다면 그 시점의 취함/중독이 강제된다.
+// - Po의 3킬 밤(직전 선택이 '아무도 안 함')은 죽은 좌석 선택이 허용되므로 실제 사망
+//   0~3건이 전부 설명 없이 성립한다 (관대한 방향). 구마사제 봉쇄 밤은 선택 자체가 없던
+//   밤이라 '아무도 안 함'으로 치지 않는다 — 다음 밤 3킬이 열리지 않는다.
 
 import { ROLES } from "@/data/roles";
 import { canShowAsRole } from "./registration";
@@ -109,8 +112,8 @@ export interface DemonScenario {
   godfatherNights?: Set<number>;
   /** 구마사제가 악마를 지목해 악마가 깨어나지 못한 밤들 */
   exorcistBlocked?: Set<number>;
-  /** impKillDuringNight[n] = 밤 n에 임프가 죽인 좌석 (없으면 null) — 현자 기상 판정용 */
-  impKillDuringNight?: (Seat | null)[];
+  /** impKillDuringNight[n] = 밤 n에 데몬이 죽인 좌석들 (Po의 3킬 밤은 여럿) — 현자 기상 판정용 */
+  impKillDuringNight?: Seat[][];
   /** 음유시인 발동으로 전원이 취해 있던 밤들 — 그 밤의 정보·킬·독살은 모두 무효 */
   minstrelNights?: Set<number>;
   /**
@@ -148,9 +151,11 @@ interface St {
   assassinNight: number | null;
   godfatherNights: number[];
   exorcistBlocked: number[];
-  impKills: (Seat | null)[];
+  impKills: Seat[][];
   minstrelNights: number[];
   foolDodgeUsed: boolean;
+  /** Po 전용: 직전 밤의 선택이 '아무도 안 함'이었는가 (참이면 이번 밤엔 반드시 3명을 고른다) */
+  poChoseNone: boolean;
   /** 할머니의 실제 손주. null = 미확정 (밤1 정보가 취함/중독이었거나 주장이 없음) */
   grandchild: Seat | null;
 }
@@ -169,12 +174,24 @@ function cloneSt(s: St): St {
     impKills: [...s.impKills],
     minstrelNights: [...s.minstrelNights],
     foolDodgeUsed: s.foolDodgeUsed,
+    poChoseNone: s.poChoseNone,
     grandchild: s.grandchild,
   };
 }
 
 function countTrue(arr: boolean[]): number {
   return arr.filter(Boolean).length;
+}
+
+/** arr의 크기 k 이하 부분집합 전부 (Po 3킬 밤의 데몬 킬 귀속 후보) */
+function subsetsUpTo(arr: Seat[], k: number): Seat[][] {
+  const out: Seat[][] = [[]];
+  for (const x of arr) {
+    for (const base of [...out]) {
+      if (base.length < k) out.push([...base, x]);
+    }
+  }
+  return out;
 }
 
 function isGoodTeam(role: RoleId): boolean {
@@ -363,6 +380,7 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
         if (forbid_(c, day, swSeat)) { // 중독된 탕녀는 승계 불가 (밤 day의 독이 낮까지 지속)
           c.demon = swSeat;
           c.became.set(swSeat, day + 0.5);
+          c.poChoseNone = false; // 승계한 Po의 선택 상태는 새로 시작한다
           branches.push({ st: c, demonless: false });
         }
       }
@@ -437,7 +455,15 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
       if (deaths.length > 0) return;
       if (st.required.has(night)) return;
       st.minstrelNights.push(night);
-      st.impKills[night] = null;
+      st.impKills[night] = [];
+      // 취한 Po도 깨어나 선택은 한다 — '아무도 안 함'(다음 밤 3킬)과 대상 선택(취해서
+      // 실패) 모두 가능. 3킬 밤이었다면 3명을 골랐고 전부 실패한 것이다.
+      if (demonRole === "po" && !st.poChoseNone) {
+        const c = cloneSt(st);
+        c.poChoseNone = true;
+        doDay(c, night);
+      }
+      st.poChoseNone = false;
       doDay(st, night);
       return;
     }
@@ -474,8 +500,13 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
       return nb !== null && nb.every((x) => isGoodTeam(assignment[x]) || assignment[x] === "spy");
     })();
 
-    for (const impKill of (demonless ? [null] : [...deaths, null]) as (Seat | null)[]) {
-      const rest = deaths.filter((d) => d !== impKill);
+    // 데몬 킬 집합: 보통은 0~1건, Po의 3킬 밤(직전 선택이 '아무도 안 함')에는 최대 3건.
+    const poTriple = demonRole === "po" && st.poChoseNone;
+    const killSets: Seat[][] = demonless ? [[]]
+      : poTriple ? subsetsUpTo(deaths, 3)
+      : [[], ...deaths.map((d) => [d])];
+    for (const demonKills of killSets) {
+      const rest = deaths.filter((d) => !demonKills.includes(d));
 
       // ── 남은 죽음들을 {암살자, 대부, 할머니 연쇄, 도박 오답, 땜장이}에 귀속 ──
       // 각 귀속은 상태 변형(Mut) 목록으로 표현하고, 완성된 조합마다 임프 분기를 돈다.
@@ -509,14 +540,16 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
             return sideEffects(true)(s);
           }], true, demonByOther || d === demon);
         }
-        if (d === gmSeat && !usedLink && impKill !== null && impKill !== gmSeat
-          && (isGoodTeam(assignment[impKill]) || assignment[impKill] === "spy")) {
-          collect(idx + 1, usedAs, usedGf, true, usedMc, usedGossip, [...muts, (s) => {
-            if (s.grandchild === null) s.grandchild = impKill; // 미확정 손주를 여기서 확정 (∃)
-            else if (s.grandchild !== impKill) return false;
-            if (!forbid_(s, night, gmSeat)) return false; // 중독된 할머니는 연쇄 사망하지 않는다
-            return sideEffects(true)(s);
-          }], gfKilled, demonByOther);
+        if (d === gmSeat && !usedLink) {
+          for (const link of demonKills) {
+            if (!(isGoodTeam(assignment[link]) || assignment[link] === "spy")) continue;
+            collect(idx + 1, usedAs, usedGf, true, usedMc, usedGossip, [...muts, (s) => {
+              if (s.grandchild === null) s.grandchild = link; // 미확정 손주를 여기서 확정 (∃)
+              else if (s.grandchild !== link) return false;
+              if (!forbid_(s, night, gmSeat)) return false; // 중독된 할머니는 연쇄 사망하지 않는다
+              return sideEffects(true)(s);
+            }], gfKilled, demonByOther);
+          }
         }
         if (d === gamblerSeat && gamble !== undefined && !gambleMustCorrect) {
           collect(idx + 1, usedAs, usedGf, usedLink, usedMc, usedGossip, [...muts, (s) => {
@@ -552,7 +585,7 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
 
       for (const plan of plans) {
         const base = cloneSt(st);
-        base.impKills[night] = impKill;
+        base.impKills[night] = demonKills;
         let ok = true;
         for (const m of plan.muts) if (!m(base)) { ok = false; break; }
         if (!ok) continue;
@@ -565,48 +598,65 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
         const impVariants: Mut[] = [];
         if (demonless) {
           impVariants.push(() => true); // 데몬이 죽은 연장 밤 — 킬도, 킬 부재의 설명도 없다
-        } else if (impKill !== null) {
+        } else if (demonKills.length > 0) {
           impVariants.push((s) => {
             if (!forbid_(s, night, demon)) return false; // 킬이 성공했으니 데몬은 중독 아님
             // 봉쇄됐어야 하는 밤에 킬이 났다 → 구마사제가 중독됐던 것
             if (exoTarget === demon && !require_(s, night, exoSeat)) return false;
-            // 멀쩡한 군인은 임프에게 죽지 않는다
-            if (impKill === soldierSeat && !require_(s, night, soldierSeat)) return false;
-            // 수도사가 이 대상을 보호했다고 기록했다 → 수도사가 중독됐던 것
-            if (monkTarget !== null && monkTarget === impKill && !require_(s, night, monkSeat)) return false;
-            // 확실한 찻집 여인 보호를 뚫었다 → 찻집 여인의 중독
-            if (tlForced(aliveStart, impKill) && !require_(s, night, tealadySeat)) return false;
-            // 회피 미사용 어릿광대를 죽였다 → 어릿광대의 중독
-            if (impKill === foolSeat && !s.foolDodgeUsed && !require_(s, night, foolSeat)) return false;
-            // 손주가 임프에게 죽었는데 할머니가 살아 있다 → 할머니가 중독됐던 것
-            if (s.grandchild !== null && impKill === s.grandchild && gmSeat >= 0 && aliveStart[gmSeat] && !deaths.includes(gmSeat)) {
-              if (!require_(s, night, gmSeat)) return false;
+            for (const k of demonKills) {
+              // 멀쩡한 군인은 데몬에게 죽지 않는다
+              if (k === soldierSeat && !require_(s, night, soldierSeat)) return false;
+              // 수도사가 이 대상을 보호했다고 기록했다 → 수도사가 중독됐던 것
+              if (monkTarget !== null && monkTarget === k && !require_(s, night, monkSeat)) return false;
+              // 확실한 찻집 여인 보호를 뚫었다 → 찻집 여인의 중독
+              if (tlForced(aliveStart, k) && !require_(s, night, tealadySeat)) return false;
+              // 회피 미사용 어릿광대를 죽였다 → 어릿광대의 중독
+              if (k === foolSeat && !s.foolDodgeUsed && !require_(s, night, foolSeat)) return false;
+              // 손주가 데몬에게 죽었는데 할머니가 살아 있다 → 할머니가 중독됐던 것
+              if (s.grandchild !== null && k === s.grandchild && gmSeat >= 0 && aliveStart[gmSeat] && !deaths.includes(gmSeat)) {
+                if (!require_(s, night, gmSeat)) return false;
+              }
             }
+            s.poChoseNone = false; // Po: 대상을 골랐다 — '아무도 안 함'이 아니다
             return true;
           });
         } else {
-          // 임프 킬 부재 — 설명이 하나는 있어야 한다
-          if (hasPoisoner) impVariants.push((s) => require_(s, night, demon));
-          if (soldierSeat >= 0 && aliveStart[soldierSeat]) {
-            impVariants.push((s) => forbid_(s, night, soldierSeat)); // 임프가 멀쩡한 군인을 노렸다
+          // 데몬 킬 부재 — 설명이 하나는 있어야 한다 (Po의 조용한 밤은 자발적 선택이라 공짜)
+          if (demonRole === "po") {
+            if (st.poChoseNone) {
+              // 3킬 밤: 반드시 3명을 고르지만 죽은 좌석도 고를 수 있어
+              // 사망 0건이 설명 없이 성립한다 (관대한 근사). 조용한 밤을 다시 고를 수는 없다.
+              impVariants.push((s) => { s.poChoseNone = false; return true; });
+            } else {
+              // 자발적 '아무도 안 함' — 다음 밤 3킬이 열린다
+              impVariants.push((s) => { s.poChoseNone = true; return true; });
+            }
           }
-          if (monkAlive && (monkTarget === null || aliveStart[monkTarget])) {
-            impVariants.push((s) => forbid_(s, night, monkSeat)); // 수도사가 임프의 대상을 보호했다
+          if (demonRole !== "po" || !st.poChoseNone) {
+            // '선택은 했으나 실패' 계열 — Po라면 다음 밤 3킬이 열리지 않는다
+            if (hasPoisoner) impVariants.push((s) => require_(s, night, demon));
+            if (soldierSeat >= 0 && aliveStart[soldierSeat]) {
+              impVariants.push((s) => forbid_(s, night, soldierSeat)); // 데몬이 멀쩡한 군인을 노렸다
+            }
+            if (monkAlive && (monkTarget === null || aliveStart[monkTarget])) {
+              impVariants.push((s) => forbid_(s, night, monkSeat)); // 수도사가 데몬의 대상을 보호했다
+            }
+            if (tlCanProtect) {
+              impVariants.push((s) => forbid_(s, night, tealadySeat)); // 보호받는 이웃을 노렸다
+            }
+            if (foolSeat >= 0 && aliveStart[foolSeat] && !st.foolDodgeUsed) {
+              impVariants.push((s) => {
+                if (!forbid_(s, night, foolSeat)) return false; // 어릿광대가 첫 죽음을 회피했다
+                s.foolDodgeUsed = true;
+                return true;
+              });
+            }
           }
           if (exoCanBlock) {
             impVariants.push((s) => {
               if (!forbid_(s, night, exoSeat)) return false; // 멀쩡한 구마사제가 악마를 지목했다
               s.exorcistBlocked.push(night);
-              return true;
-            });
-          }
-          if (tlCanProtect) {
-            impVariants.push((s) => forbid_(s, night, tealadySeat)); // 보호받는 이웃을 노렸다
-          }
-          if (foolSeat >= 0 && aliveStart[foolSeat] && !st.foolDodgeUsed) {
-            impVariants.push((s) => {
-              if (!forbid_(s, night, foolSeat)) return false; // 어릿광대가 첫 죽음을 회피했다
-              s.foolDodgeUsed = true;
+              s.poChoseNone = false; // 봉쇄는 '아무도 안 함' 선택이 아니다 — 기상 자체가 없었다
               return true;
             });
           }
@@ -618,7 +668,7 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
 
           // ── 데몬 사망 → 승계 ──
           let nexts: St[];
-          if (impKill === demon && demonRole === "imp") {
+          if (demonKills.includes(demon) && demonRole === "imp") {
             // 스타 패스 (임프 전용): 텔러가 생존 하수인 중 하나를 임프로 만든다
             const eligible: Seat[] = [];
             for (let x = 0; x < assignment.length; x++) {
@@ -630,7 +680,7 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
               c.became.set(e, night);
               return c;
             });
-          } else if (impKill === demon || plan.demonByOther) {
+          } else if (demonKills.includes(demon) || plan.demonByOther) {
             // 밤에 데몬이 살해당함 → 탕녀만이 게임을 지속시킨다 (생존 5인 이상)
             nexts = [];
             if (swSeat >= 0 && !s2.became.has(swSeat) && aliveAfter[swSeat] && countTrue(aliveStart) >= 5) {
@@ -638,6 +688,7 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
               if (forbid_(c, night, swSeat)) {
                 c.demon = swSeat;
                 c.became.set(swSeat, night);
+                c.poChoseNone = false; // 승계한 Po의 선택 상태는 새로 시작한다
                 nexts = [c];
               }
             }
@@ -665,6 +716,7 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
     impKills: [],
     minstrelNights: [],
     foolDodgeUsed: false,
+    poChoseNone: false,
     grandchild: null,
   };
 

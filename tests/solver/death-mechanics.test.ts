@@ -182,9 +182,9 @@ describe("현자", () => {
       nights: 2,
       events: [{ type: "death", night: 2, seat: 2 }],
     });
-    ctx.sc.impKillDuringNight = [null, null, 2];
+    ctx.sc.impKillDuringNight = [[], [], [2]];
     expect(wakes(ctx, 2, 2)).toBe(true);
-    ctx.sc.impKillDuringNight = [null, null, null]; // 암살자 등 다른 사인
+    ctx.sc.impKillDuringNight = [[], [], []]; // 암살자 등 다른 사인
     expect(wakes(ctx, 2, 2)).toBe(false);
   });
 });
