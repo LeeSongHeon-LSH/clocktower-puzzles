@@ -1,6 +1,8 @@
 # 아키텍처 — 시계탑 퍼즐
 
-> 요구사항은 [REQUIREMENTS.md](./REQUIREMENTS.md) 참조.
+> 요구사항은 [REQUIREMENTS.md](./REQUIREMENTS.md), 같은 내용을 그림으로 본 것은
+> [STACK.md](./STACK.md) 참조. 제3자 콘텐츠 취급은 저장소 루트의
+> [NOTICE](../NOTICE), 코드 라이선스는 [LICENSE](../LICENSE).
 
 ## 1. 기술 스택
 
