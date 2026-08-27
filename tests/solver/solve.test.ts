@@ -10,7 +10,7 @@ function keys(pz: SolverPuzzle): string[] {
     .sort();
 }
 
-describe("solve: 부정한 여인 5인 (독살 없음)", () => {
+describe("solve: 탕녀 5인 (독살 없음)", () => {
   // 선한 좌석의 주장이 모두 술/독 없이 성립해야 하는 구성.
   // 수기 도출: 악역 {3,4}(데몬 양쪽 가능) + 악역 {0,1}(데몬은 1만 — 점쟁이 [0,2] '없음' 때문) → 월드 3개.
   const pz: SolverPuzzle = {

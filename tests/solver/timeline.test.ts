@@ -68,7 +68,7 @@ describe("demonScenarios", () => {
     expect(scs[0].poisonForbidden.get(2)?.has(0)).toBe(true); // 킬이 성공했으니 데몬은 안 중독
   });
 
-  it("데몬 처형은 부정한 여인 승계로만 게임이 지속된다", () => {
+  it("데몬 처형은 탕녀 승계로만 게임이 지속된다", () => {
     const base: RoleId[] = ["imp", TF, TF, "chef", "fortuneteller", "librarian", "washerwoman"];
     const withSw = [...base];
     withSw[3] = "scarletwoman";
@@ -86,7 +86,7 @@ describe("demonScenarios", () => {
     expect(scs).toHaveLength(1);
     expect(scs[0].currentDemonSeat).toBe(3);
     expect(scs[0].becameDemonAt.get(3)).toBe(1.5);
-    expect(scs[0].poisonForbidden.get(1)?.has(3)).toBe(true); // 중독된 부정한 여인은 승계 불가
-    expect(demonScenarios(pz, sched, base)).toHaveLength(0); // 부정한 여인 없으면 게임 종료 → 모순
+    expect(scs[0].poisonForbidden.get(1)?.has(3)).toBe(true); // 중독된 탕녀는 승계 불가
+    expect(demonScenarios(pz, sched, base)).toHaveLength(0); // 탕녀 없으면 게임 종료 → 모순
   });
 });

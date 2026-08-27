@@ -5,7 +5,7 @@
 // - 밤 정보는 그 밤의 킬 이후 상태를 본다 (밤 순서상 정보 역할이 임프보다 뒤).
 //
 // 생존 여부는 이벤트만으로 결정되므로 월드와 무관하게 한 번 계산한다(Schedule).
-// 데몬 승계(스타 패스, 부정한 여인)는 월드 의존이며, 독살 선택과 얽히므로
+// 데몬 승계(스타 패스, 탕녀)는 월드 의존이며, 독살 선택과 얽히므로
 // 시나리오가 "밤 n에 반드시/절대 독살돼야 하는 좌석" 제약을 방출하고
 // solve가 주장 검증에서 나온 독살 요구와 병합해 일관성을 판정한다.
 
@@ -86,7 +86,7 @@ export interface DemonScenario {
   becameDemonAt: Map<Seat, number>;
   /** 밤 n → 반드시 이 좌석이 독살돼야 함 (킬 실패 = 데몬 중독) */
   poisonRequired: Map<number, Seat>;
-  /** 밤 n → 이 좌석들은 독살되면 안 됨 (킬 성공한 데몬, 승계한 부정한 여인) */
+  /** 밤 n → 이 좌석들은 독살되면 안 됨 (킬 성공한 데몬, 승계한 탕녀) */
   poisonForbidden: Map<number, Set<Seat>>;
 }
 
@@ -177,11 +177,11 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
       if (executed !== null) {
         const aliveBefore = sched.aliveAfterNight(night).filter(Boolean).length;
         if (executed === demon) {
-          // 부정한 여인 승계만이 게임을 지속시킨다
+          // 탕녀 승계만이 게임을 지속시킨다
           const sw = assignment.indexOf("scarletwoman");
           const swOk = sw >= 0 && sw !== executed && sched.aliveAfterNight(night)[sw] && !became.has(sw) && aliveBefore >= 5;
           if (!swOk) { valid = false; break; }
-          forbid(forbidden, night, sw); // 중독된 부정한 여인은 승계 불가 (밤 night의 독이 낮까지 지속)
+          forbid(forbidden, night, sw); // 중독된 탕녀는 승계 불가 (밤 night의 독이 낮까지 지속)
           demon = sw;
           became.set(sw, night + 0.5);
         }

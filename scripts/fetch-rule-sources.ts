@@ -1,20 +1,29 @@
-// 규칙 페이지 출처 동기화 도구.
+// 규칙 페이지 출처 동기화 도구. 공식 소스 두 곳을 대조한다.
 //
-// 공식 알마낙 위키(wiki.bloodontheclocktower.com)의 MediaWiki API에서 원문을 받아
-// 앵커 문구가 여전히 존재하는지 확인하고, 그 문장을 인용문으로 추출해
-// src/data/rule-sources.generated.ts 를 다시 쓴다.
+// 1) 공식 알마낙 위키(wiki.bloodontheclocktower.com, MediaWiki API)
+//    → 규칙 서술의 근거 원문. 앵커 문구가 여전히 존재하는지 확인하고 문장을 인용문으로 추출해
+//      src/data/rule-sources.generated.ts 를 쓴다.
+//    → 앵커가 사라졌다면 = 공식 규칙 문구가 개정됐다는 뜻이므로 실패로 끝낸다.
 //
-// 앵커가 사라졌다면 = 공식 규칙 문구가 바뀌었다는 뜻이므로 실패로 끝낸다.
-// 이것이 규칙 페이지의 "정합성 검증" 장치다.
+// 2) 공식 한국어 번역(github.com/ThePandemoniumInstitute/botc-translations, game/ko.json)
+//    → 역할별 공식 능력 문구를 받아 src/data/role-rules.generated.ts 를 쓰고,
+//      src/data/roles.ts의 한국어 표기가 공식과 일치하는지 대조한다(불일치는 경고).
 //
-//   npm run rules:sync         원문 대조 + 생성 파일 갱신
-//   npm run rules:check        대조만 (파일 미변경, CI/배포 전 점검용)
+//   npm run rules:sync         대조 + 생성 파일 갱신
+//   npm run rules:check        대조만 (파일 미변경, 배포 전 점검용)
 
 import { writeFileSync } from "node:fs";
+import { ROLES } from "../src/data/roles";
+import { ROLE_IDS, type RoleId } from "../src/lib/solver/types";
 
 const API = "https://wiki.bloodontheclocktower.com/api.php";
 const WIKI = "https://wiki.bloodontheclocktower.com";
 const OUT = new URL("../src/data/rule-sources.generated.ts", import.meta.url);
+
+const TRANSLATIONS_REPO = "ThePandemoniumInstitute/botc-translations";
+const KO_PATH = "game/ko.json";
+const KO_URL = `https://raw.githubusercontent.com/${TRANSLATIONS_REPO}/main/${KO_PATH}`;
+const ROLE_OUT = new URL("../src/data/role-rules.generated.ts", import.meta.url);
 
 /** 인용하려는 공식 문장. anchor는 그 문장을 특정하는 고유 부분 문자열. */
 interface Anchor {
@@ -185,6 +194,103 @@ function extractSentence(plain: string, anchor: string, sentences = 1): string |
   return plain.slice(start, stop).replace(/\s+/g, " ").trim();
 }
 
+// ── 공식 한국어 번역 (botc-translations) ────────────────────────────
+
+interface KoRole {
+  name: string;
+  ability: string;
+}
+
+interface KoTranslation {
+  roles: Record<string, KoRole | undefined>;
+}
+
+/** ko.json을 마지막으로 바꾼 커밋 — 인용 판본으로 표기한다. */
+async function fetchKoCommit(): Promise<{ sha: string; date: string }> {
+  const url = `https://api.github.com/repos/${TRANSLATIONS_REPO}/commits?path=${encodeURIComponent(KO_PATH)}&per_page=1`;
+  const res = await fetch(url, {
+    headers: {
+      "User-Agent": "clocktower-puzzles/rule-sync (unofficial fan project; citation check)",
+      Accept: "application/vnd.github+json",
+    },
+  });
+  if (!res.ok) throw new Error(`GitHub API 응답 ${res.status}`);
+  const [commit] = (await res.json()) as { sha: string; commit: { committer: { date: string } } }[];
+  if (!commit) throw new Error(`${KO_PATH}의 커밋 이력을 찾을 수 없음`);
+  return { sha: commit.sha.slice(0, 7), date: commit.commit.committer.date.slice(0, 10) };
+}
+
+async function fetchKoRoles(): Promise<KoTranslation> {
+  const res = await fetch(KO_URL, {
+    headers: { "User-Agent": "clocktower-puzzles/rule-sync (unofficial fan project; citation check)" },
+  });
+  if (!res.ok) throw new Error(`공식 번역 응답 ${res.status}`);
+  return (await res.json()) as KoTranslation;
+}
+
+/** 역할 문서용 생성 파일 본문 + roles.ts 표기 대조 결과. */
+function buildRoleRules(
+  ko: KoTranslation,
+  commit: { sha: string; date: string },
+): { body: string; mismatches: string[] } {
+  const mismatches: string[] = [];
+  const entries: string[] = [];
+
+  for (const id of ROLE_IDS as readonly RoleId[]) {
+    const official = ko.roles[id];
+    if (!official) throw new Error(`공식 번역에 없는 역할 id: ${id}`);
+
+    const ours = ROLES[id].ko;
+    if (ours !== official.name) {
+      mismatches.push(`  ${id}: 우리 "${ours}" ↔ 공식 "${official.name}"`);
+    }
+
+    entries.push(
+      [
+        `  ${id}: {`,
+        `    officialName: ${JSON.stringify(official.name)},`,
+        `    ability: ${JSON.stringify(official.ability)},`,
+        `    almanacUrl: ${JSON.stringify(`${WIKI}/${ROLES[id].en.replace(/ /g, "_")}`)},`,
+        `  },`,
+      ].join("\n"),
+    );
+  }
+
+  const body = `// 자동 생성 파일 — 직접 편집하지 말 것.
+// 생성: npm run rules:sync  (scripts/fetch-rule-sources.ts)
+//
+// 출처: Pandemonium Institute 공식 한국어 번역
+// https://github.com/${TRANSLATIONS_REPO}/blob/main/${KO_PATH}
+// 판본: ${commit.sha} (${commit.date})
+//
+// 역할 능력 문구는 공식 번역을 그대로 인용한다. 저작권은 The Pandemonium Institute에
+// 있으며, 이 프로젝트는 공식과 무관한 비공식 팬 프로젝트다.
+
+export interface RoleRule {
+  /** 공식 한국어 역할명 */
+  officialName: string;
+  /** 공식 한국어 능력 문구 */
+  ability: string;
+  /** 영문 알마낙(상세 규칙·예시) 링크 */
+  almanacUrl: string;
+}
+
+export const ROLE_TRANSLATION_SOURCE = {
+  repo: ${JSON.stringify(TRANSLATIONS_REPO)},
+  path: ${JSON.stringify(KO_PATH)},
+  url: ${JSON.stringify(`https://github.com/${TRANSLATIONS_REPO}/blob/main/${KO_PATH}`)},
+  commit: ${JSON.stringify(commit.sha)},
+  committed: ${JSON.stringify(commit.date)},
+} as const;
+
+export const ROLE_RULES = {
+${entries.join("\n")}
+} as const satisfies Record<string, RoleRule>;
+`;
+
+  return { body, mismatches };
+}
+
 function header(): string {
   return `// 자동 생성 파일 — 직접 편집하지 말 것.
 // 생성: npm run rules:sync  (scripts/fetch-rule-sources.ts)
@@ -253,17 +359,37 @@ ${entries.join("\n")}
 export type RuleSourceKey = keyof typeof RULE_SOURCES;
 `;
 
+  // ── 공식 한국어 번역 대조 ──
+  const [ko, koCommit] = await Promise.all([fetchKoRoles(), fetchKoCommit()]);
+  const roles = buildRoleRules(ko, koCommit);
+
   if (check) {
-    console.log(`✓ 인용 ${ANCHORS.length}건 모두 공식 원문과 일치합니다.`);
+    console.log(`✓ 알마낙 인용 ${ANCHORS.length}건 모두 공식 원문과 일치합니다.`);
     for (const t of titles) {
       const r = pages.get(t)!;
       console.log(`  ${t} — 판본 ${r.revid} (${r.timestamp.slice(0, 10)})`);
     }
-    return;
+    console.log(`✓ 공식 번역 대조 — ${KO_PATH} @ ${koCommit.sha} (${koCommit.date})`);
+  } else {
+    writeFileSync(OUT, body, "utf8");
+    writeFileSync(ROLE_OUT, roles.body, "utf8");
+    console.log(`✓ 알마낙 인용 ${ANCHORS.length}건 → src/data/rule-sources.generated.ts 갱신`);
+    console.log(
+      `✓ 역할 ${ROLE_IDS.length}종 공식 능력 문구 → src/data/role-rules.generated.ts 갱신` +
+        ` (${KO_PATH} @ ${koCommit.sha})`,
+    );
   }
 
-  writeFileSync(OUT, body, "utf8");
-  console.log(`✓ 인용 ${ANCHORS.length}건 확인 → src/data/rule-sources.generated.ts 갱신`);
+  // 표기 불일치는 경고로만 알린다 — roles.ts는 관리자 페이지에서 의도적으로 바꿀 수 있다.
+  if (roles.mismatches.length > 0) {
+    console.warn(
+      `\n⚠ roles.ts의 한국어 표기 ${roles.mismatches.length}건이 공식 번역과 다릅니다:`,
+    );
+    console.warn(roles.mismatches.join("\n"));
+    console.warn("의도한 차이가 아니라면 roles.ts를 공식 표기에 맞추세요.");
+  } else {
+    console.log("✓ roles.ts의 한국어 표기가 전부 공식 번역과 일치합니다.");
+  }
 }
 
 main().catch((err) => {

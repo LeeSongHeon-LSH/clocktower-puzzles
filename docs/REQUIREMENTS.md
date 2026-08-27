@@ -42,9 +42,10 @@
 ## 3. 언어·표기
 
 - UI 언어: 한국어.
-- 역할명: **한국어(영어 병기)** — 예: "임프(Imp)", "부정한 여인(Scarlet Woman)".
-- 번역 초안은 Claude가 작성하되 한국 커뮤니티/위키 통용 표기와 대조해 교정한다.
-- 확정 표기: Scarlet Woman = **부정한 여인**.
+- 역할명: **한국어(영어 병기)** — 예: "임프(Imp)", "탕녀(Scarlet Woman)".
+- 역할명·에디션명은 **Pandemonium Institute 공식 한국어 번역**(`botc-translations`의 `game/ko.json`)을
+  그대로 따른다. 임의 의역을 두지 않으며, `npm run rules:check`가 공식 표기와 대조해 차이를 보고한다.
+- 확정 표기: Scarlet Woman = **탕녀** (공식 표기. 이전에 쓰던 "부정한 여인"은 2026-08-27 폐기).
 - 진영 용어: Townsfolk=마을 사람, Outsider=외부인, Minion=하수인, Demon=데몬.
 - **역할명은 앱 내 관리자 페이지에서 수정 가능해야 한다** (피드백 즉시 반영 목적, §5.4).
 

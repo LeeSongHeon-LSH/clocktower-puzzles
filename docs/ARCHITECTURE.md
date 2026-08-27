@@ -22,7 +22,9 @@ src/
     page.tsx              # 홈: 퍼즐 목록 + 필터
     puzzles/[id]/page.tsx # 퍼즐 풀이 페이지
     about/page.tsx        # 소개 + 팬 고지문
-    rules/page.tsx        # 취함·중독 규칙 해설 + 공식 원문 출처 (§8)
+    rules/page.tsx        # 규칙 허브: 취함·중독 + 역할 목록 (§8)
+    rules/drunk-and-poison/page.tsx  # 취함·중독 해설 + 알마낙 원문 출처
+    rules/role/[id]/page.tsx         # 역할별 규칙 문서 (공식 능력 문구 + 해설)
     admin/page.tsx        # 역할명 편집 (비밀번호 잠금)
     api/admin/roles/route.ts  # 역할명 저장 API (GitHub 커밋)
   components/             # TownSquare, InfoLog, QuestionPanel, HintBox, Walkthrough …
@@ -34,8 +36,10 @@ src/
     progress.ts           # localStorage 풀이 기록
   data/
     roles.ts              # 역할 사전: id → { en, ko, team, edition } (관리자 편집 대상)
-    rules.ts              # 규칙 페이지 한국어 서술 (직접 작성, 출처 키 참조)
-    rule-sources.generated.ts  # 공식 원문 인용 (자동 생성 — 직접 편집 금지)
+    rules.ts              # 취함·중독 한국어 서술 (직접 작성, 출처 키 참조)
+    role-notes.ts         # 역할별 한국어 해설 (직접 작성)
+    rule-sources.generated.ts  # 알마낙 원문 인용 (자동 생성 — 직접 편집 금지)
+    role-rules.generated.ts    # 공식 한국어 능력 문구 (자동 생성 — 직접 편집 금지)
     puzzles/
       index.ts            # 퍼즐 레지스트리
       tb-01.ts …          # 문제당 1파일
@@ -89,7 +93,7 @@ export default definePuzzle({
 ```ts
 export const ROLES = {
   imp: { en: "Imp", ko: "임프", team: "demon", edition: "tb" },
-  scarletwoman: { en: "Scarlet Woman", ko: "부정한 여인", team: "minion", edition: "tb" },
+  scarletwoman: { en: "Scarlet Woman", ko: "탕녀", team: "minion", edition: "tb" },
   // …
 } satisfies Record<RoleId, RoleMeta>
 ```
@@ -115,7 +119,7 @@ clocktower-puzzles:progress = {
 - 탐색: 역할 배정 후보를 생성(팀 구성 규칙 — 인원수별 마을 사람/외부인/하수인/데몬 수, 남작 수정치 반영)하고, 각 World에 대해 **제약 평가**:
   - 참인 주장(선한 생존 정직 역할)의 정보는 게임 룰상 실제로 발생 가능해야 한다.
   - 술꾼·독살 상태의 정보는 임의 값 허용(텔러 재량), 악역 주장은 임의 거짓 허용.
-  - 이벤트 시퀀스(처형·사망)가 룰과 모순되지 않아야 한다 (예: 임프 킬, 부정한 여인 승계).
+  - 이벤트 시퀀스(처형·사망)가 룰과 모순되지 않아야 한다 (예: 임프 킬, 탕녀 승계).
 - 결과: 정합한 World 집합. **크기 1**이어야 검증 통과. (서브 질문 정답도 그 World에서 도출되는지 확인.)
 
 ### 4.2 역할 로직 구조
@@ -156,21 +160,36 @@ clocktower-puzzles:progress = {
 - 부하 특성: 100 동시 연결 기준 홈 4,500 req/s, 퍼즐 3,450 req/s (에러 0, p99 ≤ 53ms).
   전 페이지가 정적이라 실서비스에서는 Vercel 엣지 캐시가 대부분 처리한다.
 
-## 8. 규칙 페이지와 출처 대조
+## 8. 규칙 문서와 출처 대조
 
-`/rules`는 취함·중독 규칙 해설이다. 서술은 직접 쓰되 **모든 문장에 공식 알마낙 원문 인용을 각주로 붙여** 독자가 정합성을 확인할 수 있게 한다.
+`/rules`는 규칙 허브다. 서술은 직접 쓰되 **모든 문장에 공식 원문 근거를 붙여** 독자가 정합성을 확인할 수 있게 한다.
 
 ```
-src/data/rules.ts                  한국어 서술 (직접 작성) — 출처 키를 참조
-src/data/rule-sources.generated.ts 공식 원문 인용 + 판본 정보 (자동 생성)
-scripts/fetch-rule-sources.ts      공식 위키 MediaWiki API에서 대조·생성
+/rules                      허브 — 취함·중독 + 역할 목록(팀별)
+/rules/drunk-and-poison     취함·중독 해설 + 알마낙 원문 각주
+/rules/role/[id]            역할별 문서 (공식 능력 문구 + 해설 + 출처 2종)
 ```
 
-- 출처: `wiki.bloodontheclocktower.com` (공식 알마낙). `api.php`로 wikitext를 받아,
-  스크립트에 등록된 **앵커 문구**가 원문에 존재하는지 확인하고 그 문장을 인용문으로 추출한다.
+```
+src/data/rules.ts                  취함·중독 서술 (직접 작성) — 출처 키를 참조
+src/data/role-notes.ts             역할별 해설 (직접 작성)
+src/data/rule-sources.generated.ts 알마낙 원문 인용 + 판본 (자동 생성)
+src/data/role-rules.generated.ts   공식 한국어 능력 문구 + 판본 (자동 생성)
+scripts/fetch-rule-sources.ts      두 공식 소스에서 대조·생성
+```
+
+공식 소스는 두 곳이다.
+
+1. **공식 알마낙 위키** `wiki.bloodontheclocktower.com` — `api.php`로 wikitext를 받아,
+   스크립트에 등록된 **앵커 문구**가 원문에 존재하는지 확인하고 그 문장을 인용문으로 추출한다.
+   **앵커가 사라지면 실패한다** — 공식 문구가 개정됐다는 신호이므로 한국어 서술도 다시 검토해야 한다.
+2. **공식 한국어 번역** `ThePandemoniumInstitute/botc-translations`의 `game/ko.json` —
+   역할별 능력 문구를 받고, `roles.ts`의 한국어 표기가 공식과 일치하는지 대조한다.
+   불일치는 **경고**로만 알린다(관리자 페이지에서 의도적으로 바꿀 수 있으므로).
+
 - `npm run rules:sync` — 대조 후 생성 파일 갱신. `npm run rules:check` — 대조만(파일 미변경).
-- **앵커가 원문에서 사라지면 실패한다.** 공식 문구가 개정됐다는 신호이므로, 앵커와 함께
-  한국어 서술도 다시 검토해야 한다.
-- 인용은 규칙 대조 목적의 짧은 인용이며 저작권은 The Pandemonium Institute에 있다.
+- 역할명·에디션명은 공식 번역을 그대로 따른다 (REQUIREMENTS §3). 현재 예외 없음.
+- 인용은 규칙 대조 목적의 인용이며 저작권은 The Pandemonium Institute에 있다.
   공식 아트/아이콘은 여전히 사용하지 않는다(불변 규칙).
-- `tests/rules.test.ts`가 네트워크 없이 출처 누락·고아 출처·형식을 검사한다.
+- `tests/rules.test.ts`, `tests/role-rules.test.ts`가 네트워크 없이 출처 누락·고아 출처·
+  표기 일치·형식을 검사한다.

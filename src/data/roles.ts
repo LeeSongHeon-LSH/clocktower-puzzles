@@ -1,8 +1,8 @@
 // 역할 사전 — UI 표기의 유일한 원본. 관리자 페이지(/admin)가 이 파일을 GitHub 커밋으로 갱신한다.
 // UI 표기는 항상 `한국어(영어)` 형식을 쓴다: roleLabel() 참조.
 //
-// 한국어 표기 기준: Pandemonium Institute 공식 번역(github.com/ThePandemoniumInstitute/botc-translations,
-// clocktower.teeroz.net과 동일 표기). 예외: Scarlet Woman은 공식 "탕녀" 대신 운영자 선택으로 "부정한 여인".
+// 한국어 표기 기준: Pandemonium Institute 공식 번역(github.com/ThePandemoniumInstitute/botc-translations
+// 의 game/ko.json). 예외 없이 전 역할이 공식 표기와 일치하며, `npm run rules:check`가 대조한다.
 
 import type { Edition, RoleId, Team } from "@/lib/solver/types";
 
@@ -27,7 +27,7 @@ export const ROLES: Record<RoleId, RoleMeta> = {
   poisoner: { en: "Poisoner", ko: "독살범", team: "minion", edition: "tb" },
   spy: { en: "Spy", ko: "첩자", team: "minion", edition: "tb" },
   baron: { en: "Baron", ko: "남작", team: "minion", edition: "tb" },
-  scarletwoman: { en: "Scarlet Woman", ko: "부정한 여인", team: "minion", edition: "tb" },
+  scarletwoman: { en: "Scarlet Woman", ko: "탕녀", team: "minion", edition: "tb" },
   imp: { en: "Imp", ko: "임프", team: "demon", edition: "tb" },
   clockmaker: { en: "Clockmaker", ko: "시계공", team: "townsfolk", edition: "sv" },
   seamstress: { en: "Seamstress", ko: "재봉사", team: "townsfolk", edition: "sv" },
