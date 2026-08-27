@@ -11,9 +11,9 @@ export default definePuzzle({
   nights: 2,
   // 대본 — 풀이 화면에 공개된다. 이 목록 안에서만 역할이 배정된다.
   rolePool: [
-    "washerwoman", "librarian", "investigator", "chef", "empath", "fortuneteller", "undertaker", "ravenkeeper", "clockmaker", "seamstress", "juggler", "mathematician", "chambermaid",
-    "drunk", "recluse",
-    "poisoner", "spy", "baron", "scarletwoman",
+    "washerwoman", "librarian", "investigator", "chef", "empath", "fortuneteller", "undertaker", "monk", "ravenkeeper", "soldier", "mayor", "grandmother", "exorcist", "clockmaker", "dreamer", "oracle", "seamstress", "juggler", "mathematician", "chambermaid",
+    "butler", "drunk", "recluse", "saint",
+    "poisoner", "spy", "baron", "scarletwoman", "assassin",
     "imp",
   ],
   intro:

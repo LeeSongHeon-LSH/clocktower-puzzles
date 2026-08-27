@@ -91,6 +91,22 @@ export function wakes(ctx: Ctx, seat: Seat, night: number): boolean {
       return ctx.sched.diedAtNight(night).includes(seat);
     case "juggler":
       return night === 2 && aliveAfter[seat];
+    case "monk":
+    case "exorcist":
+      return night >= 2 && aliveStart[seat];
+    case "butler":
+      return aliveAfter[seat];
+    case "dreamer":
+      return aliveStart[seat]; // 악마보다 먼저 행동 — 그 밤에 죽더라도 이미 깨어났다
+    case "oracle":
+      return night >= 2 && aliveAfter[seat];
+    case "grandmother":
+      return night === 1;
+    case "assassin":
+      return ctx.sc.assassinNight === night; // 능력을 쓴 밤에만 깨어난다
+    case "godfather":
+      // 밤1: 등장한 외부인을 본다. 이후: 킬을 수행한 밤에만
+      return night === 1 ? aliveStart[seat] : (ctx.sc.godfatherNights?.has(night) ?? false);
     case "seamstress": {
       // 1회용: 실제 사용 밤은 그 좌석의 주장에 기록된 밤
       const claim = ctx.claimBySeat[seat];
@@ -101,6 +117,8 @@ export function wakes(ctx: Ctx, seat: Seat, night: number): boolean {
     case "spy":
       return aliveStart[seat];
     case "imp": {
+      // 구마사제가 악마를 지목한 밤에는 악마가 깨어나지 못한다
+      if (ctx.sc.exorcistBlocked?.has(night)) return false;
       // 승계한 밤(스타 패스)에는 임프가 됐다고 통보받으며 깨어난다
       const since = ctx.sc.becameDemonAt.get(seat);
       if (since === night) return true;

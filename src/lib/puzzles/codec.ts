@@ -183,6 +183,20 @@ function validateInfoData(v: unknown, players: number, where: string): InfoData 
       return { type: "mathematician", count: count(players) };
     case "chambermaid":
       return { type: "chambermaid", targets: seatPair(v.targets, players, where), count: count(2) };
+    case "monk":
+    case "exorcist":
+      return { type: t, target: int(v.target, 0, players - 1, `${where} 좌석`) };
+    case "dreamer":
+      return {
+        type: "dreamer",
+        target: int(v.target, 0, players - 1, `${where} 좌석`),
+        goodRole: roleId(v.goodRole, where),
+        evilRole: roleId(v.evilRole, where),
+      };
+    case "oracle":
+      return { type: "oracle", count: count(players) };
+    case "grandmother":
+      return { type: "grandmother", target: int(v.target, 0, players - 1, `${where} 좌석`), shownRole: roleId(v.shownRole, where) };
     default:
       throw new Error(`${where}: 알 수 없는 정보 종류입니다.`);
   }

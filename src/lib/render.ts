@@ -42,5 +42,15 @@ export function renderInfo(data: InfoData): string {
       return `오늘 밤 능력이 비정상 작동한 플레이어: ${data.count}명`;
     case "chambermaid":
       return `${pair(...data.targets)} 중 어젯밤 깨어난 사람: ${data.count}명`;
+    case "monk":
+      return `${seatName(data.target)}를 악마로부터 보호했다`;
+    case "exorcist":
+      return `${seatName(data.target)}를 지목했다 (악마라면 그 밤 깨어나지 못한다)`;
+    case "dreamer":
+      return `${seatName(data.target)}는 ${roleLabel(data.goodRole)} 아니면 ${roleLabel(data.evilRole)}이다`;
+    case "oracle":
+      return `죽은 플레이어 중 악인: ${data.count}명`;
+    case "grandmother":
+      return `내 손주는 ${seatName(data.target)} — ${roleLabel(data.shownRole)}이다`;
   }
 }

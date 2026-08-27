@@ -93,6 +93,7 @@ export type RoleId = (typeof ROLE_IDS)[number];
  * 능력을 구현할 때마다 여기에 한 줄씩 추가한다.
  */
 export const SOLVER_ROLES: readonly RoleId[] = [
+  // ── TB ──
   "washerwoman",
   "librarian",
   "investigator",
@@ -100,15 +101,29 @@ export const SOLVER_ROLES: readonly RoleId[] = [
   "empath",
   "fortuneteller",
   "undertaker",
+  "monk", // 보호 행동 주장 → 킬 실패 설명·보호 위반 시 중독 강제 (timeline.ts)
   "ravenkeeper",
+  "soldier", // 킬 실패 설명. 밤에 죽었다면 그 밤 중독이 강제된다
+  "mayor", // 능력이 진행 중 게임에 관측 가능한 흔적을 남기지 않는다 — 구성 전용.
+  //         (킬 튕김은 "임프가 그 좌석을 직접 노렸다"와 관측상 동치라 별도 모델 불요)
+  "butler", // 밤마다 깨어난다(주인 지목) — 객실 청소부·수학자 판정에만 영향
   "drunk",
   "recluse",
+  "saint", // 처형됐다면 그 밤 중독이 강제된다 (멀쩡한 성자 처형 = 게임 종료)
   "poisoner",
   "spy",
   "baron",
   "scarletwoman",
   "imp",
+  // ── BMR ──
+  "grandmother", // 밤1 손주 정보 + 손주가 임프에게 죽으면 연쇄 사망
+  "exorcist", // 악마 지목 시 그 밤 악마가 깨어나지 못한다
+  "godfather", // 외부인 ±1 구성 + 낮에 외부인이 처형돼 죽으면 그 밤 킬
+  "assassin", // 1회, 밤에 무조건 킬 (보호 무시) — 한 밤 2사망의 주 설명 수단
+  // ── SV ──
   "clockmaker",
+  "dreamer",
+  "oracle",
   "seamstress",
   "juggler",
   "mathematician",
@@ -135,7 +150,14 @@ export type InfoData =
   | { type: "seamstress"; targets: [Seat, Seat]; sameTeam: boolean }
   | { type: "juggler"; guesses: { seat: Seat; role: RoleId }[]; correct: number }
   | { type: "mathematician"; count: number }
-  | { type: "chambermaid"; targets: [Seat, Seat]; count: number };
+  | { type: "chambermaid"; targets: [Seat, Seat]; count: number }
+  // 행동 기록 (정보가 아니라 선택의 기록 — 참/거짓 판정 대상이 아니고 제약은 timeline이 소비)
+  | { type: "monk"; target: Seat }
+  | { type: "exorcist"; target: Seat }
+  // 추가 정보 역할
+  | { type: "dreamer"; target: Seat; goodRole: RoleId; evilRole: RoleId }
+  | { type: "oracle"; count: number }
+  | { type: "grandmother"; target: Seat; shownRole: RoleId };
 
 /** 특정 밤에 받았다고 주장하는 정보 한 건 */
 export interface ClaimInfo {

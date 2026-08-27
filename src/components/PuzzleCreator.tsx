@@ -4,7 +4,7 @@
 //
 // 핵심: 브라우저가 직접 솔버를 돌려 **유일해일 때만 공유 링크를 발급한다.**
 // "모든 퍼즐은 유일해가 증명돼야 한다"는 규칙이 사람 검수 없이 사설 문제에도 적용된다.
-// 실측상 솔버는 최악의 경우도 15ms 미만이라 동기 실행으로 충분하다.
+// 실측상 솔버는 최악(10인·전체 대본·다중 사망)에도 ~150ms라 동기 실행으로 충분하다.
 
 import { useMemo, useState } from "react";
 import { ROLES, TEAM_LABELS, roleLabel } from "@/data/roles";
@@ -67,6 +67,7 @@ const TEAM_STYLE: Record<Team, { rail: string; text: string; chipOn: string }> =
 const INFO_ROLES: RoleId[] = [
   "washerwoman", "librarian", "investigator", "chef", "empath", "fortuneteller",
   "undertaker", "ravenkeeper", "clockmaker", "seamstress", "mathematician", "chambermaid",
+  "monk", "exorcist", "dreamer", "oracle", "grandmother",
 ];
 
 interface DraftInfo {
@@ -82,7 +83,7 @@ interface DraftClaim {
 type Verdict =
   | { kind: "idle" }
   | { kind: "error"; message: string }
-  | { kind: "multiple"; count: number }
+  | { kind: "multiple"; count: number; example: string }
   | { kind: "none" }
   | { kind: "unsupported"; roles: RoleId[] }
   | { kind: "unique"; link: string };
@@ -103,6 +104,11 @@ function blankInfo(role: RoleId, night: number, players: number): DraftInfo | nu
     case "seamstress": return { night, data: { type: "seamstress", targets: pair, sameTeam: true } };
     case "mathematician": return { night, data: { type: "mathematician", count: 0 } };
     case "chambermaid": return { night, data: { type: "chambermaid", targets: pair, count: 0 } };
+    case "monk": return { night: Math.max(2, night), data: { type: "monk", target: 0 } };
+    case "exorcist": return { night: Math.max(2, night), data: { type: "exorcist", target: 0 } };
+    case "dreamer": return { night, data: { type: "dreamer", target: 0, goodRole: "chef", evilRole: "imp" } };
+    case "oracle": return { night: Math.max(2, night), data: { type: "oracle", count: 0 } };
+    case "grandmother": return { night: 1, data: { type: "grandmother", target: 0, shownRole: "chef" } };
     default: return null;
   }
 }
@@ -202,7 +208,10 @@ export function PuzzleCreator() {
     () => buildLedger(nights, playerCount, deaths, executions),
     [nights, playerCount, deaths, executions],
   );
-  const hasPoisoner = pool.includes("poisoner");
+  /** 킬 실패(아무도 안 죽은 밤)를 설명할 수 있는 역할이 대본에 있는가 */
+  const hasKillFailExplainer = (["poisoner", "soldier", "monk", "exorcist"] as RoleId[]).some((r) => pool.includes(r));
+  /** 한 밤 2인 이상 사망을 설명할 수 있는 역할이 대본에 있는가 */
+  const hasMultiKill = (["assassin", "godfather", "grandmother"] as RoleId[]).some((r) => pool.includes(r));
   const minionKinds = pool.filter((r) => ROLES[r].team === "minion").length;
   /** 대본이 공개되므로 좌석 수에 비해 좁으면 그 자체가 답을 좁힌다 */
   const narrowPool = pool.length < playerCount + 4;
@@ -329,7 +338,17 @@ export function PuzzleCreator() {
       return;
     }
     if (worlds.length > 1) {
-      setVerdict({ kind: "multiple", count: worlds.length });
+      // 반례를 그대로 보여준다 — 작성자가 어디서 새는지 찾는 가장 빠른 길이다
+      const intended = shared.solution.join(",");
+      const intendedDemon = shared.currentDemonSeat ?? shared.solution.findIndex((r) => ROLES[r].team === "demon");
+      const other = worlds.find((w) => w.assignment.join(",") !== intended || w.currentDemonSeat !== intendedDemon) ?? worlds[0];
+      setVerdict({
+        kind: "multiple",
+        count: worlds.length,
+        example:
+          other.assignment.map((r, i) => `${seatName(i)}=${ROLES[r].ko}`).join(", ") +
+          ` (현재 악마: ${seatName(other.currentDemonSeat)})`,
+      });
       return;
     }
     // 유일해가 작성자가 의도한 배치와 같은지도 확인한다
@@ -638,15 +657,17 @@ export function PuzzleCreator() {
                     <span className="tabular-nums text-faded">생존 {row.alive}명</span>
                   </p>
 
-                  {row.kind === "night" && row.picked.length > 1 && (
+                  {row.kind === "night" && row.picked.length > 1 && !hasMultiKill && (
                     <p className="text-[11px] text-blood">
-                      한 밤에 둘 이상을 죽이는 능력은 아직 솔버에 없습니다 — 이대로 검증하면 “해가 없습니다”가 나옵니다.
+                      한 밤에 두 명 이상이 죽으려면 {roleLabel("assassin")}·{roleLabel("godfather")}·
+                      {roleLabel("grandmother")} 중 하나가 대본에 있어야 합니다 — 지금 대본으로는 “해가
+                      없습니다”가 나옵니다.
                     </p>
                   )}
-                  {row.kind === "night" && row.index > 1 && row.picked.length === 0 && !hasPoisoner && (
+                  {row.kind === "night" && row.index > 1 && row.picked.length === 0 && !hasKillFailExplainer && (
                     <p className="text-[11px] text-faded">
-                      악마의 킬이 실패하려면 <span className="text-brass">{roleLabel("poisoner")}</span>이 필요합니다 — 지금
-                      역할 풀에 없습니다.
+                      악마의 킬이 실패하려면 {roleLabel("poisoner")}·{roleLabel("soldier")}·{roleLabel("monk")}·
+                      {roleLabel("exorcist")} 중 하나가 대본에 있어야 합니다 — 지금 대본에 없습니다.
                     </p>
                   )}
                 </div>
@@ -721,7 +742,13 @@ export function PuzzleCreator() {
           <div className="rounded border border-brass/60 bg-panel p-3">
             <p className="font-bold text-brass">해가 {verdict.count}개입니다 — 아직 문제가 아닙니다.</p>
             <p className="mt-1 text-faded">
-              단서가 부족해 답을 하나로 좁힐 수 없습니다. 정보를 더 넣거나 역할 풀을 좁혀 보세요.
+              단서가 부족해 답을 하나로 좁힐 수 없습니다. 예컨대 입력한 정답 말고 이 배치도 모든
+              주장·사건과 정합합니다:
+            </p>
+            <p className="mt-2 rounded bg-ink/60 px-3 py-2 font-mono text-xs text-parchment">{verdict.example}</p>
+            <p className="mt-2 text-faded">
+              두 배치를 가르는 정보를 더 넣거나, 사건을 추가해 보세요. 역할 풀 좁히기는 대본이 공개되는
+              만큼 마지막 수단입니다.
             </p>
           </div>
         )}
@@ -771,9 +798,11 @@ function InfoEditor({
     </select>
   );
 
-  const roleSelect = (value: RoleId, onPick: (r: RoleId) => void) => (
+  const roleSelect = (value: RoleId, onPick: (r: RoleId) => void, teams?: Team[]) => (
     <select className={field} value={value} onChange={(e) => onPick(e.target.value as RoleId)}>
-      {(ROLE_IDS as readonly RoleId[]).map((r) => <option key={r} value={r}>{ROLES[r].ko}</option>)}
+      {(ROLE_IDS as readonly RoleId[])
+        .filter((r) => !teams || teams.includes(ROLES[r].team))
+        .map((r) => <option key={r} value={r}>{ROLES[r].ko}</option>)}
     </select>
   );
 
@@ -846,6 +875,39 @@ function InfoEditor({
               onClick={() => set({ ...d, sameTeam: !d.sameTeam })}>
               {d.sameTeam ? "같은 편" : "다른 편"}
             </button>
+          </>
+        )}
+
+        {(d.type === "monk" || d.type === "exorcist") && (
+          <>
+            {seatSelect(d.target, (s) => set({ ...d, target: s }))}
+            <span className="text-xs text-faded">{d.type === "monk" ? "를 보호" : "를 지목"}</span>
+          </>
+        )}
+
+        {d.type === "dreamer" && (
+          <>
+            {seatSelect(d.target, (s) => set({ ...d, target: s }))}
+            <span className="text-xs text-faded">는</span>
+            {roleSelect(d.goodRole, (r) => set({ ...d, goodRole: r }), ["townsfolk", "outsider"])}
+            <span className="text-xs text-faded">아니면</span>
+            {roleSelect(d.evilRole, (r) => set({ ...d, evilRole: r }), ["minion", "demon"])}
+          </>
+        )}
+
+        {d.type === "oracle" && (
+          <>
+            <span className="text-xs text-faded">죽은 악인</span>
+            {numberSelect(d.count, seats.length, (n) => set({ type: "oracle", count: n }))}
+          </>
+        )}
+
+        {d.type === "grandmother" && (
+          <>
+            <span className="text-xs text-faded">손주</span>
+            {seatSelect(d.target, (s) => set({ ...d, target: s }))}
+            <span className="text-xs text-faded">=</span>
+            {roleSelect(d.shownRole, (r) => set({ ...d, shownRole: r }), ["townsfolk", "outsider"])}
           </>
         )}
 

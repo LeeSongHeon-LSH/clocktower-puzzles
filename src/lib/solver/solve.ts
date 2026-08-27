@@ -97,34 +97,41 @@ export function solve(pz: SolverPuzzle): World[] {
     const nonDemon = seats.filter((s) => s !== demonSeat);
     for (const minionSeats of combinations(nonDemon, baseComp.minion)) {
       for (const minionRoles of permutations(minionsInPool, minionSeats.length)) {
-        const comp = composition(N, minionRoles.includes("baron"));
-        const evil = new Set<Seat>([demonSeat, ...minionSeats]);
-        const goodSeats = seats.filter((s) => !evil.has(s));
-        const outsiderClaims = goodSeats.filter((s) => ROLES[claimBySeat[s].role].team === "outsider");
-        const need = comp.outsider - outsiderClaims.length;
-        if (need < 0 || need > 1) continue;
-        if (need === 1 && !pz.rolePool.includes("drunk")) continue;
-        const drunkChoices: (Seat | null)[] = need === 1
-          ? goodSeats.filter((s) => ROLES[claimBySeat[s].role].team === "townsfolk")
-          : [null];
+        // 구성 변형: 남작 +2 외부인, 대부 ±1 외부인 (텔러 선택 — 두 경우 모두 탐색)
+        let deltas = [0];
+        if (minionRoles.includes("baron")) deltas = deltas.map((d) => d + 2);
+        if (minionRoles.includes("godfather")) deltas = deltas.flatMap((d) => [d + 1, d - 1]);
+        for (const delta of new Set(deltas)) {
+          const comp = { ...baseComp, outsider: baseComp.outsider + delta, townsfolk: baseComp.townsfolk - delta };
+          if (comp.outsider < 0 || comp.townsfolk < 0) continue;
+          const evil = new Set<Seat>([demonSeat, ...minionSeats]);
+          const goodSeats = seats.filter((s) => !evil.has(s));
+          const outsiderClaims = goodSeats.filter((s) => ROLES[claimBySeat[s].role].team === "outsider");
+          const need = comp.outsider - outsiderClaims.length;
+          if (need < 0 || need > 1) continue;
+          if (need === 1 && !pz.rolePool.includes("drunk")) continue;
+          const drunkChoices: (Seat | null)[] = need === 1
+            ? goodSeats.filter((s) => ROLES[claimBySeat[s].role].team === "townsfolk")
+            : [null];
 
-        for (const drunkSeat of drunkChoices) {
-          const assignment: RoleId[] = new Array(N);
-          assignment[demonSeat] = "imp";
-          minionSeats.forEach((s, i) => { assignment[s] = minionRoles[i]; });
-          for (const s of goodSeats) assignment[s] = s === drunkSeat ? "drunk" : claimBySeat[s].role;
+          for (const drunkSeat of drunkChoices) {
+            const assignment: RoleId[] = new Array(N);
+            assignment[demonSeat] = "imp";
+            minionSeats.forEach((s, i) => { assignment[s] = minionRoles[i]; });
+            for (const s of goodSeats) assignment[s] = s === drunkSeat ? "drunk" : claimBySeat[s].role;
 
-          const goodTokens = goodSeats.map((s) => assignment[s]);
-          if (new Set(goodTokens).size !== goodTokens.length) continue; // 실물 토큰 중복 불가
-          const tfCount = goodSeats.filter((s) => ROLES[assignment[s]].team === "townsfolk").length;
-          if (tfCount !== comp.townsfolk) continue;
+            const goodTokens = goodSeats.map((s) => assignment[s]);
+            if (new Set(goodTokens).size !== goodTokens.length) continue; // 실물 토큰 중복 불가
+            const tfCount = goodSeats.filter((s) => ROLES[assignment[s]].team === "townsfolk").length;
+            if (tfCount !== comp.townsfolk) continue;
 
-          for (const sc of demonScenarios(pz, sched, assignment)) {
-            const ftSeat = assignment.indexOf("fortuneteller");
-            const rhChoices: (Seat | null)[] = ftSeat >= 0 ? goodSeats : [null];
-            for (const rh of rhChoices) {
-              const world = tryWorld(pz, sched, claimBySeat, assignment, sc, rh, goodSeats);
-              if (world) found.set(worldKey(world), world);
+            for (const sc of demonScenarios(pz, sched, assignment)) {
+              const ftSeat = assignment.indexOf("fortuneteller");
+              const rhChoices: (Seat | null)[] = ftSeat >= 0 ? goodSeats : [null];
+              for (const rh of rhChoices) {
+                const world = tryWorld(pz, sched, claimBySeat, assignment, sc, rh, goodSeats);
+                if (world) found.set(worldKey(world), world);
+              }
             }
           }
         }

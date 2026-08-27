@@ -17,6 +17,11 @@ import { seamstress } from "./seamstress";
 import { juggler } from "./juggler";
 import { mathematician } from "./mathematician";
 import { chambermaid } from "./chambermaid";
+import { monk } from "./monk";
+import { exorcist } from "./exorcist";
+import { dreamer } from "./dreamer";
+import { oracle } from "./oracle";
+import { grandmother } from "./grandmother";
 
 export function checkContent(ctx: Ctx, seat: Seat, data: InfoData, night: number): boolean {
   switch (data.type) {
@@ -33,5 +38,10 @@ export function checkContent(ctx: Ctx, seat: Seat, data: InfoData, night: number
     case "juggler": return juggler(ctx, seat, data, night);
     case "mathematician": return mathematician(ctx, seat, data, night);
     case "chambermaid": return chambermaid(ctx, seat, data, night);
+    case "monk": return monk(ctx, seat, data, night);
+    case "exorcist": return exorcist(ctx, seat, data, night);
+    case "dreamer": return dreamer(ctx, seat, data, night);
+    case "oracle": return oracle(ctx, seat, data, night);
+    case "grandmother": return grandmother(ctx, seat, data, night);
   }
 }
