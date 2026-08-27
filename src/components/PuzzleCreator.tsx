@@ -7,14 +7,13 @@
 // 실측상 솔버는 최악의 경우도 15ms 미만이라 동기 실행으로 충분하다.
 
 import { useMemo, useState } from "react";
-import { EDITION_LABELS, ROLES, TEAM_LABELS, roleLabel } from "@/data/roles";
+import { ROLES, TEAM_LABELS, roleLabel } from "@/data/roles";
 import { LIMITS, encodePuzzle, toPuzzle, type SharedPuzzle } from "@/lib/puzzles/codec";
 import { seatName, type Difficulty } from "@/lib/puzzles/schema";
 import { solve } from "@/lib/solver/solve";
 import {
   ROLE_IDS,
   SOLVER_ROLES,
-  type Edition,
   type InfoData,
   type RoleId,
   type Seat,
@@ -62,8 +61,6 @@ const TEAM_STYLE: Record<Team, { rail: string; text: string; chipOn: string }> =
     chipOn: "border-team-demon bg-team-demon/15 text-parchment",
   },
 };
-
-const EDITIONS: Edition[] = ["tb", "bmr", "sv"];
 
 /** 정보를 만들어 내는 역할 = 정보 입력칸이 있는 역할 */
 const INFO_ROLES: RoleId[] = [
@@ -130,8 +127,6 @@ export function PuzzleCreator() {
   const [deathNight, setDeathNight] = useState<string>("");
   const [deathSeat, setDeathSeat] = useState(0);
   const [verdict, setVerdict] = useState<Verdict>({ kind: "idle" });
-  /** 역할 풀 표시 필터. 사전이 72종이라 판본으로 좁혀 보여준다 (고른 역할은 항상 보인다). */
-  const [poolEdition, setPoolEdition] = useState<Edition | "all">("tb");
 
   const seats = useMemo(() => Array.from({ length: playerCount }, (_, i) => i), [playerCount]);
   const claimable = useMemo(() => pool.filter((r) => !UNCLAIMABLE.includes(r)), [pool]);
@@ -308,19 +303,6 @@ export function PuzzleCreator() {
           악마는 최소 1종 넣어야 합니다.
         </p>
 
-        <div className="flex flex-wrap gap-2" role="group" aria-label="판본 필터">
-          {(["all", ...EDITIONS] as const).map((e) => (
-            <button key={e} type="button" onClick={() => setPoolEdition(e)} aria-pressed={poolEdition === e}
-              className={`rounded-full border px-3 py-1 text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brass ${
-                poolEdition === e
-                  ? "border-brass bg-brass/15 text-parchment"
-                  : "border-panel-edge text-faded hover:text-parchment"
-              }`}>
-              {e === "all" ? "전체" : EDITION_LABELS[e].ko}
-            </button>
-          ))}
-        </div>
-
         <p className="text-xs text-faded">
           <span className="mr-1.5 inline-block rounded-full border border-dashed border-faded px-2 py-0.5 align-middle text-[11px]">
             점선
@@ -332,10 +314,6 @@ export function PuzzleCreator() {
         <div className="space-y-3" role="group" aria-label="역할 풀">
           {POOL_BY_TEAM.map(({ team, roles }) => {
             const picked = roles.filter((r) => pool.includes(r)).length;
-            // 고른 역할을 숨기면 풀에 뭐가 들었는지 모르게 된다 — 필터는 안 고른 역할만 접는다.
-            const shown = roles.filter(
-              (r) => poolEdition === "all" || ROLES[r].edition === poolEdition || pool.includes(r),
-            );
             const style = TEAM_STYLE[team];
             return (
               <div key={team} className={`border-l-2 pl-3 ${style.rail}`}>
@@ -347,7 +325,7 @@ export function PuzzleCreator() {
                   </span>
                 </div>
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
-                  {shown.map((r) => {
+                  {roles.map((r) => {
                     const on = pool.includes(r);
                     const modeled = SOLVER_ROLES.includes(r);
                     return (
