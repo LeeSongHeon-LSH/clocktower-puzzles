@@ -42,6 +42,7 @@ export function makeCtx(opts: {
   nights?: number;
   redHerring?: Seat | null;
   poison?: (Seat | null)[] | null;
+  sweet?: { target: Seat; since: number } | null;
 }): Ctx {
   const pz = makePuzzle({
     assignmentLength: opts.assignment.length,
@@ -64,5 +65,6 @@ export function makeCtx(opts: {
     sc: plainScenario(opts.assignment, pz.nights),
     redHerring: opts.redHerring ?? null,
     poison: opts.poison ?? null,
+    sweet: opts.sweet ?? null,
   };
 }

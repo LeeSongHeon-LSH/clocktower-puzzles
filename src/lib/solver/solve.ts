@@ -8,8 +8,8 @@
 import { ROLES } from "@/data/roles";
 import { composition } from "./composition";
 import { checkContent } from "./roles";
-import { Ctx, isDrunk, wakes } from "./ctx";
-import { DemonScenario, demonScenarios, Schedule } from "./timeline";
+import { Ctx, isDrunk, isSweetDrunk, wakes } from "./ctx";
+import { DemonScenario, demonScenarios, Schedule, SweetheartCase } from "./timeline";
 import type { Claim, InfoData, RoleId, Seat, SolverPuzzle, World } from "./types";
 import { SOLVER_ROLES, worldKey } from "./types";
 
@@ -125,12 +125,14 @@ export function solve(pz: SolverPuzzle): World[] {
             const tfCount = goodSeats.filter((s) => ROLES[assignment[s]].team === "townsfolk").length;
             if (tfCount !== comp.townsfolk) continue;
 
-            for (const sc of demonScenarios(pz, sched, assignment)) {
-              const ftSeat = assignment.indexOf("fortuneteller");
-              const rhChoices: (Seat | null)[] = ftSeat >= 0 ? goodSeats : [null];
-              for (const rh of rhChoices) {
-                const world = tryWorld(pz, sched, claimBySeat, assignment, sc, rh, goodSeats);
-                if (world) found.set(worldKey(world), world);
+            for (const sweet of sweetheartCases(pz, sched, assignment, seats)) {
+              for (const sc of demonScenarios(pz, sched, assignment, sweet)) {
+                const ftSeat = assignment.indexOf("fortuneteller");
+                const rhChoices: (Seat | null)[] = ftSeat >= 0 ? goodSeats : [null];
+                for (const rh of rhChoices) {
+                  const world = tryWorld(pz, sched, claimBySeat, assignment, sc, sweet, rh, goodSeats);
+                  if (world) found.set(worldKey(world), world);
+                }
               }
             }
           }
@@ -141,16 +143,42 @@ export function solve(pz: SolverPuzzle): World[] {
   return [...found.values()];
 }
 
+/**
+ * 스위트하트 케이스 열거. 스위트하트가 배정에 없거나 살아 있으면 [null] (취함 없음).
+ * 죽었다면 텔러가 고른 취함 대상 전부 + "사망 순간 중독이라 미발동"(target: null)을 분기한다 —
+ * 사망 시점은 이벤트로 고정돼 있어 대상 1명만 열거하면 된다 (docs/REQUIREMENTS.md 2.4).
+ */
+function sweetheartCases(pz: SolverPuzzle, sched: Schedule, assignment: RoleId[], seats: Seat[]): (SweetheartCase | null)[] {
+  const sweetSeat = assignment.indexOf("sweetheart");
+  if (sweetSeat < 0) return [null];
+  let deathNight: number | null = null;
+  let since = 0;
+  for (let n = 2; n <= pz.nights; n++) {
+    if (sched.diedAtNight(n).includes(sweetSeat)) { deathNight = n; since = n; }
+  }
+  for (let d = 1; d <= pz.nights - 1; d++) {
+    if (sched.executedOnDay(d) === sweetSeat) { deathNight = d; since = d + 0.5; }
+  }
+  if (deathNight === null) return [null];
+  const dn = deathNight;
+  return [
+    ...seats.filter((t) => t !== sweetSeat).map((t) => ({ sweetSeat, deathNight: dn, since, target: t as Seat | null })),
+    { sweetSeat, deathNight: dn, since, target: null },
+  ];
+}
+
 function tryWorld(
   pz: SolverPuzzle,
   sched: Schedule,
   claimBySeat: Claim[],
   assignment: RoleId[],
   sc: DemonScenario,
+  sweet: SweetheartCase | null,
   redHerring: Seat | null,
   goodSeats: Seat[],
 ): World | null {
-  const ctx: Ctx = { pz, sched, assignment, claimBySeat, sc, redHerring, poison: null };
+  const sweetDrunk = sweet !== null && sweet.target !== null ? { target: sweet.target, since: sweet.since } : null;
+  const ctx: Ctx = { pz, sched, assignment, claimBySeat, sc, redHerring, poison: null, sweet: sweetDrunk };
 
   // 선한 좌석(주정뱅이 포함)의 정보 수집 + 구조 검증 (깨어날 수 없었다면 그 주장은 참일 수 없다)
   const infos: GoodInfo[] = [];
@@ -171,6 +199,7 @@ function tryWorld(
     const required = new Map(sc.poisonRequired);
     for (const i of soberInfos) {
       if (sc.minstrelNights?.has(i.night)) continue; // 전원 취함 밤의 정보는 무제약
+      if (isSweetDrunk(ctx, i.seat, i.night)) continue; // 스위트하트 취함 — 정보 무제약
       if (checkContent(ctx, i.seat, i.data, i.night)) continue;
       const existing = required.get(i.night);
       if (existing !== undefined && existing !== i.seat) return null;
@@ -178,13 +207,14 @@ function tryWorld(
     }
     for (const [night, target] of required) {
       if (poisonerSeat < 0) return null;
+      if (isSweetDrunk(ctx, poisonerSeat, night)) return null; // 취한 독살범의 독은 듣지 않는다
       if (!sched.aliveAtNightStart(night)[poisonerSeat]) return null;
       if (!sched.aliveAtNightStart(night)[target]) return null;
       if (sc.poisonForbidden.get(night)?.has(target)) return null;
     }
     const poisonTargets: (Seat | null)[] = new Array(pz.nights + 1).fill(null);
     for (const [night, target] of required) poisonTargets[night] = target;
-    return { assignment: [...assignment], currentDemonSeat: sc.currentDemonSeat, poisonTargets, redHerring };
+    return { assignment: [...assignment], currentDemonSeat: sc.currentDemonSeat, poisonTargets, redHerring, sweetheartDrunk: sweetDrunk?.target ?? null };
   }
 
   // 열거 경로 (수학자 포함 퍼즐): 밤별 독살 대상을 전수 열거
@@ -201,7 +231,7 @@ function tryWorld(
         return null;
       }
       optionsPerNight[night] = [req];
-    } else if (poisonerSeat >= 0 && sched.aliveAtNightStart(night)[poisonerSeat]) {
+    } else if (poisonerSeat >= 0 && sched.aliveAtNightStart(night)[poisonerSeat] && !isSweetDrunk(ctx, poisonerSeat, night)) {
       const alive = sched.aliveAtNightStart(night);
       optionsPerNight[night] = alive
         .map((a, s) => (a && !forbidden?.has(s) ? s : null))
@@ -218,9 +248,10 @@ function tryWorld(
       for (const i of soberInfos) {
         if (vector[i.night] === i.seat) continue; // 그 밤 중독 → 정보 무제약
         if (sc.minstrelNights?.has(i.night)) continue; // 전원 취함 밤
+        if (isSweetDrunk(pctx, i.seat, i.night)) continue; // 스위트하트 취함
         if (!checkContent(pctx, i.seat, i.data, i.night)) return null;
       }
-      return { assignment: [...assignment], currentDemonSeat: sc.currentDemonSeat, poisonTargets: [...vector], redHerring };
+      return { assignment: [...assignment], currentDemonSeat: sc.currentDemonSeat, poisonTargets: [...vector], redHerring, sweetheartDrunk: sweetDrunk?.target ?? null };
     }
     for (const opt of optionsPerNight[night]) {
       vector[night] = opt;

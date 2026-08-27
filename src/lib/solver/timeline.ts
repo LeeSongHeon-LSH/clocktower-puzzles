@@ -115,6 +115,20 @@ export interface DemonScenario {
   minstrelNights?: Set<number>;
 }
 
+/**
+ * 스위트하트 취함 케이스 (solve가 배정별로 열거).
+ * 스위트하트가 죽은 배정에서만 존재한다. target이 좌석이면 "사망 순간 멀쩡했고 그
+ * 좌석이 since부터 취한다", null이면 "사망 순간 중독돼 있어 취함이 발동하지 않았다".
+ * 시점 규약은 becameDemonAt과 같다: 밤 n 사망 = n, 낮 d 처형 = d + 0.5.
+ * deathNight는 사망 순간의 독살 제약이 걸리는 밤 인덱스 (낮 d 처형이면 d — 밤 d의 독이 낮까지 지속).
+ */
+export interface SweetheartCase {
+  sweetSeat: Seat;
+  deathNight: number;
+  since: number;
+  target: Seat | null;
+}
+
 type Trigger = "must" | "may" | "none";
 
 interface St {
@@ -183,10 +197,14 @@ function neighborsOf(alive: boolean[], seat: Seat): [Seat, Seat] | null {
  * 게임이 이미 끝났어야 하는 경로(데몬 사망 후 승계 불가, 생존 2인 이하)는 제외.
  * 빈 배열 = 이 배정은 이벤트와 모순.
  */
-export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: RoleId[]): DemonScenario[] {
+export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: RoleId[], sweet?: SweetheartCase | null): DemonScenario[] {
   const impSeat = assignment.indexOf("imp");
   if (impSeat < 0) return [];
-  const hasPoisoner = assignment.includes("poisoner");
+  const poisonerSeat = assignment.indexOf("poisoner");
+  const hasPoisoner = poisonerSeat >= 0;
+  // 스위트하트 취함: since 이후의 그 좌석은 능력이 비정상 동작한다 (독살과 같은 효과, 영구)
+  const sweetTarget = sweet ? sweet.target : null;
+  const sweetSince = sweet ? sweet.since : Infinity;
 
   const claimBySeat: (Claim | undefined)[] = [];
   for (const c of pz.claims) claimBySeat[c.seat] = c;
@@ -217,9 +235,11 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
 
   const results: DemonScenario[] = [];
 
-  /** 밤 night에 seat 독살을 강제. 모순이면 false */
+  /** 밤 night에 seat의 능력 비정상 동작을 강제 (스위트하트 취함 또는 독살). 모순이면 false */
   function require_(st: St, night: number, seat: Seat): boolean {
+    if (sweetTarget === seat && sweetSince <= night) return true; // 이미 취해 있다 — 독살 불요
     if (!hasPoisoner) return false;
+    if (sweetTarget === poisonerSeat && sweetSince <= night) return false; // 취한 독살범의 독은 듣지 않는다
     if (st.minstrelNights.includes(night)) return false; // 그 밤엔 독살범도 취해 있다
     const ex = st.required.get(night);
     if (ex !== undefined && ex !== seat) return false;
@@ -228,8 +248,9 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
     return true;
   }
 
-  /** 밤 night에 seat이 독살되지 않았음을 강제. 모순이면 false */
+  /** 밤 night에 seat의 능력 정상 동작을 강제 (취하지도 독살되지도 않음). 모순이면 false */
   function forbid_(st: St, night: number, seat: Seat): boolean {
+    if (sweetTarget === seat && sweetSince <= night) return false; // 취해 있어 정상 동작 불가
     if (st.required.get(night) === seat) return false;
     if (!st.forbidden.has(night)) st.forbidden.set(night, new Set());
     st.forbidden.get(night)!.add(seat);
@@ -552,6 +573,14 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
     foolDodgeUsed: false,
     grandchild: null,
   };
+
+  // 스위트하트 사망 순간의 상태 제약: 취함 발동에는 멀쩡함이, 미발동에는 중독이 필요하다
+  if (sweet) {
+    const ok = sweet.target === null
+      ? require_(st0, sweet.deathNight, sweet.sweetSeat)
+      : forbid_(st0, sweet.deathNight, sweet.sweetSeat);
+    if (!ok) return results;
+  }
 
   // 할머니 밤1 정보의 취함/중독 여부가 손주 확정을 좌우하므로 최상위에서 분기한다
   if (gmSeat >= 0 && gmClaimTarget !== null) {

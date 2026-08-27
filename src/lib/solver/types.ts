@@ -127,6 +127,7 @@ export const SOLVER_ROLES: readonly RoleId[] = [
   "godfather", // 외부인 ±1 구성 + 낮에 외부인이 처형돼 죽으면 그 밤 킬
   "assassin", // 1회, 밤에 무조건 킬 (보호 무시) — 한 밤 2사망의 주 설명 수단
   // ── SV ──
+  "sweetheart", // 죽으면 그때부터 1명이 취한다 — 대상(또는 사망 시 중독으로 미발동)을 열거
   "clockmaker",
   "dreamer",
   "oracle",
@@ -212,6 +213,7 @@ export interface World {
   currentDemonSeat: Seat; // 현재(승계 반영) 데몬 좌석
   poisonTargets: (Seat | null)[]; // 밤 n(1-based)의 독살 대상, [0]은 미사용
   redHerring: Seat | null; // 점쟁이 레드 헤링 (점쟁이 있을 때만)
+  sweetheartDrunk: Seat | null; // 스위트하트 사망으로 취한 좌석 (미발동·부재 시 null)
 }
 
 /** 유일해 비교용 직렬화 키 */

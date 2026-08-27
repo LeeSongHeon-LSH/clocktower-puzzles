@@ -43,12 +43,15 @@
 - SV/BMR 정보: Clockmaker, Seamstress, Juggler, Mathematician, Chambermaid, Dreamer, Oracle, Grandmother, Sage(악마 킬 사망 시 정보)
 - BMR 킬 계열 (2026-08-27 추가 — 한 밤 다중 사망은 이들로만 성립): Exorcist(악마 봉쇄), Assassin(1회 확정 킬), Godfather(외부인 ±1 + 외부인 처형 후 의무 킬)
 - BMR 죽음 역학 (2026-08-27 2차): Gambler(오답 사망), Tinker(재량 사망), Minstrel(하수인 처형 → 전원 취함 밤), Tea Lady(이웃 보호), Fool(첫 죽음 회피)
+- SV 취함 원천 (2026-08-27 3차): Sweetheart — 죽는 순간부터 1명이 계속 취한다. 사망 시점이
+  이벤트로 고정돼 취함 대상 1명만 열거하면 되고(사망 순간 중독으로 미발동인 분기 포함),
+  대상이 독살범이면 그 이후의 독은 듣지 않는다.
 
 미룬 역할과 이유 (구현 전 논의 필요):
 - Virgin, Slayer, Gossip — **낮 공개 행동(지명·총격·발언) 이벤트 모델**이 없다. 이벤트 스키마·에디터·공유 코덱 확장이 선행돼야 한다.
 - Flowergirl, Town Crier — 투표·지명 기록이 필요해 위와 같은 확장에 묶인다.
-- Courtier, Sailor, Innkeeper, Goon, Sweetheart — 독살범 외의 **추가 취함 원천**. 탐색 공간이 밤당 곱으로
-  늘어 솔버 구조 변경이 필요하다 (Sweetheart는 사망 후 1명 고정이라 열거 가능 — 다음 후보 중 가장 싸다).
+- Courtier, Sailor, Innkeeper, Goon — 독살범 외의 **추가 취함 원천**이 밤마다 움직인다. 탐색 공간이
+  밤당 곱으로 늘어 솔버 구조 변경이 필요하다 (같은 계열이던 Sweetheart는 사망 후 1명 고정이라 열거로 해결 — 3차에서 구현).
 - Pacifist, Devil's Advocate, Professor, Mastermind — "처형됐지만 죽지 않음"·부활 이벤트 형태가 없다.
 - Snake Charmer, Philosopher, Pit-Hag, Barber — **역할이 게임 중 바뀐다**. 배정 고정 전제를 깬다.
 - 임프 외 데몬 (Zombuul, Pukka, Shabaloth, Po, Fang Gu, Vigormortis, No Dashii, Vortox) — 데몬별 킬 패턴·정보 왜곡이 엔진 일반화를 요구한다. Vortox(마을 정보 전부 거짓)는 그중 가장 가치 있는 후보.
