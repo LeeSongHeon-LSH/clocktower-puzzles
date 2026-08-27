@@ -22,7 +22,13 @@ const csp = [
   "upgrade-insecure-requests",
 ].join("; ");
 
-const securityHeaders = [
+/**
+ * ⚠ 이 헤더는 Next가 응답을 서빙할 때만(next start / Vercel) 적용된다.
+ * `output: "export"`로 바꿔 순수 CDN에 올리면 **경고 없이 사라진다.**
+ * 호스팅 방식을 바꾼다면 호스팅 쪽(_headers, vercel.json 등)에 같은 헤더를 옮길 것.
+ * tests/security-headers.test.ts 가 이 조건을 감시한다.
+ */
+export const securityHeaders = [
   { key: "Content-Security-Policy", value: csp },
   { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
   { key: "X-Content-Type-Options", value: "nosniff" },

@@ -97,6 +97,20 @@ describe("검증 — 신뢰할 수 없는 입력", () => {
     expect(() => validateShared([1, 2, 3])).toThrow();
   });
 
+  it("정답 좌석이 인원수보다 많으면 거부한다 (풀 수 없는 문제 방지)", () => {
+    const b = base();
+    const questions = structuredClone(b.questions) as { answerSeats: number[] }[];
+    questions[0].answerSeats = Array.from({ length: 50 }, (_, i) => i % 5);
+    expect(() => validateShared({ ...b, questions })).toThrow(/정답 좌석/);
+  });
+
+  it("정답 좌석에 중복이 있으면 거부한다 (좌석 선택은 토글이라 답할 수 없음)", () => {
+    const b = base();
+    const questions = structuredClone(b.questions) as { answerSeats: number[] }[];
+    questions[0].answerSeats = [1, 1];
+    expect(() => validateShared({ ...b, questions })).toThrow(/중복/);
+  });
+
   it("정답 배치의 역할이 풀에 없으면 거부한다", () => {
     const b = base();
     const solution = [...(b.solution as string[])];

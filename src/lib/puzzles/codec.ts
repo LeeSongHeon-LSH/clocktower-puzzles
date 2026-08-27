@@ -243,10 +243,19 @@ export function validateShared(v: unknown): SharedPuzzle {
     if (!Array.isArray(raw.answerSeats) || raw.answerSeats.length === 0) {
       throw new Error(`질문 ${i + 1}: 정답 좌석이 없습니다.`);
     }
+    // 좌석 수보다 많거나 중복이 있으면 풀이 화면에서 영원히 답할 수 없다
+    // (좌석 선택은 토글이라 같은 좌석을 두 번 고를 수 없다).
+    if (raw.answerSeats.length > playerCount) {
+      throw new Error(`질문 ${i + 1}: 정답 좌석이 인원수(${playerCount}명)보다 많습니다.`);
+    }
+    const answerSeats = raw.answerSeats.map((s) => int(s, 0, playerCount - 1, `질문 ${i + 1} 정답 좌석`));
+    if (new Set(answerSeats).size !== answerSeats.length) {
+      throw new Error(`질문 ${i + 1}: 정답 좌석에 중복이 있습니다.`);
+    }
     return {
       id: qid,
       text: str(raw.text, LIMITS.maxText, `질문 ${i + 1}`)!,
-      answerSeats: raw.answerSeats.map((s) => int(s, 0, playerCount - 1, `질문 ${i + 1} 정답 좌석`)),
+      answerSeats,
     };
   });
 

@@ -163,6 +163,16 @@ clocktower-puzzles:progress = {
 - GitHub private repo `LeeSongHeon-LSH/clocktower-puzzles` → Vercel 연동(사용자가 1회 클릭).
 - `main` push = 프로덕션 배포.
 - **전 페이지가 정적이다.** 서버 라우트도 API도 없다 — 순수 정적 배포로 CDN에서 전부 서빙된다.
+- 보안 헤더는 `next.config.ts`의 `headers()`가 CDN 엣지에서 붙인다 (CSP, HSTS, X-Frame-Options,
+  X-Content-Type-Options, Referrer-Policy, Permissions-Policy). 방어 심화 목적 — 서버·쿠키·외부
+  요청이 없고 React가 출력을 이스케이프하므로 현재 막고 있는 취약점이 있어서가 아니라,
+  향후 실수의 피해를 줄이는 안전망이다.
+  - CSP는 정적 배포라 요청별 nonce를 만들 수 없어 `script-src`에 `'unsafe-inline'`이 불가피하다
+    (Next 인라인 부트스트랩). 대신 `connect-src 'self'`로 유출 경로를, `object-src 'none'`·
+    `base-uri 'self'`·`frame-ancestors 'none'`으로 삽입·피벗 경로를 막는다.
+  - **`output: "export"`로 바꾸면 이 헤더가 경고 없이 사라진다.** 호스팅을 옮긴다면 헤더도
+    호스팅 쪽으로 옮겨야 한다. `tests/security-headers.test.ts`가 이 조건과 핵심 지시어 누락을
+    감시한다.
 - 부하 특성: 100 동시 연결 기준 홈 4,500 req/s, 퍼즐 3,450 req/s (에러 0, p99 ≤ 53ms).
   전 페이지가 정적이라 실서비스에서는 Vercel 엣지 캐시가 대부분 처리한다.
 
