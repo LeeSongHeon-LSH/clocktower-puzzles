@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "rules:sync": "tsx scripts/fetch-rule-sources.ts",
+    "rules:check": "tsx scripts/fetch-rule-sources.ts --check"
   },
   "dependencies": {
     "next": "16.3.3",

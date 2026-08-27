@@ -22,6 +22,7 @@ src/
     page.tsx              # 홈: 퍼즐 목록 + 필터
     puzzles/[id]/page.tsx # 퍼즐 풀이 페이지
     about/page.tsx        # 소개 + 팬 고지문
+    rules/page.tsx        # 취함·중독 규칙 해설 + 공식 원문 출처 (§8)
     admin/page.tsx        # 역할명 편집 (비밀번호 잠금)
     api/admin/roles/route.ts  # 역할명 저장 API (GitHub 커밋)
   components/             # TownSquare, InfoLog, QuestionPanel, HintBox, Walkthrough …
@@ -33,9 +34,15 @@ src/
     progress.ts           # localStorage 풀이 기록
   data/
     roles.ts              # 역할 사전: id → { en, ko, team, edition } (관리자 편집 대상)
+    rules.ts              # 규칙 페이지 한국어 서술 (직접 작성, 출처 키 참조)
+    rule-sources.generated.ts  # 공식 원문 인용 (자동 생성 — 직접 편집 금지)
     puzzles/
       index.ts            # 퍼즐 레지스트리
       tb-01.ts …          # 문제당 1파일
+  lib/
+    rate-limit.ts         # 관리자 API 브루트포스 방지 (실패 5회 → 15분 차단)
+scripts/
+  fetch-rule-sources.ts   # 공식 위키 API에서 규칙 원문 대조·생성 (§8)
 tests/
   solver/                 # 솔버 단위 테스트 (역할 로직별)
   puzzles.test.ts         # 전 퍼즐 유일해 검증 (배포 게이트)
@@ -146,3 +153,24 @@ clocktower-puzzles:progress = {
 - GitHub private repo `LeeSongHeon-LSH/clocktower-puzzles` → Vercel 연동(사용자가 1회 클릭).
 - `main` push = 프로덕션 배포.
 - 퍼즐 데이터는 빌드 시점에 정적 포함(SSG). 서버 런타임이 필요한 것은 `/api/admin/*` 뿐.
+- 부하 특성: 100 동시 연결 기준 홈 4,500 req/s, 퍼즐 3,450 req/s (에러 0, p99 ≤ 53ms).
+  전 페이지가 정적이라 실서비스에서는 Vercel 엣지 캐시가 대부분 처리한다.
+
+## 8. 규칙 페이지와 출처 대조
+
+`/rules`는 취함·중독 규칙 해설이다. 서술은 직접 쓰되 **모든 문장에 공식 알마낙 원문 인용을 각주로 붙여** 독자가 정합성을 확인할 수 있게 한다.
+
+```
+src/data/rules.ts                  한국어 서술 (직접 작성) — 출처 키를 참조
+src/data/rule-sources.generated.ts 공식 원문 인용 + 판본 정보 (자동 생성)
+scripts/fetch-rule-sources.ts      공식 위키 MediaWiki API에서 대조·생성
+```
+
+- 출처: `wiki.bloodontheclocktower.com` (공식 알마낙). `api.php`로 wikitext를 받아,
+  스크립트에 등록된 **앵커 문구**가 원문에 존재하는지 확인하고 그 문장을 인용문으로 추출한다.
+- `npm run rules:sync` — 대조 후 생성 파일 갱신. `npm run rules:check` — 대조만(파일 미변경).
+- **앵커가 원문에서 사라지면 실패한다.** 공식 문구가 개정됐다는 신호이므로, 앵커와 함께
+  한국어 서술도 다시 검토해야 한다.
+- 인용은 규칙 대조 목적의 짧은 인용이며 저작권은 The Pandemonium Institute에 있다.
+  공식 아트/아이콘은 여전히 사용하지 않는다(불변 규칙).
+- `tests/rules.test.ts`가 네트워크 없이 출처 누락·고아 출처·형식을 검사한다.
