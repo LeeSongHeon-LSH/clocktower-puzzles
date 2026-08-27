@@ -67,7 +67,7 @@ const TEAM_STYLE: Record<Team, { rail: string; text: string; chipOn: string }> =
 const INFO_ROLES: RoleId[] = [
   "washerwoman", "librarian", "investigator", "chef", "empath", "fortuneteller",
   "undertaker", "ravenkeeper", "clockmaker", "seamstress", "mathematician", "chambermaid",
-  "monk", "exorcist", "dreamer", "oracle", "grandmother",
+  "monk", "exorcist", "dreamer", "oracle", "grandmother", "gambler", "sage",
 ];
 
 interface DraftInfo {
@@ -109,6 +109,8 @@ function blankInfo(role: RoleId, night: number, players: number): DraftInfo | nu
     case "dreamer": return { night, data: { type: "dreamer", target: 0, goodRole: "chef", evilRole: "imp" } };
     case "oracle": return { night: Math.max(2, night), data: { type: "oracle", count: 0 } };
     case "grandmother": return { night: 1, data: { type: "grandmother", target: 0, shownRole: "chef" } };
+    case "gambler": return { night: Math.max(2, night), data: { type: "gambler", target: 0, role: "chef" } };
+    case "sage": return { night: Math.max(2, night), data: { type: "sage", targets: pair } };
     default: return null;
   }
 }
@@ -183,6 +185,11 @@ const CHIP_DEATH_ON = "border-blood bg-blood/20 text-parchment";
 const CHIP_EXEC_ON = "border-brass bg-brass/15 text-parchment";
 const CHIP_NONE_ON = "border-faded/70 text-parchment";
 
+/** 킬 실패를 설명할 수 있는 역할들 — 솔버의 임프 킬 부재 분기와 같은 목록 (timeline.ts) */
+const KILL_FAIL_ROLES: RoleId[] = ["poisoner", "soldier", "monk", "exorcist", "tealady", "fool", "minstrel"];
+/** 한 밤 2인 이상 사망을 설명할 수 있는 역할들 */
+const MULTI_KILL_ROLES: RoleId[] = ["assassin", "godfather", "grandmother", "gambler", "tinker"];
+
 const field = "rounded border border-panel-edge bg-ink px-2 py-1 text-sm text-parchment";
 const label = "block text-xs text-faded";
 
@@ -209,9 +216,9 @@ export function PuzzleCreator() {
     [nights, playerCount, deaths, executions],
   );
   /** 킬 실패(아무도 안 죽은 밤)를 설명할 수 있는 역할이 대본에 있는가 */
-  const hasKillFailExplainer = (["poisoner", "soldier", "monk", "exorcist"] as RoleId[]).some((r) => pool.includes(r));
+  const hasKillFailExplainer = KILL_FAIL_ROLES.some((r) => pool.includes(r));
   /** 한 밤 2인 이상 사망을 설명할 수 있는 역할이 대본에 있는가 */
-  const hasMultiKill = (["assassin", "godfather", "grandmother"] as RoleId[]).some((r) => pool.includes(r));
+  const hasMultiKill = MULTI_KILL_ROLES.some((r) => pool.includes(r));
   const minionKinds = pool.filter((r) => ROLES[r].team === "minion").length;
   /** 대본이 공개되므로 좌석 수에 비해 좁으면 그 자체가 답을 좁힌다 */
   const narrowPool = pool.length < playerCount + 4;
@@ -659,15 +666,15 @@ export function PuzzleCreator() {
 
                   {row.kind === "night" && row.picked.length > 1 && !hasMultiKill && (
                     <p className="text-[11px] text-blood">
-                      한 밤에 두 명 이상이 죽으려면 {roleLabel("assassin")}·{roleLabel("godfather")}·
-                      {roleLabel("grandmother")} 중 하나가 대본에 있어야 합니다 — 지금 대본으로는 “해가
-                      없습니다”가 나옵니다.
+                      한 밤에 두 명 이상이 죽으려면{" "}
+                      {MULTI_KILL_ROLES.map(roleLabel).join("·")} 중 하나가 대본에 있어야 합니다 —
+                      지금 대본으로는 “해가 없습니다”가 나옵니다.
                     </p>
                   )}
                   {row.kind === "night" && row.index > 1 && row.picked.length === 0 && !hasKillFailExplainer && (
                     <p className="text-[11px] text-faded">
-                      악마의 킬이 실패하려면 {roleLabel("poisoner")}·{roleLabel("soldier")}·{roleLabel("monk")}·
-                      {roleLabel("exorcist")} 중 하나가 대본에 있어야 합니다 — 지금 대본에 없습니다.
+                      악마의 킬이 실패하려면 {KILL_FAIL_ROLES.map(roleLabel).join("·")} 중 하나가
+                      대본에 있어야 합니다 — 지금 대본에 없습니다.
                     </p>
                   )}
                 </div>
@@ -899,6 +906,24 @@ function InfoEditor({
           <>
             <span className="text-xs text-faded">죽은 악인</span>
             {numberSelect(d.count, seats.length, (n) => set({ type: "oracle", count: n }))}
+          </>
+        )}
+
+        {d.type === "gambler" && (
+          <>
+            {seatSelect(d.target, (s) => set({ ...d, target: s }))}
+            <span className="text-xs text-faded">를</span>
+            {roleSelect(d.role, (r) => set({ ...d, role: r }))}
+            <span className="text-xs text-faded">로 추측</span>
+          </>
+        )}
+
+        {d.type === "sage" && (
+          <>
+            <span className="text-xs text-faded">죽는 순간:</span>
+            {seatSelect(d.targets[0], (a) => set({ type: "sage", targets: [a, d.targets[1]] }), "a")}
+            {seatSelect(d.targets[1], (b) => set({ type: "sage", targets: [d.targets[0], b] }), "b")}
+            <span className="text-xs text-faded">중 하나가 악마</span>
           </>
         )}
 

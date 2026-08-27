@@ -170,6 +170,7 @@ function tryWorld(
     // 빠른 경로: 술/독 없이 설명 안 되는 정보는 그 밤 그 좌석의 독살을 강제한다
     const required = new Map(sc.poisonRequired);
     for (const i of soberInfos) {
+      if (sc.minstrelNights?.has(i.night)) continue; // 전원 취함 밤의 정보는 무제약
       if (checkContent(ctx, i.seat, i.data, i.night)) continue;
       const existing = required.get(i.night);
       if (existing !== undefined && existing !== i.seat) return null;
@@ -189,6 +190,10 @@ function tryWorld(
   // 열거 경로 (수학자 포함 퍼즐): 밤별 독살 대상을 전수 열거
   const optionsPerNight: (Seat | null)[][] = [];
   for (let night = 1; night <= pz.nights; night++) {
+    if (sc.minstrelNights?.has(night)) {
+      optionsPerNight[night] = [null]; // 독살범도 취해 있던 밤
+      continue;
+    }
     const req = sc.poisonRequired.get(night);
     const forbidden = sc.poisonForbidden.get(night);
     if (req !== undefined) {
@@ -212,6 +217,7 @@ function tryWorld(
       const pctx: Ctx = { ...ctx, poison: vector };
       for (const i of soberInfos) {
         if (vector[i.night] === i.seat) continue; // 그 밤 중독 → 정보 무제약
+        if (sc.minstrelNights?.has(i.night)) continue; // 전원 취함 밤
         if (!checkContent(pctx, i.seat, i.data, i.night)) return null;
       }
       return { assignment: [...assignment], currentDemonSeat: sc.currentDemonSeat, poisonTargets: [...vector], redHerring };

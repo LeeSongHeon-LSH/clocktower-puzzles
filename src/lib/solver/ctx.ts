@@ -93,7 +93,11 @@ export function wakes(ctx: Ctx, seat: Seat, night: number): boolean {
       return night === 2 && aliveAfter[seat];
     case "monk":
     case "exorcist":
+    case "gambler":
       return night >= 2 && aliveStart[seat];
+    case "sage":
+      // 임프에게 죽은 그 밤에만 깨어난다 (암살자·대부의 킬은 트리거가 아니다)
+      return ctx.sc.impKillDuringNight?.[night] === seat;
     case "butler":
       return aliveAfter[seat];
     case "dreamer":

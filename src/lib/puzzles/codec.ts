@@ -197,6 +197,10 @@ function validateInfoData(v: unknown, players: number, where: string): InfoData 
       return { type: "oracle", count: count(players) };
     case "grandmother":
       return { type: "grandmother", target: int(v.target, 0, players - 1, `${where} 좌석`), shownRole: roleId(v.shownRole, where) };
+    case "gambler":
+      return { type: "gambler", target: int(v.target, 0, players - 1, `${where} 좌석`), role: roleId(v.role, where) };
+    case "sage":
+      return { type: "sage", targets: seatPair(v.targets, players, where) };
     default:
       throw new Error(`${where}: 알 수 없는 정보 종류입니다.`);
   }

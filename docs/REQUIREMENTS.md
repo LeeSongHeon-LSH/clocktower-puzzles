@@ -40,19 +40,22 @@
 - TB 정보 역할: Washerwoman, Librarian, Investigator, Chef, Empath, Fortune Teller, Undertaker, Ravenkeeper
 - TB 행동·구성 역할 (2026-08-27 추가): Monk(보호 행동), Soldier(킬 면역), Saint(처형 제약), Mayor(구성 전용), Butler(기상 전용)
 - TB 교란원·악역: Drunk, Recluse, Poisoner, Spy, Baron, Scarlet Woman, Imp
-- SV/BMR 정보: Clockmaker, Seamstress, Juggler, Mathematician, Chambermaid, Dreamer, Oracle, Grandmother
+- SV/BMR 정보: Clockmaker, Seamstress, Juggler, Mathematician, Chambermaid, Dreamer, Oracle, Grandmother, Sage(악마 킬 사망 시 정보)
 - BMR 킬 계열 (2026-08-27 추가 — 한 밤 다중 사망은 이들로만 성립): Exorcist(악마 봉쇄), Assassin(1회 확정 킬), Godfather(외부인 ±1 + 외부인 처형 후 의무 킬)
+- BMR 죽음 역학 (2026-08-27 2차): Gambler(오답 사망), Tinker(재량 사망), Minstrel(하수인 처형 → 전원 취함 밤), Tea Lady(이웃 보호), Fool(첫 죽음 회피)
 
 미룬 역할과 이유 (구현 전 논의 필요):
 - Virgin, Slayer, Gossip — **낮 공개 행동(지명·총격·발언) 이벤트 모델**이 없다. 이벤트 스키마·에디터·공유 코덱 확장이 선행돼야 한다.
 - Flowergirl, Town Crier — 투표·지명 기록이 필요해 위와 같은 확장에 묶인다.
-- Courtier, Sailor, Innkeeper, Goon — 독살범 외의 **추가 취함 원천**. 탐색 공간이 밤당 곱으로 늘어 솔버 구조 변경이 필요하다.
-- Tea Lady, Pacifist, Fool, Devil's Advocate — "처형됐지만 죽지 않음" 이벤트 형태가 없다.
+- Courtier, Sailor, Innkeeper, Goon, Sweetheart — 독살범 외의 **추가 취함 원천**. 탐색 공간이 밤당 곱으로
+  늘어 솔버 구조 변경이 필요하다 (Sweetheart는 사망 후 1명 고정이라 열거 가능 — 다음 후보 중 가장 싸다).
+- Pacifist, Devil's Advocate, Professor, Mastermind — "처형됐지만 죽지 않음"·부활 이벤트 형태가 없다.
 - Snake Charmer, Philosopher, Pit-Hag, Barber — **역할이 게임 중 바뀐다**. 배정 고정 전제를 깬다.
 - 임프 외 데몬 (Zombuul, Pukka, Shabaloth, Po, Fang Gu, Vigormortis, No Dashii, Vortox) — 데몬별 킬 패턴·정보 왜곡이 엔진 일반화를 요구한다. Vortox(마을 정보 전부 거짓)는 그중 가장 가치 있는 후보.
 
 솔버 모델 경계 (문서화된 근사, `timeline.ts` 참조): 같은 밤 승계 직후의 새 데몬 재살해,
-수도사의 임프 자기 보호는 탐색하지 않는다. 대부 트리거는 낮 처형 사망만 본다.
+수도사의 임프 자기 보호는 탐색하지 않는다. 대부·음유시인 트리거는 낮 처형 사망만 본다.
+어릿광대·찻집 여인의 "처형됐지만 생존"은 이벤트로 표현할 수 없어 등장하지 않는다.
 
 **역할 사전과는 별개다.** 사전(`src/data/roles.ts`)에는 3개 판본 전 역할 72종이 있고 사설
 문제 편집기에서 무엇이든 고를 수 있지만, 위 목록(`SOLVER_ROLES`)에 없는 역할이 좌석에

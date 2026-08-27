@@ -2,8 +2,9 @@
 //
 // 진행 순서 모델: 밤1 → 낮1 → 밤2 → 낮2 → … → 밤k → (현재: k일차 낮, 처형 전).
 // - 처형(execution)은 낮 d (1 ≤ d ≤ k-1), 밤 사망(death)은 밤 n (2 ≤ n ≤ k).
-// - 한 밤의 사망은 여러 건일 수 있다. 각 죽음은 임프 킬 / 암살자 / 대부 / 할머니 연쇄
-//   중 하나로 귀속돼야 하고, demonScenarios가 가능한 귀속을 전부 분기한다.
+// - 한 밤의 사망은 여러 건일 수 있다. 각 죽음은 임프 킬 / 암살자 / 대부 /
+//   할머니 연쇄 / 도박사의 오답 / 땜장이 중 하나로 귀속돼야 하고,
+//   demonScenarios가 가능한 귀속을 전부 분기한다.
 // - 밤 정보는 그 밤의 킬 이후 상태를 본다 (밤 순서상 정보 역할이 임프보다 뒤).
 //
 // 생존 여부는 이벤트만으로 결정되므로 월드와 무관하게 한 번 계산한다(Schedule).
@@ -14,9 +15,12 @@
 // 모델 경계 (문서화된 근사):
 // - 같은 밤에 승계가 일어난 직후의 새 데몬을 암살자·대부가 다시 죽이는 경로는 탐색하지 않는다.
 // - 수도사가 임프 자신을 보호해 스타 패스를 막는 경우는 고려하지 않는다 (허용 방향 근사).
-// - 대부 트리거는 "낮 처형으로 죽은 외부인"만 본다 (이 모델의 낮 사망은 처형뿐이다).
+// - 대부·음유시인 트리거는 "낮 처형으로 죽은" 외부인/하수인만 본다 (이 모델의 낮 사망은 처형뿐).
+// - 어릿광대·찻집 여인의 "처형됐지만 살아남음"은 이벤트로 표현할 수 없으므로 등장하지 않는다 —
+//   처형 이벤트는 언제나 죽음이고, 이들이 처형돼 죽었다면 그 시점의 취함/중독이 강제된다.
 
 import { ROLES } from "@/data/roles";
+import { canShowAsRole } from "./registration";
 import type { Claim, RoleId, Seat, SolverPuzzle } from "./types";
 
 // ── Schedule: 이벤트만으로 결정되는 생존 상태 ─────────────────────
@@ -105,6 +109,10 @@ export interface DemonScenario {
   godfatherNights?: Set<number>;
   /** 구마사제가 악마를 지목해 악마가 깨어나지 못한 밤들 */
   exorcistBlocked?: Set<number>;
+  /** impKillDuringNight[n] = 밤 n에 임프가 죽인 좌석 (없으면 null) — 현자 기상 판정용 */
+  impKillDuringNight?: (Seat | null)[];
+  /** 음유시인 발동으로 전원이 취해 있던 밤들 — 그 밤의 정보·킬·독살은 모두 무효 */
+  minstrelNights?: Set<number>;
 }
 
 type Trigger = "must" | "may" | "none";
@@ -119,6 +127,9 @@ interface St {
   assassinNight: number | null;
   godfatherNights: number[];
   exorcistBlocked: number[];
+  impKills: (Seat | null)[];
+  minstrelNights: number[];
+  foolDodgeUsed: boolean;
   /** 할머니의 실제 손주. null = 미확정 (밤1 정보가 취함/중독이었거나 주장이 없음) */
   grandchild: Seat | null;
 }
@@ -134,6 +145,9 @@ function cloneSt(s: St): St {
     assassinNight: s.assassinNight,
     godfatherNights: [...s.godfatherNights],
     exorcistBlocked: [...s.exorcistBlocked],
+    impKills: [...s.impKills],
+    minstrelNights: [...s.minstrelNights],
+    foolDodgeUsed: s.foolDodgeUsed,
     grandchild: s.grandchild,
   };
 }
@@ -145,6 +159,23 @@ function countTrue(arr: boolean[]): number {
 function isGoodTeam(role: RoleId): boolean {
   const t = ROLES[role].team;
   return t === "townsfolk" || t === "outsider";
+}
+
+/** 자신을 제외한 가장 가까운 생존 이웃 [왼쪽, 오른쪽]. ctx.aliveNeighbors와 같은 정의 (순환 의존 회피용 사본). */
+function neighborsOf(alive: boolean[], seat: Seat): [Seat, Seat] | null {
+  const n = alive.length;
+  let left: Seat | null = null;
+  let right: Seat | null = null;
+  for (let step = 1; step < n; step++) {
+    const l = (seat - step + n) % n;
+    if (alive[l]) { left = l; break; }
+  }
+  for (let step = 1; step < n; step++) {
+    const r = (seat + step) % n;
+    if (alive[r]) { right = r; break; }
+  }
+  if (left === null || right === null) return null;
+  return [left, right];
 }
 
 /**
@@ -167,11 +198,15 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
   const gfSeat = assignment.indexOf("godfather");
   const gmSeat = assignment.indexOf("grandmother");
   const swSeat = assignment.indexOf("scarletwoman");
+  const gamblerSeat = assignment.indexOf("gambler");
+  const tinkerSeat = assignment.indexOf("tinker");
+  const minstrelSeat = assignment.indexOf("minstrel");
+  const tealadySeat = assignment.indexOf("tealady");
+  const foolSeat = assignment.indexOf("fool");
 
-  /** 좌석의 주장에서 특정 밤의 행동 대상 (수도사 보호·구마사제 지목). 기록이 없으면 null */
-  function actionTarget(seat: Seat, type: "monk" | "exorcist", night: number): Seat | null {
-    const rec = claimBySeat[seat]?.info.find((i) => i.night === night && i.data?.type === type);
-    return rec?.data && "target" in rec.data ? rec.data.target : null;
+  /** 좌석의 주장에서 특정 밤의 행동 기록 데이터 */
+  function actionData(seat: Seat, type: "monk" | "exorcist" | "gambler", night: number) {
+    return claimBySeat[seat]?.info.find((i) => i.night === night && i.data?.type === type)?.data;
   }
 
   const gmClaimTarget: Seat | null = (() => {
@@ -185,6 +220,7 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
   /** 밤 night에 seat 독살을 강제. 모순이면 false */
   function require_(st: St, night: number, seat: Seat): boolean {
     if (!hasPoisoner) return false;
+    if (st.minstrelNights.includes(night)) return false; // 그 밤엔 독살범도 취해 있다
     const ex = st.required.get(night);
     if (ex !== undefined && ex !== seat) return false;
     if (st.forbidden.get(night)?.has(seat)) return false;
@@ -206,6 +242,17 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
     return assignment[seat];
   }
 
+  /**
+   * 찻집 여인의 보호가 **확실히** 작동하는 좌석인가 (양옆 생존 이웃이 반드시 선으로 등록).
+   * 확실할 때만 죽음이 모순이 된다 — 은둔자·첩자 이웃은 악 등록이 가능해 보호가 새어도 된다.
+   */
+  function tlForced(alive: boolean[], dead: Seat): boolean {
+    if (tealadySeat < 0 || !alive[tealadySeat] || dead === tealadySeat) return false;
+    const nb = neighborsOf(alive, tealadySeat);
+    if (!nb || !nb.includes(dead)) return false;
+    return nb.every((x) => isGoodTeam(assignment[x]) && assignment[x] !== "recluse");
+  }
+
   function finish(st: St) {
     results.push({
       demonDuringNight: st.demonNights,
@@ -216,6 +263,8 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
       assassinNight: st.assassinNight,
       godfatherNights: new Set(st.godfatherNights),
       exorcistBlocked: new Set(st.exorcistBlocked),
+      impKillDuringNight: [...st.impKills],
+      minstrelNights: new Set(st.minstrelNights),
     });
   }
 
@@ -226,14 +275,15 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
     }
     const executed = sched.executedOnDay(day);
     if (executed === null) {
-      doNight(st, day + 1, "none");
+      doNight(st, day + 1, "none", false);
       return;
     }
-    const aliveBefore = countTrue(sched.aliveAfterNight(day));
+    const aliveAtDay = sched.aliveAfterNight(day);
+    const aliveBefore = countTrue(aliveAtDay);
     const s = cloneSt(st);
     if (executed === s.demon) {
       // 탕녀 승계만이 게임을 지속시킨다
-      const swOk = swSeat >= 0 && swSeat !== executed && sched.aliveAfterNight(day)[swSeat] && !s.became.has(swSeat) && aliveBefore >= 5;
+      const swOk = swSeat >= 0 && swSeat !== executed && aliveAtDay[swSeat] && !s.became.has(swSeat) && aliveBefore >= 5;
       if (!swOk) return;
       if (!forbid_(s, day, swSeat)) return; // 중독된 탕녀는 승계 불가 (밤 day의 독이 낮까지 지속)
       s.demon = swSeat;
@@ -241,18 +291,41 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
     }
     // 멀쩡한 성자 처형 = 게임 종료 → 처형된 성자는 그 밤 독살됐어야 한다
     if (assignment[executed] === "saint" && !require_(s, day, executed)) return;
+    // 보호가 확실한 찻집 여인의 이웃은 처형으로도 죽지 않는다 → 찻집 여인의 중독 강제
+    if (tlForced(aliveAtDay, executed) && !require_(s, day, tealadySeat)) return;
+    // 회피를 쓰지 않은 어릿광대는 처형으로 죽지 않는다 → 그 밤의 중독 강제
+    if (executed === foolSeat && !s.foolDodgeUsed && !require_(s, day, foolSeat)) return;
     if (aliveBefore - 1 <= 2) return;
 
-    // 대부 트리거: 처형으로 죽은 좌석이 외부인으로 등록되는가
+    // 트리거 계산: 처형으로 죽은 좌석의 토큰 등록
     const token = tokenAt(s.became, executed, day);
-    let trigger: Trigger = "none";
-    if (token === "recluse" || token === "spy") trigger = "may"; // 오등록 선택은 텔러 몫 (∃)
-    else if (ROLES[token].team === "outsider") trigger = "must";
+    let gfTrigger: Trigger = "none";
+    if (token === "recluse" || token === "spy") gfTrigger = "may"; // 오등록 선택은 텔러 몫 (∃)
+    else if (ROLES[token].team === "outsider") gfTrigger = "must";
 
-    doNight(s, day + 1, trigger);
+    let minstrelMode: Trigger = "none";
+    if (minstrelSeat >= 0 && executed !== minstrelSeat && aliveAtDay[minstrelSeat]) {
+      if (token === "recluse" || token === "spy") minstrelMode = "may";
+      else if (ROLES[token].team === "minion") minstrelMode = "must";
+    }
+
+    if (minstrelMode !== "none") {
+      const act = cloneSt(s);
+      if (forbid_(act, day, minstrelSeat)) doNight(act, day + 1, gfTrigger, true); // 멀쩡한 음유시인 → 전원 취함
+      if (minstrelMode === "must") {
+        const poi = cloneSt(s);
+        if (require_(poi, day, minstrelSeat)) doNight(poi, day + 1, gfTrigger, false);
+      } else {
+        doNight(s, day + 1, gfTrigger, false); // 하수인으로 등록되지 않은 것으로 (∃)
+      }
+      return;
+    }
+    doNight(s, day + 1, gfTrigger, false);
   }
 
-  function doNight(st: St, night: number, trigger: Trigger) {
+  type Mut = (s: St) => boolean;
+
+  function doNight(st: St, night: number, trigger: Trigger, minstrelActive: boolean) {
     st.demonNights[night] = st.demon;
     const deaths = sched.diedAtNight(night);
     if (night === 1) {
@@ -263,6 +336,16 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
     }
     if (!sched.aliveAtNightStart(night)[st.demon]) return;
 
+    if (minstrelActive) {
+      // 전원 취함: 킬도, 독살도, 유효한 정보도 없는 밤
+      if (deaths.length > 0) return;
+      if (st.required.has(night)) return;
+      st.minstrelNights.push(night);
+      st.impKills[night] = null;
+      doDay(st, night);
+      return;
+    }
+
     const demon = st.demon;
     const aliveStart = sched.aliveAtNightStart(night);
     const aliveAfter = sched.aliveAfterNight(night);
@@ -270,127 +353,185 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
     const assassinReady = assassinSeat >= 0 && !st.assassinUsed && !st.became.has(assassinSeat) && aliveStart[assassinSeat];
     const gfReady = gfSeat >= 0 && !st.became.has(gfSeat) && aliveStart[gfSeat];
     const monkAlive = monkSeat >= 0 && aliveStart[monkSeat];
-    const monkTarget = monkAlive ? actionTarget(monkSeat, "monk", night) : null;
+    const monkData = monkAlive ? actionData(monkSeat, "monk", night) : undefined;
+    const monkTarget = monkData && "target" in monkData ? monkData.target : null;
     const exoAlive = exoSeat >= 0 && aliveStart[exoSeat];
-    const exoTarget = exoAlive ? actionTarget(exoSeat, "exorcist", night) : null;
-    const exoHasClaim = exoAlive && claimBySeat[exoSeat]?.info.some((i) => i.night === night && i.data?.type === "exorcist") === true;
+    const exoData = exoAlive ? actionData(exoSeat, "exorcist", night) : undefined;
+    const exoTarget = exoData && "target" in exoData ? exoData.target : null;
     // 봉쇄 가능: 지목 기록이 악마를 가리키거나, 기록이 없어 ∃ 지목=악마
-    const exoCanBlock = exoAlive && (exoTarget === demon || !exoHasClaim);
+    const exoCanBlock = exoAlive && (exoTarget === demon || exoData === undefined);
+
+    // 도박사의 이 밤 추측 기록
+    const gambleData = gamblerSeat >= 0 && aliveStart[gamblerSeat] ? actionData(gamblerSeat, "gambler", night) : undefined;
+    const gamble = gambleData && gambleData.type === "gambler" ? gambleData : undefined;
+    const tokenView = { tokenRole: (x: Seat) => tokenAt(st.became, x, night), rolePool: pz.rolePool };
+    /** 추측이 반드시 맞는가 (오답 사망 불가) / 반드시 틀리는가 (생존이 모순) */
+    const gambleMustCorrect = gamble !== undefined && (() => {
+      const tok = tokenAt(st.became, gamble.target, night);
+      return tok === gamble.role && tok !== "spy" && tok !== "recluse";
+    })();
+    const gambleMustWrong = gamble !== undefined && !canShowAsRole(tokenView, gamble.target, gamble.role);
+
+    // 찻집 여인이 이웃 보호로 킬 실패를 설명할 수 있는가 (이웃 둘 다 선 등록 가능)
+    const tlCanProtect = tealadySeat >= 0 && aliveStart[tealadySeat] && (() => {
+      const nb = neighborsOf(aliveStart, tealadySeat);
+      return nb !== null && nb.every((x) => isGoodTeam(assignment[x]) || assignment[x] === "spy");
+    })();
 
     for (const impKill of [...deaths, null] as (Seat | null)[]) {
-      const rest1 = deaths.filter((d) => d !== impKill);
-      const assassinChoices: (Seat | null)[] = assassinReady ? [...rest1, null] : [null];
-      for (const asKill of assassinChoices) {
-        const rest2 = rest1.filter((d) => d !== asKill);
-        const gfChoices: (Seat | null)[] = gfReady && trigger !== "none" ? [...rest2, null] : [null];
-        for (const gfKill of gfChoices) {
-          const rest3 = rest2.filter((d) => d !== gfKill);
+      const rest = deaths.filter((d) => d !== impKill);
 
-          // 남은 죽음은 전부 할머니 연쇄여야 한다 (할머니는 1명 → 최대 1건)
-          if (rest3.length > 1) continue;
-          const linkDeath = rest3.length === 1;
-          if (linkDeath) {
-            if (rest3[0] !== gmSeat || impKill === null || impKill === gmSeat) continue;
-            // 손주는 선한 플레이어여야 한다 (첩자는 선으로 등록될 수 있어 허용)
-            if (!isGoodTeam(assignment[impKill]) && assignment[impKill] !== "spy") continue;
-          }
+      // ── 남은 죽음들을 {암살자, 대부, 할머니 연쇄, 도박 오답, 땜장이}에 귀속 ──
+      // 각 귀속은 상태 변형(Mut) 목록으로 표현하고, 완성된 조합마다 임프 분기를 돈다.
+      interface Plan { muts: Mut[]; gfKilled: boolean; demonByOther: boolean }
+      const plans: Plan[] = [];
+      const collect = (idx: number, usedAs: boolean, usedGf: boolean, usedLink: boolean, muts: Mut[], gfKilled: boolean, demonByOther: boolean) => {
+        if (idx === rest.length) {
+          plans.push({ muts, gfKilled, demonByOther });
+          return;
+        }
+        const d = rest[idx];
+        const sideEffects = (killedByDemonlike: boolean): Mut => (s) => {
+          // 찻집 여인의 확실한 보호를 뚫은 죽음 → 찻집 여인의 중독 (암살자는 보호 무시)
+          if (tlForced(aliveStart, d) && !require_(s, night, tealadySeat)) return false;
+          // 회피 미사용 어릿광대의 죽음 → 그 밤 중독 (암살자·자기 죽음 계열은 회피 무관)
+          if (killedByDemonlike && d === foolSeat && !s.foolDodgeUsed && !require_(s, night, foolSeat)) return false;
+          return true;
+        };
+        if (assassinReady && !usedAs) {
+          collect(idx + 1, true, usedGf, usedLink, [...muts, (s) => {
+            if (!forbid_(s, night, assassinSeat)) return false; // 중독된 암살자는 죽이지 못한다
+            s.assassinUsed = true;
+            s.assassinNight = night;
+            return true;
+          }], gfKilled, demonByOther || d === demon);
+        }
+        if (gfReady && trigger !== "none" && !usedGf) {
+          collect(idx + 1, usedAs, true, usedLink, [...muts, (s) => {
+            if (!forbid_(s, night, gfSeat)) return false;
+            s.godfatherNights.push(night);
+            return sideEffects(true)(s);
+          }], true, demonByOther || d === demon);
+        }
+        if (d === gmSeat && !usedLink && impKill !== null && impKill !== gmSeat
+          && (isGoodTeam(assignment[impKill]) || assignment[impKill] === "spy")) {
+          collect(idx + 1, usedAs, usedGf, true, [...muts, (s) => {
+            if (s.grandchild === null) s.grandchild = impKill; // 미확정 손주를 여기서 확정 (∃)
+            else if (s.grandchild !== impKill) return false;
+            if (!forbid_(s, night, gmSeat)) return false; // 중독된 할머니는 연쇄 사망하지 않는다
+            return sideEffects(true)(s);
+          }], gfKilled, demonByOther);
+        }
+        if (d === gamblerSeat && gamble !== undefined && !gambleMustCorrect) {
+          collect(idx + 1, usedAs, usedGf, usedLink, [...muts, (s) => {
+            if (!forbid_(s, night, gamblerSeat)) return false; // 중독된 도박사는 오답으로도 죽지 않는다
+            return sideEffects(false)(s);
+          }], gfKilled, demonByOther);
+        }
+        if (d === tinkerSeat) {
+          collect(idx + 1, usedAs, usedGf, usedLink, [...muts, (s) => {
+            if (!forbid_(s, night, tinkerSeat)) return false; // 중독된 땜장이는 텔러가 죽일 수 없다
+            return sideEffects(false)(s);
+          }], gfKilled, demonByOther);
+        }
+      };
+      collect(0, false, false, false, [], false, false);
 
-          const base = cloneSt(st);
-          let ok = true;
+      for (const plan of plans) {
+        const base = cloneSt(st);
+        base.impKills[night] = impKill;
+        let ok = true;
+        for (const m of plan.muts) if (!m(base)) { ok = false; break; }
+        if (!ok) continue;
+        // 의무 트리거인데 대부 킬이 없다 → 대부가 그 밤 중독됐어야 한다
+        if (trigger === "must" && gfReady && !plan.gfKilled && !require_(base, night, gfSeat)) continue;
+        // 도박사가 반드시 틀리는 추측을 하고도 살아 있다 → 그 밤 중독됐어야 한다
+        if (gamble !== undefined && gambleMustWrong && !deaths.includes(gamblerSeat) && !require_(base, night, gamblerSeat)) continue;
 
-          // ── 임프 외 킬 주체 제약 ──
-          if (asKill !== null) {
-            ok = forbid_(base, night, assassinSeat); // 중독된 암살자는 죽이지 못한다
-            base.assassinUsed = true;
-            base.assassinNight = night;
+        // ── 임프 ──
+        const impVariants: Mut[] = [];
+        if (impKill !== null) {
+          impVariants.push((s) => {
+            if (!forbid_(s, night, demon)) return false; // 킬이 성공했으니 데몬은 중독 아님
+            // 봉쇄됐어야 하는 밤에 킬이 났다 → 구마사제가 중독됐던 것
+            if (exoTarget === demon && !require_(s, night, exoSeat)) return false;
+            // 멀쩡한 군인은 임프에게 죽지 않는다
+            if (impKill === soldierSeat && !require_(s, night, soldierSeat)) return false;
+            // 수도사가 이 대상을 보호했다고 기록했다 → 수도사가 중독됐던 것
+            if (monkTarget !== null && monkTarget === impKill && !require_(s, night, monkSeat)) return false;
+            // 확실한 찻집 여인 보호를 뚫었다 → 찻집 여인의 중독
+            if (tlForced(aliveStart, impKill) && !require_(s, night, tealadySeat)) return false;
+            // 회피 미사용 어릿광대를 죽였다 → 어릿광대의 중독
+            if (impKill === foolSeat && !s.foolDodgeUsed && !require_(s, night, foolSeat)) return false;
+            // 손주가 임프에게 죽었는데 할머니가 살아 있다 → 할머니가 중독됐던 것
+            if (s.grandchild !== null && impKill === s.grandchild && gmSeat >= 0 && aliveStart[gmSeat] && !deaths.includes(gmSeat)) {
+              if (!require_(s, night, gmSeat)) return false;
+            }
+            return true;
+          });
+        } else {
+          // 임프 킬 부재 — 설명이 하나는 있어야 한다
+          if (hasPoisoner) impVariants.push((s) => require_(s, night, demon));
+          if (soldierSeat >= 0 && aliveStart[soldierSeat]) {
+            impVariants.push((s) => forbid_(s, night, soldierSeat)); // 임프가 멀쩡한 군인을 노렸다
           }
-          if (ok && gfKill !== null) {
-            ok = forbid_(base, night, gfSeat);
-            base.godfatherNights.push(night);
+          if (monkAlive && (monkTarget === null || aliveStart[monkTarget])) {
+            impVariants.push((s) => forbid_(s, night, monkSeat)); // 수도사가 임프의 대상을 보호했다
           }
-          // 의무 트리거인데 대부 킬이 없다 → 대부가 그 밤 중독됐어야 한다
-          if (ok && trigger === "must" && gfReady && gfKill === null) {
-            ok = require_(base, night, gfSeat);
-          }
-          if (ok && linkDeath) {
-            if (base.grandchild === null) base.grandchild = impKill; // 미확정 손주를 여기서 확정 (∃)
-            else if (base.grandchild !== impKill) ok = false;
-            // 중독된 할머니는 연쇄 사망하지 않는다 — 죽었으니 멀쩡했어야 한다
-            if (ok) ok = forbid_(base, night, gmSeat);
-          }
-          if (!ok) continue;
-
-          // ── 임프 ──
-          const impVariants: ((s: St) => boolean)[] = [];
-          if (impKill !== null) {
+          if (exoCanBlock) {
             impVariants.push((s) => {
-              if (!forbid_(s, night, demon)) return false; // 킬이 성공했으니 데몬은 중독 아님
-              // 봉쇄됐어야 하는 밤에 킬이 났다 → 구마사제가 중독됐던 것
-              if (exoTarget === demon && !require_(s, night, exoSeat)) return false;
-              // 멀쩡한 군인은 임프에게 죽지 않는다
-              if (impKill === soldierSeat && !require_(s, night, soldierSeat)) return false;
-              // 수도사가 이 대상을 보호했다고 기록했다 → 수도사가 중독됐던 것
-              if (monkTarget !== null && monkTarget === impKill && !require_(s, night, monkSeat)) return false;
-              // 손주가 임프에게 죽었는데 할머니가 살아 있다 → 할머니가 중독됐던 것
-              if (s.grandchild !== null && impKill === s.grandchild && gmSeat >= 0 && aliveStart[gmSeat] && !deaths.includes(gmSeat)) {
-                if (!require_(s, night, gmSeat)) return false;
-              }
+              if (!forbid_(s, night, exoSeat)) return false; // 멀쩡한 구마사제가 악마를 지목했다
+              s.exorcistBlocked.push(night);
               return true;
             });
+          }
+          if (tlCanProtect) {
+            impVariants.push((s) => forbid_(s, night, tealadySeat)); // 보호받는 이웃을 노렸다
+          }
+          if (foolSeat >= 0 && aliveStart[foolSeat] && !st.foolDodgeUsed) {
+            impVariants.push((s) => {
+              if (!forbid_(s, night, foolSeat)) return false; // 어릿광대가 첫 죽음을 회피했다
+              s.foolDodgeUsed = true;
+              return true;
+            });
+          }
+        }
+
+        for (const variant of impVariants) {
+          const s2 = cloneSt(base);
+          if (!variant(s2)) continue;
+
+          // ── 데몬 사망 → 승계 ──
+          let nexts: St[];
+          if (impKill === demon) {
+            // 스타 패스: 텔러가 생존 하수인 중 하나를 임프로 만든다
+            const eligible: Seat[] = [];
+            for (let x = 0; x < assignment.length; x++) {
+              if (aliveAfter[x] && !s2.became.has(x) && ROLES[assignment[x]].team === "minion") eligible.push(x);
+            }
+            nexts = eligible.map((e) => {
+              const c = cloneSt(s2);
+              c.demon = e;
+              c.became.set(e, night);
+              return c;
+            });
+          } else if (plan.demonByOther) {
+            // 밤에 데몬이 살해당함 → 탕녀만이 게임을 지속시킨다 (생존 5인 이상)
+            nexts = [];
+            if (swSeat >= 0 && !s2.became.has(swSeat) && aliveAfter[swSeat] && countTrue(aliveStart) >= 5) {
+              const c = cloneSt(s2);
+              if (forbid_(c, night, swSeat)) {
+                c.demon = swSeat;
+                c.became.set(swSeat, night);
+                nexts = [c];
+              }
+            }
           } else {
-            // 임프 킬 부재 — 설명이 하나는 있어야 한다
-            if (hasPoisoner) impVariants.push((s) => require_(s, night, demon));
-            if (soldierSeat >= 0 && aliveStart[soldierSeat]) {
-              impVariants.push((s) => forbid_(s, night, soldierSeat)); // 임프가 멀쩡한 군인을 노렸다
-            }
-            if (monkAlive && (monkTarget === null || aliveStart[monkTarget])) {
-              impVariants.push((s) => forbid_(s, night, monkSeat)); // 수도사가 임프의 대상을 보호했다
-            }
-            if (exoCanBlock) {
-              impVariants.push((s) => {
-                if (!forbid_(s, night, exoSeat)) return false; // 멀쩡한 구마사제가 악마를 지목했다
-                s.exorcistBlocked.push(night);
-                return true;
-              });
-            }
+            nexts = [s2];
           }
 
-          for (const variant of impVariants) {
-            const s2 = cloneSt(base);
-            if (!variant(s2)) continue;
-
-            // ── 데몬 사망 → 승계 ──
-            let nexts: St[];
-            if (impKill === demon) {
-              // 스타 패스: 텔러가 생존 하수인 중 하나를 임프로 만든다
-              const eligible: Seat[] = [];
-              for (let x = 0; x < assignment.length; x++) {
-                if (aliveAfter[x] && !s2.became.has(x) && ROLES[assignment[x]].team === "minion") eligible.push(x);
-              }
-              nexts = eligible.map((e) => {
-                const c = cloneSt(s2);
-                c.demon = e;
-                c.became.set(e, night);
-                return c;
-              });
-            } else if (asKill === demon || gfKill === demon) {
-              // 밤에 데몬이 살해당함 → 탕녀만이 게임을 지속시킨다 (생존 5인 이상)
-              nexts = [];
-              if (swSeat >= 0 && !s2.became.has(swSeat) && aliveAfter[swSeat] && countTrue(aliveStart) >= 5) {
-                const c = cloneSt(s2);
-                if (forbid_(c, night, swSeat)) {
-                  c.demon = swSeat;
-                  c.became.set(swSeat, night);
-                  nexts = [c];
-                }
-              }
-            } else {
-              nexts = [s2];
-            }
-
-            if (deaths.length > 0 && countTrue(aliveAfter) <= 2) continue; // 게임이 이미 끝났어야 한다
-            for (const nx of nexts) doDay(nx, night);
-          }
+          if (deaths.length > 0 && countTrue(aliveAfter) <= 2) continue; // 게임이 이미 끝났어야 한다
+          for (const nx of nexts) doDay(nx, night);
         }
       }
     }
@@ -406,6 +547,9 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
     assassinNight: null,
     godfatherNights: [],
     exorcistBlocked: [],
+    impKills: [],
+    minstrelNights: [],
+    foolDodgeUsed: false,
     grandchild: null,
   };
 
@@ -416,14 +560,14 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
     if (canBeGrandchild) {
       const sober = cloneSt(st0);
       sober.grandchild = target;
-      if (forbid_(sober, 1, gmSeat)) doNight(sober, 1, "none");
+      if (forbid_(sober, 1, gmSeat)) doNight(sober, 1, "none", false);
     }
     if (hasPoisoner) {
       const poisoned = cloneSt(st0);
-      if (require_(poisoned, 1, gmSeat)) doNight(poisoned, 1, "none");
+      if (require_(poisoned, 1, gmSeat)) doNight(poisoned, 1, "none", false);
     }
   } else {
-    doNight(st0, 1, "none");
+    doNight(st0, 1, "none", false);
   }
 
   return results;

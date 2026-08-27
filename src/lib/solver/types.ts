@@ -117,7 +117,13 @@ export const SOLVER_ROLES: readonly RoleId[] = [
   "imp",
   // ── BMR ──
   "grandmother", // 밤1 손주 정보 + 손주가 임프에게 죽으면 연쇄 사망
+  "gambler", // 밤마다 (좌석, 역할) 추측 — 틀리면 죽는다. 추측 기록이 곧 단서
+  "minstrel", // 하수인이 처형돼 죽으면 다음 밤 전원 취함 (그 밤엔 킬도 정보도 없다)
+  "tealady", // 살아 있는 양옆 이웃이 모두 선하면 그들은 죽지 않는다
+  "fool", // 첫 죽음을 한 번 회피한다 — 킬 실패 설명 + 사망 시 회피 소진 추적
+  "tinker", // 텔러 재량으로 언제든 밤에 죽을 수 있다 — 자기 죽음의 자유 설명
   "exorcist", // 악마 지목 시 그 밤 악마가 깨어나지 못한다
+  "sage", // 악마에게 죽는 밤, 둘 중 하나가 악마인 두 좌석을 배운다
   "godfather", // 외부인 ±1 구성 + 낮에 외부인이 처형돼 죽으면 그 밤 킬
   "assassin", // 1회, 밤에 무조건 킬 (보호 무시) — 한 밤 2사망의 주 설명 수단
   // ── SV ──
@@ -157,7 +163,9 @@ export type InfoData =
   // 추가 정보 역할
   | { type: "dreamer"; target: Seat; goodRole: RoleId; evilRole: RoleId }
   | { type: "oracle"; count: number }
-  | { type: "grandmother"; target: Seat; shownRole: RoleId };
+  | { type: "grandmother"; target: Seat; shownRole: RoleId }
+  | { type: "gambler"; target: Seat; role: RoleId } // 행동+추측 기록 (틀리면 죽었을 것)
+  | { type: "sage"; targets: [Seat, Seat] };
 
 /** 특정 밤에 받았다고 주장하는 정보 한 건 */
 export interface ClaimInfo {

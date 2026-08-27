@@ -52,5 +52,9 @@ export function renderInfo(data: InfoData): string {
       return `죽은 플레이어 중 악인: ${data.count}명`;
     case "grandmother":
       return `내 손주는 ${seatName(data.target)} — ${roleLabel(data.shownRole)}이다`;
+    case "gambler":
+      return `${seatName(data.target)}를 ${roleLabel(data.role)}로 추측했다 (틀리면 죽는다)`;
+    case "sage":
+      return `죽는 순간 배웠다: ${seatName(data.targets[0])}·${seatName(data.targets[1])} 중 하나가 나를 죽인 악마다`;
   }
 }

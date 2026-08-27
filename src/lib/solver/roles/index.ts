@@ -22,6 +22,8 @@ import { exorcist } from "./exorcist";
 import { dreamer } from "./dreamer";
 import { oracle } from "./oracle";
 import { grandmother } from "./grandmother";
+import { gambler } from "./gambler";
+import { sage } from "./sage";
 
 export function checkContent(ctx: Ctx, seat: Seat, data: InfoData, night: number): boolean {
   switch (data.type) {
@@ -43,5 +45,7 @@ export function checkContent(ctx: Ctx, seat: Seat, data: InfoData, night: number
     case "dreamer": return dreamer(ctx, seat, data, night);
     case "oracle": return oracle(ctx, seat, data, night);
     case "grandmother": return grandmother(ctx, seat, data, night);
+    case "gambler": return gambler(ctx, seat, data, night);
+    case "sage": return sage(ctx, seat, data, night);
   }
 }
