@@ -151,6 +151,13 @@ export interface DemonScenario {
    * 정보 무제약, require 만족, forbid 불파괴.
    */
   pukkaPoisoned?: Set<Seat>[];
+  /** 비고르모르티스 세계: 좌석 → 그 밤부터 죽었지만 능력을 유지한다 (비고르모르티스의 킬) */
+  vigorKeptSince?: Map<Seat, number>;
+  /**
+   * 비고르모르티스 세계: 밤 n에 죽은 하수인의 이웃 독을 받고 '있었을 수 있는' 좌석들
+   * (관대 집합 — nodashiiPoisoned와 같은 규약: 정보 무제약, require 만족, forbid 불파괴).
+   */
+  vigorPoisoned?: Set<Seat>[];
 }
 
 /**
@@ -190,6 +197,14 @@ interface St {
   pukkaMaybe: Map<number, Set<Seat>>;
   /** 할머니의 실제 손주. null = 미확정 (밤1 정보가 취함/중독이었거나 주장이 없음) */
   grandchild: Seat | null;
+  /** 팡 구 전용: 점프(첫 외부인 킬 → 외부인이 팡 구가 됨)를 이미 썼는가 (게임당 1회) */
+  fangGuJumpUsed: boolean;
+  /** 팡 구 전용: 이번 밤 변형이 고른 점프 대상 (승계 단계가 소비하고 비운다) */
+  fangGuJumpTarget: Seat | null;
+  /** 비고르모르티스 전용: 좌석 → 죽었지만 능력을 유지하기 시작한 밤 */
+  vigorKept: Map<Seat, number>;
+  /** 비고르모르티스 전용: 좌석 → 이웃 독을 받고 있었을 수 있는 시작 밤 (관대 집합) */
+  vigorPoisonMaybe: Map<Seat, number>;
 }
 
 function cloneSt(s: St): St {
@@ -210,6 +225,10 @@ function cloneSt(s: St): St {
     zombuulFakeDeadAt: s.zombuulFakeDeadAt,
     pukkaMaybe: new Map([...s.pukkaMaybe].map(([k, v]) => [k, new Set(v)])),
     grandchild: s.grandchild,
+    fangGuJumpUsed: s.fangGuJumpUsed,
+    fangGuJumpTarget: s.fangGuJumpTarget,
+    vigorKept: new Map(s.vigorKept),
+    vigorPoisonMaybe: new Map(s.vigorPoisonMaybe),
   };
 }
 
@@ -338,11 +357,39 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
     return out;
   }
 
+  /**
+   * 비고르모르티스가 죽인 하수인의 이웃 독 후보: 하수인 좌석에서 양방향으로 죽은 좌석과
+   * 마을 사람 아닌 좌석을 건너뛰며 첫 마을 사람까지 (도중의 첩자는 흡수 가능 ∃).
+   * 죽는 밤의 두 생존 상태(시작/킬 이후) 합집합 — ndPoisonedAt과 같은 관대한 방향.
+   */
+  function vigorNeighborsAt(minionSeat: Seat, night: number): Set<Seat> {
+    const out = new Set<Seat>();
+    const n = assignment.length;
+    for (const alive of [sched.aliveAtNightStart(night), sched.aliveAfterNight(night)]) {
+      for (const dir of [1, -1]) {
+        for (let step = 1; step < n; step++) {
+          const s = (minionSeat + dir * step + n) % n;
+          if (s === minionSeat) break;
+          if (!alive[s]) continue;
+          if (ROLES[assignment[s]].team === "townsfolk") { out.add(s); break; }
+          if (assignment[s] === "spy") out.add(s);
+        }
+      }
+    }
+    return out;
+  }
+
+  /** 죽었지만 능력을 유지하는가 (비고르모르티스에게 죽은 하수인) */
+  function vigorKeeps(st: St, seat: Seat): boolean {
+    return demonRole === "vigormortis" && st.vigorKept.has(seat);
+  }
+
   /** 밤 night에 seat의 능력 비정상 동작을 강제 (스위트하트 취함, 노 다시 독, 또는 독살). 모순이면 false */
   function require_(st: St, night: number, seat: Seat): boolean {
     if (sweetTarget === seat && sweetSince <= night) return true; // 이미 취해 있다 — 독살 불요
     if (demonRole === "nodashii" && ndPoisonedAt(st.demonNights[night] ?? st.demon, night).has(seat)) return true;
     if (demonRole === "pukka" && st.pukkaMaybe.get(night)?.has(seat)) return true;
+    if (demonRole === "vigormortis" && (st.vigorPoisonMaybe.get(seat) ?? Infinity) <= night) return true;
     if (!hasPoisoner) return false;
     if (sweetTarget === poisonerSeat && sweetSince <= night) return false; // 취한 독살범의 독은 듣지 않는다
     if (st.minstrelNights.includes(night)) return false; // 그 밤엔 독살범도 취해 있다
@@ -388,13 +435,14 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
 
   /**
    * 찻집 여인의 보호가 **확실히** 작동하는 좌석인가 (양옆 생존 이웃이 반드시 선으로 등록).
-   * 확실할 때만 죽음이 모순이 된다 — 은둔자·첩자 이웃은 악 등록이 가능해 보호가 새어도 된다.
+   * 확실할 때만 죽음이 모순이 된다 — 은둔자·첩자 이웃은 악 등록이 가능해 보호가 새어도 되고,
+   * 데몬이 된 좌석(팡 구 점프)은 더 이상 선이 아니다.
    */
-  function tlForced(alive: boolean[], dead: Seat): boolean {
+  function tlForced(alive: boolean[], dead: Seat, became: Map<Seat, number>): boolean {
     if (tealadySeat < 0 || !alive[tealadySeat] || dead === tealadySeat) return false;
     const nb = neighborsOf(alive, tealadySeat);
     if (!nb || !nb.includes(dead)) return false;
-    return nb.every((x) => isGoodTeam(assignment[x]) && assignment[x] !== "recluse");
+    return nb.every((x) => isGoodTeam(assignment[x]) && assignment[x] !== "recluse" && !became.has(x));
   }
 
   function finish(st: St) {
@@ -415,6 +463,14 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
             n === 0 ? new Set<Seat>() : ndPoisonedAt(st.demonNights[n] ?? st.demon, n))
         : undefined,
       pukkaPoisoned: demonRole === "pukka" ? pukkaSets(st) : undefined,
+      vigorKeptSince: demonRole === "vigormortis" ? new Map(st.vigorKept) : undefined,
+      vigorPoisoned: demonRole === "vigormortis"
+        ? Array.from({ length: pz.nights + 1 }, (_, n) => {
+            const set = new Set<Seat>();
+            for (const [seat, since] of st.vigorPoisonMaybe) if (since <= n) set.add(seat);
+            return set;
+          })
+        : undefined,
     });
   }
 
@@ -457,8 +513,8 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
       }
       // (b) 마스터마인드 연장 — 게임을 '끝내는' 처형이어야 발동한다 (탕녀가 승계하면 안 끝남).
       //     하루(밤 하나 + 낮 하나)만 이어지므로 마지막 낮(nights-1) 처형일 때만 현재에 닿는다.
-      const mmOk = mmSeat >= 0 && mmSeat !== executed && aliveAtDay[mmSeat] && !st.became.has(mmSeat)
-        && day === pz.nights - 1 && demonRole !== "vortox";
+      const mmOk = mmSeat >= 0 && mmSeat !== executed && (aliveAtDay[mmSeat] || vigorKeeps(st, mmSeat))
+        && !st.became.has(mmSeat) && day === pz.nights - 1 && demonRole !== "vortox";
       if (mmOk) {
         const c = cloneSt(st);
         let ok = realDeath(c) && forbid_(c, day, mmSeat); // 중독된 마스터마인드는 연장하지 못한다
@@ -472,10 +528,10 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
 
     for (const br of branches) {
     const s = br.st;
-    // 멀쩡한 성자 처형 = 게임 종료 → 처형된 성자는 그 밤 독살됐어야 한다
-    if (assignment[executed] === "saint" && !require_(s, day, executed)) continue;
+    // 멀쩡한 성자 처형 = 게임 종료 → 처형된 성자는 그 밤 독살됐어야 한다 (데몬이 됐다면 성자가 아니다)
+    if (assignment[executed] === "saint" && !s.became.has(executed) && !require_(s, day, executed)) continue;
     // 보호가 확실한 찻집 여인의 이웃은 처형으로도 죽지 않는다 → 찻집 여인의 중독 강제
-    if (tlForced(aliveAtDay, executed) && !require_(s, day, tealadySeat)) continue;
+    if (tlForced(aliveAtDay, executed, s.became) && !require_(s, day, tealadySeat)) continue;
     // 회피를 쓰지 않은 어릿광대는 처형으로 죽지 않는다 → 그 밤의 중독 강제
     if (executed === foolSeat && !s.foolDodgeUsed && !require_(s, day, foolSeat)) continue;
     // 가짜 죽음 좀부울은 등록상 죽었지만 실제로 살아 있다 — 종료 판정에서 생존자로 센다
@@ -547,8 +603,10 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
     const aliveStart = sched.aliveAtNightStart(night);
     const aliveAfter = sched.aliveAfterNight(night);
 
-    const assassinReady = assassinSeat >= 0 && !st.assassinUsed && !st.became.has(assassinSeat) && aliveStart[assassinSeat];
-    const gfReady = gfSeat >= 0 && !st.became.has(gfSeat) && aliveStart[gfSeat];
+    // 비고르모르티스에게 죽은 하수인은 능력을 유지한다 — 죽어서도 준비 상태
+    const assassinReady = assassinSeat >= 0 && !st.assassinUsed && !st.became.has(assassinSeat)
+      && (aliveStart[assassinSeat] || vigorKeeps(st, assassinSeat));
+    const gfReady = gfSeat >= 0 && !st.became.has(gfSeat) && (aliveStart[gfSeat] || vigorKeeps(st, gfSeat));
     const monkAlive = monkSeat >= 0 && aliveStart[monkSeat];
     const monkData = monkAlive ? actionData(monkSeat, "monk", night) : undefined;
     const monkTarget = monkData && "target" in monkData ? monkData.target : null;
@@ -606,7 +664,7 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
         const d = rest[idx];
         const sideEffects = (killedByDemonlike: boolean): Mut => (s) => {
           // 찻집 여인의 확실한 보호를 뚫은 죽음 → 찻집 여인의 중독 (암살자는 보호 무시)
-          if (tlForced(aliveStart, d) && !require_(s, night, tealadySeat)) return false;
+          if (tlForced(aliveStart, d, s.became) && !require_(s, night, tealadySeat)) return false;
           // 회피 미사용 어릿광대의 죽음 → 그 밤 중독 (암살자·자기 죽음 계열은 회피 무관)
           if (killedByDemonlike && d === foolSeat && !s.foolDodgeUsed && !require_(s, night, foolSeat)) return false;
           return true;
@@ -630,6 +688,7 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
           for (const link of demonKills) {
             if (!(isGoodTeam(assignment[link]) || assignment[link] === "spy")) continue;
             collect(idx + 1, usedAs, usedGf, true, usedMc, usedGossip, [...muts, (s) => {
+              if (s.became.has(link)) return false; // 데몬이 된 좌석(팡 구 점프)은 손주일 수 없다
               if (s.grandchild === null) s.grandchild = link; // 미확정 손주를 여기서 확정 (∃)
               else if (s.grandchild !== link) return false;
               if (!forbid_(s, night, gmSeat)) return false; // 중독된 할머니는 연쇄 사망하지 않는다
@@ -645,6 +704,7 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
         }
         if (d === tinkerSeat) {
           collect(idx + 1, usedAs, usedGf, usedLink, usedMc, usedGossip, [...muts, (s) => {
+            if (s.became.has(tinkerSeat)) return false; // 데몬이 된 땜장이(팡 구 점프)는 능력을 잃었다
             if (!forbid_(s, night, tinkerSeat)) return false; // 중독된 땜장이는 텔러가 죽일 수 없다
             return sideEffects(false)(s);
           }], gfKilled, demonByOther);
@@ -653,6 +713,8 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
         // 지목했다 (∃) — 선으로 등록되는 좌석만 저주로 죽을 수 있고, 발동은 한 번뿐
         if (night === mcCurseNight && !usedMc && (isGoodTeam(assignment[d]) || assignment[d] === "spy")) {
           collect(idx + 1, usedAs, usedGf, usedLink, true, usedGossip, [...muts, (s) => {
+            // 데몬이 된 좌석(팡 구 점프)은 저주 능력·선 등록 어느 쪽도 성립하지 않는다
+            if (s.became.has(mcSeat) || s.became.has(d)) return false;
             // 죽음을 알고 지목하던 시점(전날 밤~낮)에 멀쩡했어야 저주가 성립한다
             if (!forbid_(s, night - 1, mcSeat)) return false;
             return sideEffects(true)(s);
@@ -702,8 +764,14 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
               // 수도사가 이 대상을 보호했다고 기록했다 → 수도사가 중독됐던 것
               if (monkTarget !== null && monkTarget === k && !require_(s, night, monkSeat)) return false;
               }
+              // 팡 구: 점프 미사용 상태에서는 외부인이 킬로 죽을 수 없다 — 첫 외부인 공격은
+              // 점프가 된다 (은둔자는 하수인 오등록으로 정상 사망 가능 ∃)
+              if (demonRole === "fanggu" && !s.fangGuJumpUsed) {
+                const tok = tokenAt(s.became, k, night);
+                if (ROLES[tok].team === "outsider" && tok !== "recluse") return false;
+              }
               // 확실한 찻집 여인 보호를 뚫었다 → 찻집 여인의 중독
-              if (tlForced(aliveStart, k) && !require_(s, night, tealadySeat)) return false;
+              if (tlForced(aliveStart, k, s.became) && !require_(s, night, tealadySeat)) return false;
               // 회피 미사용 어릿광대를 죽였다 → 어릿광대의 중독
               if (k === foolSeat && !s.foolDodgeUsed && !require_(s, night, foolSeat)) return false;
               // 손주가 데몬에게 죽었는데 할머니가 살아 있다 → 할머니가 중독됐던 것
@@ -715,9 +783,45 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
             if (demonRole === "pukka") {
               for (const k of demonKills) { pukkaMark(s, pkPrev, k); pukkaMark(s, night, k); }
             }
+            // 비고르모르티스가 하수인을 죽였다: 능력 유지 + 마을 사람 이웃 1명이 계속 중독
+            // (어느 이웃인지는 텔러 몫 ∃ — 관대 집합. 은둔자는 하수인으로 오등록돼 죽었을 수 있어
+            //  이웃 독도 '있었을 수 있음'으로만 담는다. 능력은 없으니 유지는 없다)
+            if (demonRole === "vigormortis") {
+              for (const k of demonKills) {
+                const tok = tokenAt(s.became, k, night);
+                if (ROLES[tok].team === "minion") s.vigorKept.set(k, night);
+                if (ROLES[tok].team === "minion" || tok === "recluse") {
+                  for (const nb of vigorNeighborsAt(k, night)) {
+                    if (!s.vigorPoisonMaybe.has(nb)) s.vigorPoisonMaybe.set(nb, night);
+                  }
+                }
+              }
+            }
             s.poChoseNone = false; // Po: 대상을 골랐다 — '아무도 안 함'이 아니다
             return true;
           });
+          // 팡 구 점프: 데몬 좌석의 사망은 "외부인을 골라 점프가 발동한" 것일 수 있다 —
+          // 대상 외부인은 죽지 않고 비밀리에 팡 구가 된다 (게임당 1회). 첩자는 외부인
+          // 오등록으로 대상이 될 수 있다 (∃). 대상별로 다른 데몬 좌석 = 다른 월드.
+          if (demonRole === "fanggu" && !st.fangGuJumpUsed
+            && demonKills.length === 1 && demonKills[0] === demon) {
+            for (let t = 0; t < assignment.length; t++) {
+              if (t === demon || !aliveStart[t] || deaths.includes(t)) continue;
+              const tok = tokenAt(st.became, t, night);
+              if (ROLES[tok].team !== "outsider" && tok !== "spy") continue;
+              const target = t;
+              impVariants.push((s) => {
+                if (!forbid_(s, night, demon)) return false; // 멀쩡해야 킬(=점프)이 성립한다
+                if (exoTarget === demon && !require_(s, night, exoSeat)) return false; // 봉쇄됐어야 하는 밤
+                // 수도사·찻집 여인이 대상을 보호했다면 킬 자체가 막혀 점프도 없다 → 보호자의 중독 강제
+                if (monkTarget !== null && monkTarget === target && !require_(s, night, monkSeat)) return false;
+                if (tlForced(aliveStart, target, s.became) && !require_(s, night, tealadySeat)) return false;
+                s.fangGuJumpUsed = true;
+                s.fangGuJumpTarget = target;
+                return true;
+              });
+            }
+          }
         } else {
           // 데몬 킬 부재 — 설명이 하나는 있어야 한다 (Po의 조용한 밤은 자발적 선택이라 공짜)
           if (zombuulRested) {
@@ -813,7 +917,15 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
 
           // ── 데몬 사망 → 승계 ──
           let nexts: St[];
-          if (demonKills.includes(demon) && demonRole === "imp") {
+          if (s2.fangGuJumpTarget !== null) {
+            // 팡 구 점프: 대상 외부인이 새 팡 구가 된다 — 탕녀 승계는 발동하지 않는다 (데몬 생존)
+            const t = s2.fangGuJumpTarget;
+            const c = cloneSt(s2);
+            c.fangGuJumpTarget = null;
+            c.demon = t;
+            c.became.set(t, night);
+            nexts = [c];
+          } else if (demonKills.includes(demon) && demonRole === "imp") {
             // 스타 패스 (임프 전용): 텔러가 생존 하수인 중 하나를 임프로 만든다
             const eligible: Seat[] = [];
             for (let x = 0; x < assignment.length; x++) {
@@ -880,6 +992,10 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
     zombuulFakeDeadAt: null,
     pukkaMaybe: new Map(),
     grandchild: null,
+    fangGuJumpUsed: false,
+    fangGuJumpTarget: null,
+    vigorKept: new Map(),
+    vigorPoisonMaybe: new Map(),
   };
 
   // 스위트하트 사망 순간의 상태 제약: 취함 발동에는 멀쩡함이, 미발동에는 중독이 필요하다

@@ -9,7 +9,7 @@ import { ROLES } from "@/data/roles";
 import { composition } from "./composition";
 import { checkContent } from "./roles";
 import { checkContentFalse } from "./roles/false-info";
-import { Ctx, isDrunk, isNdPoisoned, isPukkaPoisoned, isSweetDrunk, wakes } from "./ctx";
+import { Ctx, isDrunk, isNdPoisoned, isPukkaPoisoned, isSweetDrunk, isVigorPoisoned, wakes } from "./ctx";
 import { DemonScenario, demonScenarios, Schedule, SweetheartCase } from "./timeline";
 import type { Claim, InfoData, RoleId, Seat, SolverPuzzle, World } from "./types";
 import { SOLVER_ROLES, worldKey } from "./types";
@@ -62,6 +62,10 @@ function validatePuzzle(pz: SolverPuzzle): Claim[] {
     // 연장 밤에는 죽은 보르톡스의 거짓 강제가 풀리는데 그 조합 처리가 아직 없다 — 건전성 위해 거부
     throw new Error("보르톡스와 마스터마인드는 아직 한 퍼즐에서 함께 지원되지 않습니다");
   }
+  if (pz.rolePool.includes("fanggu") && pz.rolePool.includes("sweetheart")) {
+    // 점프한 스위트하트는 능력을 잃는데, 스위트하트 취함 열거가 점프와 얽히는 처리가 아직 없다 — 건전성 위해 거부
+    throw new Error("팡 구와 스위트하트는 아직 한 퍼즐에서 함께 지원되지 않습니다");
+  }
   const unmodeled = assignableRoles(pz).filter((r) => !SOLVER_ROLES.includes(r));
   if (unmodeled.length > 0) {
     throw new Error(`솔버가 아직 모르는 역할입니다: ${unmodeled.map((r) => ROLES[r].ko).join(", ")}`);
@@ -112,10 +116,15 @@ export function solve(pz: SolverPuzzle): World[] {
     const nonDemon = seats.filter((s) => s !== demonSeat);
     for (const minionSeats of combinations(nonDemon, baseComp.minion)) {
       for (const minionRoles of permutations(minionsInPool, minionSeats.length)) {
-        // 구성 변형: 남작 +2 외부인, 대부 ±1 외부인 (텔러 선택 — 두 경우 모두 탐색)
+        for (const demonRole of demonsInPool) {
+        if (demonRole === "vortox" && !vortoxViable) continue;
+        // 구성 변형: 남작 +2 외부인, 대부 ±1 외부인 (텔러 선택 — 두 경우 모두 탐색),
+        // 팡 구 +1 외부인, 비고르모르티스 −1 외부인 (0 미만으로는 내려가지 않는다)
         let deltas = [0];
+        if (demonRole === "fanggu") deltas = deltas.map((d) => d + 1);
         if (minionRoles.includes("baron")) deltas = deltas.map((d) => d + 2);
         if (minionRoles.includes("godfather")) deltas = deltas.flatMap((d) => [d + 1, d - 1]);
+        if (demonRole === "vigormortis") deltas = deltas.map((d) => Math.max(d - 1, -baseComp.outsider));
         for (const delta of new Set(deltas)) {
           const comp = { ...baseComp, outsider: baseComp.outsider + delta, townsfolk: baseComp.townsfolk - delta };
           if (comp.outsider < 0 || comp.townsfolk < 0) continue;
@@ -135,8 +144,6 @@ export function solve(pz: SolverPuzzle): World[] {
             : [null];
 
           for (const hidden of hiddenChoices) {
-          for (const demonRole of demonsInPool) {
-            if (demonRole === "vortox" && !vortoxViable) continue;
             const assignment: RoleId[] = new Array(N);
             assignment[demonSeat] = demonRole;
             minionSeats.forEach((s, i) => { assignment[s] = minionRoles[i]; });
@@ -207,8 +214,10 @@ function tryWorld(
   const infos: GoodInfo[] = [];
   for (const s of goodSeats) {
     if (assignment[s] === "mutant" || assignment[s] === "lunatic") continue; // 광인·루나틱의 주장은 전부 날조 — 구조도 내용도 검증하지 않는다
+    const becameAt = sc.becameDemonAt.get(s); // 팡 구 점프로 데몬이 된 선한 좌석
     for (const info of claimBySeat[s].info) {
       if (!info.data) continue;
+      if (becameAt !== undefined && becameAt <= info.night) continue; // 데몬이 된 뒤의 주장은 날조
       if (!wakes(ctx, s, info.night)) return null;
       infos.push({ seat: s, night: info.night, data: info.data });
     }
@@ -222,6 +231,11 @@ function tryWorld(
   const canBePoisonTarget = (night: number, target: Seat): boolean =>
     sched.aliveAtNightStart(night)[target] ||
     (sc.zombuulFakeDeadAt != null && target === sc.currentDemonSeat && sc.zombuulFakeDeadAt < night);
+  // 비고르모르티스에게 죽은 독살범은 능력을 유지한다 — 죽어서도 밤마다 독살한다
+  const poisonerAble = (night: number): boolean =>
+    poisonerSeat >= 0 &&
+    (sched.aliveAtNightStart(night)[poisonerSeat] ||
+      (sc.vigorKeptSince?.get(poisonerSeat) ?? Infinity) <= night);
 
   if (!needsExactPoison) {
     // 빠른 경로: 술/독 없이 설명 안 되는 정보는 그 밤 그 좌석의 독살을 강제한다.
@@ -234,6 +248,7 @@ function tryWorld(
         if (isSweetDrunk(ctx, i.seat, i.night)) continue; // 스위트하트 취함 — 정보 무제약
         if (isNdPoisoned(ctx, i.seat, i.night)) continue; // 노 다시 이웃 독 가능 — 정보 무제약
         if (isPukkaPoisoned(ctx, i.seat, i.night)) continue; // 푸카 독 가능 — 정보 무제약
+        if (isVigorPoisoned(ctx, i.seat, i.night)) continue; // 죽은 하수인의 이웃 독 가능 — 정보 무제약
         if (checkContent(ctx, i.seat, i.data, i.night)) continue;
         const existing = required.get(i.night);
         if (existing !== undefined && existing !== i.seat) return null;
@@ -269,7 +284,7 @@ function tryWorld(
     for (const [night, target] of required) {
       if (poisonerSeat < 0) return null;
       if (isSweetDrunk(ctx, poisonerSeat, night)) return null; // 취한 독살범의 독은 듣지 않는다
-      if (!sched.aliveAtNightStart(night)[poisonerSeat]) return null;
+      if (!poisonerAble(night)) return null;
       if (!canBePoisonTarget(night, target)) return null;
       if (sc.poisonForbidden.get(night)?.has(target)) return null;
     }
@@ -288,11 +303,11 @@ function tryWorld(
     const req = sc.poisonRequired.get(night);
     const forbidden = sc.poisonForbidden.get(night);
     if (req !== undefined) {
-      if (poisonerSeat < 0 || !sched.aliveAtNightStart(night)[poisonerSeat] || !canBePoisonTarget(night, req) || forbidden?.has(req)) {
+      if (!poisonerAble(night) || !canBePoisonTarget(night, req) || forbidden?.has(req)) {
         return null;
       }
       optionsPerNight[night] = [req];
-    } else if (poisonerSeat >= 0 && sched.aliveAtNightStart(night)[poisonerSeat] && !isSweetDrunk(ctx, poisonerSeat, night)) {
+    } else if (poisonerAble(night) && !isSweetDrunk(ctx, poisonerSeat, night)) {
       const alive = sched.aliveAtNightStart(night);
       const opts = alive
         .map((a, s) => (a && !forbidden?.has(s) ? s : null))
@@ -317,6 +332,7 @@ function tryWorld(
         if (isSweetDrunk(pctx, i.seat, i.night)) continue; // 스위트하트 취함
         if (isNdPoisoned(pctx, i.seat, i.night)) continue; // 노 다시 이웃 독 가능
         if (isPukkaPoisoned(pctx, i.seat, i.night)) continue; // 푸카 독 가능
+        if (isVigorPoisoned(pctx, i.seat, i.night)) continue; // 죽은 하수인의 이웃 독 가능
         if (vortoxSeat >= 0) {
           if (vector[i.night] === vortoxSeat) continue; // Vortox가 중독된 밤 — 무제약 (관대한 근사)
           if (!checkContentFalse(pctx, i.seat, i.data, i.night)) return null;

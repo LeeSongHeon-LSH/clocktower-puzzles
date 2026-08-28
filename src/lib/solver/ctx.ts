@@ -40,12 +40,25 @@ export function isPukkaPoisoned(ctx: Ctx, seat: Seat, night: number): boolean {
   return ctx.sc.pukkaPoisoned?.[night]?.has(seat) ?? false;
 }
 
+/** 비고르모르티스가 죽인 하수인의 이웃 독 — 밤 night에 받고 있었을 수 있는가 (관대 집합) */
+export function isVigorPoisoned(ctx: Ctx, seat: Seat, night: number): boolean {
+  return ctx.sc.vigorPoisoned?.[night]?.has(seat) ?? false;
+}
+
+/** 비고르모르티스에게 죽어 능력을 유지 중인가 (밤 night 기준) */
+export function vigorKept(ctx: Ctx, seat: Seat, night: number): boolean {
+  return (ctx.sc.vigorKeptSince?.get(seat) ?? Infinity) <= night;
+}
+
 export function isPoisoned(ctx: Ctx, seat: Seat, night: number): boolean {
   return ctx.poison !== null && ctx.poison[night] === seat;
 }
 
 /** 좌석이 믿고 있는 자기 역할 (주정뱅이는 주장 역할, 그 외는 승계 반영 토큰) */
 export function believedRole(ctx: Ctx, seat: Seat, night: number): RoleId {
+  // 데몬이 된 좌석(승계·팡 구 점프)은 자신이 데몬임을 통보받는다 — 주정뱅이였어도 벗어난다
+  const since = ctx.sc.becameDemonAt.get(seat);
+  if (since !== undefined && since <= night) return tokenRoleAt(ctx.assignment, ctx.sc, seat, night);
   if (isDrunk(ctx, seat)) return ctx.claimBySeat[seat].role;
   return tokenRoleAt(ctx.assignment, ctx.sc, seat, night);
 }
@@ -137,10 +150,11 @@ export function wakes(ctx: Ctx, seat: Seat, night: number): boolean {
     case "poisoner":
     case "spy":
     case "devilsadvocate": // 밤마다 처형 면역 대상을 고른다 (밤1 포함)
-      return aliveStart[seat];
+      // 비고르모르티스에게 죽은 하수인은 능력을 유지하며 계속 깨어난다
+      return aliveStart[seat] || vigorKept(ctx, seat, night);
     case "witch":
       // 밤마다 저주 대상을 고른다 — 생존자가 3명 이하면 능력을 잃고 깨어나지 않는다
-      return aliveStart[seat] && aliveStart.filter(Boolean).length > 3;
+      return (aliveStart[seat] || vigorKept(ctx, seat, night)) && aliveStart.filter(Boolean).length > 3;
     case "lunatic":
       // 자기가 데몬인 줄 알고 데몬처럼 깨어나 '킬'을 고른다 (실제로는 아무 일도 없다)
       return night >= 2 && aliveStart[seat];
@@ -165,6 +179,8 @@ export function wakes(ctx: Ctx, seat: Seat, night: number): boolean {
     case "imp":
     case "vortox":
     case "nodashii":
+    case "fanggu": // 점프로 승계한 밤에는 아래 since === night 분기로 깨어난다
+    case "vigormortis":
     case "shabaloth": // 밤2부터 매밤 2명을 고른다 (시신 포함 가능)
     case "po": { // 조용한 밤에도 깨어난다 — '아무도 안 함'도 선택하러 깬다
       // 구마사제가 악마를 지목한 밤에는 악마가 깨어나지 못한다
