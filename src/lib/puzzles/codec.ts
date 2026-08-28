@@ -9,7 +9,7 @@
 // decode 입력은 **신뢰할 수 없는 외부 입력**이다. 반드시 validate를 거친다.
 
 import { ROLES } from "@/data/roles";
-import { ROLE_IDS, type Claim, type ClaimInfo, type GameEvent, type InfoData, type RoleId, type Seat } from "@/lib/solver/types";
+import { ROLE_IDS, type Claim, type ClaimInfo, type GameEvent, type InfoData, type Prop, type RoleId, type Seat } from "@/lib/solver/types";
 import type { Difficulty, Puzzle, PuzzleEdition, PuzzleQuestion } from "./schema";
 
 /** 링크 형식 버전. 형식이 바뀌면 올리고, 옛 링크는 안내 문구를 띄운다. */
@@ -145,6 +145,21 @@ function seatPair(v: unknown, players: number, field: string): [Seat, Seat] {
   return [int(v[0], 0, players - 1, `${field} 좌석`), int(v[1], 0, players - 1, `${field} 좌석`)];
 }
 
+function validateProp(v: unknown, players: number, where: string): Prop {
+  if (!isRecord(v)) throw new Error(`${where}: 명제 형식이 잘못됐습니다.`);
+  switch (v.kind) {
+    case "isDemon":
+    case "isEvil":
+      return { kind: v.kind, seat: int(v.seat, 0, players - 1, `${where} 명제 좌석`) };
+    case "isRole":
+      return { kind: "isRole", seat: int(v.seat, 0, players - 1, `${where} 명제 좌석`), role: roleId(v.role, `${where} 명제`) };
+    case "roleInPlay":
+      return { kind: "roleInPlay", role: roleId(v.role, `${where} 명제`) };
+    default:
+      throw new Error(`${where}: 알 수 없는 명제 종류입니다.`);
+  }
+}
+
 function validateInfoData(v: unknown, players: number, where: string): InfoData {
   if (!isRecord(v)) throw new Error(`${where}: 정보 형식이 잘못됐습니다.`);
   const t = v.type;
@@ -193,6 +208,17 @@ function validateInfoData(v: unknown, players: number, where: string): InfoData 
       return { type: "innkeeper", targets: seatPair(v.targets, players, where) };
     case "courtier":
       return { type: "courtier", role: roleId(v.role, where) };
+    case "artist":
+      return { type: "artist", question: validateProp(v.question, players, where), yes: v.yes === true };
+    case "savant": {
+      if (!Array.isArray(v.statements) || v.statements.length !== 2) {
+        throw new Error(`${where}: 학자의 진술은 2개여야 합니다.`);
+      }
+      return {
+        type: "savant",
+        statements: [validateProp(v.statements[0], players, where), validateProp(v.statements[1], players, where)],
+      };
+    }
     case "dreamer":
       return {
         type: "dreamer",

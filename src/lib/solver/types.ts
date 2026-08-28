@@ -149,6 +149,8 @@ export const SOLVER_ROLES: readonly RoleId[] = [
   "eviltwin", // 선한 쌍둥이와 서로를 안다 — 진행 중 게임에 관측 제약 없음 (구성 전용, 밤에 깨지 않음)
   "witch", // 밤마다 저주 — 저주 사망(낮, 지명 시)은 이벤트로 표현 불가, 기상 전용
   "cerenovus", // 밤마다 광기 강제 — 마지막 밤의 선택이 선한 좌석 1개의 주장 전체를 날조로 만들 수 있다 (solve가 열거)
+  "savant", // 매일 낮 2개 진술(구조화 명제) — 멀쩡하면 정확히 하나만 참, Vortox 세계에선 둘 다 거짓
+  "artist", // 1회, 낮에 예/아니오 질문(구조화 명제) — 멀쩡하면 답이 진실
   "flowergirl", // 밤마다 어제 악마가 투표했는지 배운다 — '아니오'가 기록된 투표자를 제약
   "towncrier", // 밤마다 어제 하수인이 지명했는지 배운다 — '아니오'가 기록된 지명자를 제약
   "vortox", // 임프 대체 데몬: 마을 사람 정보가 전부 거짓 + 처형 없는 낮이 지나면 악의 승리
@@ -169,6 +171,16 @@ export type Seat = number;
 
 // ── 밤 정보 (솔버용 구조화 데이터) ────────────────────────────────
 // 각 정보 역할이 "받았다고 주장하는" 정보의 형태.
+
+/**
+ * 구조화 명제 (18차→19차): 화가의 질문·학자의 진술을 검증 가능한 형태로 담는다.
+ * 평가는 등록(오등록 ∃) 기반 — "참으로 등록될 수 있는가 / 거짓으로 등록될 수 있는가".
+ */
+export type Prop =
+  | { kind: "isDemon"; seat: Seat } // 좌석이 데몬인가
+  | { kind: "isEvil"; seat: Seat } // 좌석이 악인가
+  | { kind: "isRole"; seat: Seat; role: RoleId } // 좌석이 특정 역할인가
+  | { kind: "roleInPlay"; role: RoleId }; // 그 역할이 판에 있는가
 
 export type InfoData =
   | { type: "washerwoman"; targets: [Seat, Seat]; shownRole: RoleId }
@@ -192,6 +204,9 @@ export type InfoData =
   | { type: "innkeeper"; targets: [Seat, Seat] } // 밤마다(밤2부터): 둘은 그 밤 죽지 않고, 하나가 취한다
   | { type: "courtier"; role: RoleId } // 1회: 그 역할(토큰)이 3밤 3낮 취한다
   | { type: "professor"; target: Seat } // 1회(밤2부터): 죽은 좌석 선택 — 마을 사람이면 부활했을 것
+  // 낮 정보 (night n = 낮 n — 독 지속 창과 일치). 밤에 깨지 않는다.
+  | { type: "artist"; question: Prop; yes: boolean } // 1회, 낮: 예/아니오 질문 — 멀쩡하면 진실
+  | { type: "savant"; statements: [Prop, Prop] } // 매일 낮: 둘 중 정확히 하나만 참 (Vortox: 둘 다 거짓)
   // 추가 정보 역할
   | { type: "dreamer"; target: Seat; goodRole: RoleId; evilRole: RoleId }
   | { type: "oracle"; count: number }

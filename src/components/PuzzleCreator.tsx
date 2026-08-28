@@ -16,6 +16,7 @@ import {
   SOLVER_ROLES,
   type GameEvent,
   type InfoData,
+  type Prop,
   type RoleId,
   type Seat,
   type Team,
@@ -68,7 +69,7 @@ const INFO_ROLES: RoleId[] = [
   "washerwoman", "librarian", "investigator", "chef", "empath", "fortuneteller",
   "undertaker", "ravenkeeper", "clockmaker", "seamstress", "mathematician", "chambermaid",
   "monk", "exorcist", "dreamer", "oracle", "grandmother", "gambler", "sage",
-  "flowergirl", "towncrier", "sailor", "innkeeper", "courtier", "professor",
+  "flowergirl", "towncrier", "sailor", "innkeeper", "courtier", "professor", "artist", "savant",
 ];
 
 interface DraftInfo {
@@ -118,6 +119,9 @@ function blankInfo(role: RoleId, night: number, players: number): DraftInfo | nu
     case "innkeeper": return { night: Math.max(2, night), data: { type: "innkeeper", targets: pair } };
     case "courtier": return { night, data: { type: "courtier", role: "imp" } };
     case "professor": return { night: Math.max(2, night), data: { type: "professor", target: 0 } };
+    case "artist": return { night, data: { type: "artist", question: { kind: "isDemon", seat: 0 }, yes: false } };
+    case "savant":
+      return { night, data: { type: "savant", statements: [{ kind: "isEvil", seat: 0 }, { kind: "roleInPlay", role: "drunk" }] } };
     default: return null;
   }
 }
@@ -1025,6 +1029,31 @@ function InfoEditor({
 
   const pair = "targets" in d && Array.isArray(d.targets) ? (d.targets as [Seat, Seat]) : null;
 
+  /** 구조화 명제 편집 (화가 질문·학자 진술) */
+  const propEditor = (p: Prop, onPick: (next: Prop) => void, key: string) => (
+    <span key={key} className="inline-flex flex-wrap items-center gap-1">
+      <select
+        className={field}
+        value={p.kind}
+        onChange={(e) => {
+          const kind = e.target.value as Prop["kind"];
+          if (kind === "isDemon" || kind === "isEvil") onPick({ kind, seat: "seat" in p ? p.seat : 0 });
+          else if (kind === "isRole") onPick({ kind, seat: "seat" in p ? p.seat : 0, role: "role" in p ? p.role : "imp" });
+          else onPick({ kind: "roleInPlay", role: "role" in p ? p.role : "imp" });
+        }}
+      >
+        <option value="isDemon">~는 악마다</option>
+        <option value="isEvil">~는 악하다</option>
+        <option value="isRole">~는 특정 역할이다</option>
+        <option value="roleInPlay">역할이 판에 있다</option>
+      </select>
+      {(p.kind === "isDemon" || p.kind === "isEvil" || p.kind === "isRole") &&
+        seatSelect(p.seat, (s) => onPick({ ...p, seat: s }))}
+      {(p.kind === "isRole" || p.kind === "roleInPlay") &&
+        roleSelect(p.role, (r) => onPick({ ...p, role: r }))}
+    </span>
+  );
+
   return (
     <div className="mt-2 space-y-1.5 border-l border-panel-edge pl-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -1130,6 +1159,27 @@ function InfoEditor({
           <>
             <span className="text-xs text-faded">죽은 악인</span>
             {numberSelect(d.count, seats.length, (n) => set({ type: "oracle", count: n }))}
+          </>
+        )}
+
+        {d.type === "artist" && (
+          <>
+            <span className="text-xs text-faded">낮에 물었다:</span>
+            {propEditor(d.question, (q) => set({ ...d, question: q }), "q")}
+            <button type="button" className="rounded border border-panel-edge px-2 py-1 text-xs text-parchment"
+              onClick={() => set({ ...d, yes: !d.yes })}>
+              {d.yes ? "답: 그렇다" : "답: 아니다"}
+            </button>
+          </>
+        )}
+
+        {d.type === "savant" && (
+          <>
+            <span className="text-xs text-faded">진술 1:</span>
+            {propEditor(d.statements[0], (p) => set({ ...d, statements: [p, d.statements[1]] }), "s1")}
+            <span className="text-xs text-faded">진술 2:</span>
+            {propEditor(d.statements[1], (p) => set({ ...d, statements: [d.statements[0], p] }), "s2")}
+            <span className="text-xs text-faded">(하나는 참, 하나는 거짓)</span>
           </>
         )}
 

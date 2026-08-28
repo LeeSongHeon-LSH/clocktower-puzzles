@@ -91,6 +91,9 @@ function validatePuzzle(pz: SolverPuzzle): Claim[] {
         throw new Error(`좌석 ${c.seat}: 주장 역할(${c.role})과 정보 타입(${info.data.type}) 불일치`);
       }
     }
+    if (c.info.filter((i) => i.data?.type === "artist").length > 1) {
+      throw new Error(`좌석 ${c.seat}: 화가의 질문은 게임당 1회입니다`);
+    }
     claimBySeat[c.seat] = c;
   }
   for (let s = 0; s < pz.playerCount; s++) {
@@ -262,7 +265,10 @@ function tryWorld(
     for (const info of claimBySeat[s].info) {
       if (!info.data) continue;
       if (becameAt !== undefined && becameAt <= info.night) continue; // 데몬이 된 뒤의 주장은 날조
-      if (!wakes(ctx, s, info.night)) return null;
+      if (info.data.type === "artist" || info.data.type === "savant") {
+        // 낮 정보 (night n = 낮 n) — 밤에 깨지 않으므로 그 낮의 생존만 요구한다
+        if (!sched.aliveAfterNight(info.night)[s]) return null;
+      } else if (!wakes(ctx, s, info.night)) return null;
       infos.push({ seat: s, night: info.night, data: info.data });
     }
   }

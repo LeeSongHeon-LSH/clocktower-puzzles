@@ -3,10 +3,24 @@
 
 import { roleLabel } from "@/data/roles";
 import { seatName } from "@/lib/puzzles/schema";
-import type { InfoData, Seat } from "@/lib/solver/types";
+import type { InfoData, Prop, Seat } from "@/lib/solver/types";
 
 function pair(a: Seat, b: Seat): string {
   return `${seatName(a)}·${seatName(b)}`;
+}
+
+/** 구조화 명제 → 한국어 문장 (화가 질문·학자 진술) */
+export function renderProp(p: Prop): string {
+  switch (p.kind) {
+    case "isDemon":
+      return `${seatName(p.seat)}는 악마다`;
+    case "isEvil":
+      return `${seatName(p.seat)}는 악하다`;
+    case "isRole":
+      return `${seatName(p.seat)}는 ${roleLabel(p.role)}다`;
+    case "roleInPlay":
+      return `${roleLabel(p.role)}이(가) 판에 있다`;
+  }
 }
 
 export function renderInfo(data: InfoData): string {
@@ -54,6 +68,10 @@ export function renderInfo(data: InfoData): string {
       return `${roleLabel(data.role)}을(를) 골랐다 — 그 역할이 3일 밤낮 취한다`;
     case "professor":
       return `${seatName(data.target)}의 시신을 골랐다 — 마을 사람이었다면 되살아났을 것이다`;
+    case "artist":
+      return `낮에 물었다: "${renderProp(data.question)}?" — 답은 "${data.yes ? "그렇다" : "아니다"}"`;
+    case "savant":
+      return `낮에 들었다: "${renderProp(data.statements[0])}" / "${renderProp(data.statements[1])}" — 하나는 참, 하나는 거짓`;
     case "dreamer":
       return `${seatName(data.target)}는 ${roleLabel(data.goodRole)} 아니면 ${roleLabel(data.evilRole)}이다`;
     case "oracle":

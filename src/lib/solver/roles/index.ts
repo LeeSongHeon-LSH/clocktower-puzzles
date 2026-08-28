@@ -24,6 +24,7 @@ import { oracle } from "./oracle";
 import { flowergirl } from "./flowergirl";
 import { towncrier } from "./towncrier";
 import { courtier, innkeeper, professor, sailor } from "./drunk-sources";
+import { artist, savant } from "./props";
 import { grandmother } from "./grandmother";
 import { gambler } from "./gambler";
 import { sage } from "./sage";
@@ -53,6 +54,8 @@ export function checkContent(ctx: Ctx, seat: Seat, data: InfoData, night: number
     case "innkeeper": return innkeeper(ctx, seat, data, night);
     case "courtier": return courtier(ctx, seat, data, night);
     case "professor": return professor(ctx, seat, data, night);
+    case "artist": return artist(ctx, seat, data, night); // night = 낮
+    case "savant": return savant(ctx, seat, data, night); // night = 낮
     case "grandmother": return grandmother(ctx, seat, data, night);
     case "gambler": return gambler(ctx, seat, data, night);
     case "sage": return sage(ctx, seat, data, night);
