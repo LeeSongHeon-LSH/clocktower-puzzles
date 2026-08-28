@@ -68,7 +68,7 @@ const INFO_ROLES: RoleId[] = [
   "washerwoman", "librarian", "investigator", "chef", "empath", "fortuneteller",
   "undertaker", "ravenkeeper", "clockmaker", "seamstress", "mathematician", "chambermaid",
   "monk", "exorcist", "dreamer", "oracle", "grandmother", "gambler", "sage",
-  "flowergirl", "towncrier", "sailor", "innkeeper", "courtier",
+  "flowergirl", "towncrier", "sailor", "innkeeper", "courtier", "professor",
 ];
 
 interface DraftInfo {
@@ -117,6 +117,7 @@ function blankInfo(role: RoleId, night: number, players: number): DraftInfo | nu
     case "sailor": return { night, data: { type: "sailor", target: 0 } };
     case "innkeeper": return { night: Math.max(2, night), data: { type: "innkeeper", targets: pair } };
     case "courtier": return { night, data: { type: "courtier", role: "imp" } };
+    case "professor": return { night: Math.max(2, night), data: { type: "professor", target: 0 } };
     default: return null;
   }
 }
@@ -1088,11 +1089,14 @@ function InfoEditor({
           </>
         )}
 
-        {(d.type === "monk" || d.type === "exorcist" || d.type === "sailor") && (
+        {(d.type === "monk" || d.type === "exorcist" || d.type === "sailor" || d.type === "professor") && (
           <>
             {seatSelect(d.target, (s) => set({ ...d, target: s }))}
             <span className="text-xs text-faded">
-              {d.type === "monk" ? "를 보호" : d.type === "exorcist" ? "를 지목" : "를 선택 (나 또는 그가 취한다)"}
+              {d.type === "monk" ? "를 보호"
+                : d.type === "exorcist" ? "를 지목"
+                : d.type === "sailor" ? "를 선택 (나 또는 그가 취한다)"
+                : "의 시신을 선택 (마을 사람이면 부활)"}
             </span>
           </>
         )}

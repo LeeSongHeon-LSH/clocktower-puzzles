@@ -17,7 +17,7 @@ import { exorcist } from "./exorcist";
 import { gambler } from "./gambler";
 import { flowergirl } from "./flowergirl";
 import { towncrier } from "./towncrier";
-import { courtier, innkeeper, sailor } from "./drunk-sources";
+import { courtier, innkeeper, professor, sailor } from "./drunk-sources";
 
 /** [min, max] 범위의 등록 가능 값 중 claimed와 다른 값이 존재하는가 (범위는 항상 비어 있지 않다) */
 function rangeCanDiffer(min: number, max: number, claimed: number): boolean {
@@ -178,5 +178,7 @@ export function checkContentFalse(ctx: Ctx, seat: Seat, data: InfoData, night: n
       return innkeeper(ctx, seat, data, night);
     case "courtier":
       return courtier(ctx, seat, data, night);
+    case "professor":
+      return professor(ctx, seat, data, night);
   }
 }

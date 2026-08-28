@@ -24,3 +24,11 @@ export function innkeeper(ctx: Ctx, seat: Seat, data: InnkeeperData, night: numb
 export function courtier(ctx: Ctx, _seat: Seat, data: CourtierData, _night: number): boolean {
   return ctx.pz.rolePool.includes(data.role); // 대본에 있는 역할만 고를 수 있다
 }
+
+type ProfessorData = Extract<InfoData, { type: "professor" }>;
+
+/** 교수(부활 시도): 죽은 좌석만 고를 수 있다 (밤2부터 — 기상은 wakes가 판정) */
+export function professor(ctx: Ctx, seat: Seat, data: ProfessorData, night: number): boolean {
+  if (data.target === seat) return false;
+  return night >= 2 && !ctx.sched.aliveAtNightStart(night)[data.target];
+}

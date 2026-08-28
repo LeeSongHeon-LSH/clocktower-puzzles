@@ -133,10 +133,11 @@ export function wakes(ctx: Ctx, seat: Seat, night: number): boolean {
       return night >= 2 && aliveStart[seat];
     case "sailor":
       return aliveStart[seat]; // 밤1부터 매밤 깨어나 선택한다
-    case "courtier": {
+    case "courtier":
+    case "professor": {
       // 1회용: 실제 사용 밤은 그 좌석의 주장에 기록된 밤 (재봉사와 같은 규약)
       const claim = ctx.claimBySeat[seat];
-      const used = claim.role === "courtier" ? claim.info.find((i) => i.data?.type === "courtier") : undefined;
+      const used = claim.role === role ? claim.info.find((i) => i.data?.type === role) : undefined;
       return used !== undefined && used.night === night && aliveStart[seat];
     }
     case "sage":
@@ -166,6 +167,7 @@ export function wakes(ctx: Ctx, seat: Seat, night: number): boolean {
     case "poisoner":
     case "spy":
     case "devilsadvocate": // 밤마다 처형 면역 대상을 고른다 (밤1 포함)
+    case "cerenovus": // 밤마다 광기 대상과 역할을 고른다
       // 비고르모르티스에게 죽은 하수인은 능력을 유지하며 계속 깨어난다
       return aliveStart[seat] || vigorKept(ctx, seat, night);
     case "witch":

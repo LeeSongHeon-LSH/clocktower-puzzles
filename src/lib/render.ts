@@ -52,6 +52,8 @@ export function renderInfo(data: InfoData): string {
       return `${pair(...data.targets)}를 보호했다 — 둘은 오늘 밤 죽지 않고, 하나가 취한다`;
     case "courtier":
       return `${roleLabel(data.role)}을(를) 골랐다 — 그 역할이 3일 밤낮 취한다`;
+    case "professor":
+      return `${seatName(data.target)}의 시신을 골랐다 — 마을 사람이었다면 되살아났을 것이다`;
     case "dreamer":
       return `${seatName(data.target)}는 ${roleLabel(data.goodRole)} 아니면 ${roleLabel(data.evilRole)}이다`;
     case "oracle":

@@ -51,6 +51,13 @@ function assignableRoles(pz: SolverPuzzle): RoleId[] {
   if (pz.rolePool.includes("drunk")) out.add("drunk");
   if (pz.rolePool.includes("mutant")) out.add("mutant");
   if (pz.rolePool.includes("lunatic")) out.add("lunatic");
+  if (pz.rolePool.includes("cerenovus")) {
+    // 광기 좌석의 실제 역할은 풀의 어떤 선한 역할이든 될 수 있다
+    for (const r of pz.rolePool) {
+      const t = ROLES[r].team;
+      if (t === "townsfolk" || t === "outsider") out.add(r);
+    }
+  }
   return [...out];
 }
 
@@ -130,8 +137,27 @@ export function solve(pz: SolverPuzzle): World[] {
           if (comp.outsider < 0 || comp.townsfolk < 0) continue;
           const evil = new Set<Seat>([demonSeat, ...minionSeats]);
           const goodSeats = seats.filter((s) => !evil.has(s));
-          const outsiderClaims = goodSeats.filter((s) => ROLES[claimBySeat[s].role].team === "outsider");
-          const need = comp.outsider - outsiderClaims.length;
+          // 세레노부스 광기 (18차): 마지막 밤의 광기 선택이 선한 좌석 하나의 주장 전체를
+          // 날조로 만들 수 있다 — 그 좌석의 실제 역할은 풀의 어떤 선한 역할이든 될 수 있다.
+          const madChoices: ({ seat: Seat; role: RoleId } | null)[] = [null];
+          if (minionRoles.includes("cerenovus")) {
+            const goodPoolRoles = pz.rolePool.filter((r) => {
+              const t = ROLES[r].team;
+              return t === "townsfolk" || t === "outsider";
+            });
+            for (const g of goodSeats) {
+              for (const r of goodPoolRoles) {
+                if (r !== claimBySeat[g].role) madChoices.push({ seat: g, role: r });
+              }
+            }
+          }
+
+          for (const mad of madChoices) {
+          const outsiderClaims = goodSeats.filter(
+            (s) => s !== mad?.seat && ROLES[claimBySeat[s].role].team === "outsider",
+          );
+          const madOutsider = mad !== null && ROLES[mad.role].team === "outsider" ? 1 : 0;
+          const need = comp.outsider - outsiderClaims.length - madOutsider;
           if (need < 0 || need > 1) continue;
           // 숨은 외부인: 주정뱅이(자기 역할을 믿음), 광인(외부인임을 알고 사칭),
           // 루나틱(자기가 데몬인 줄 알고 허세) — 마을 사람을 주장하는 선한 좌석 하나가 실제로는 이들일 수 있다
@@ -139,7 +165,7 @@ export function solve(pz: SolverPuzzle): World[] {
           if (need === 1 && hiddenRoles.length === 0) continue;
           const hiddenChoices: ({ seat: Seat; role: RoleId } | null)[] = need === 1
             ? goodSeats
-                .filter((s) => ROLES[claimBySeat[s].role].team === "townsfolk")
+                .filter((s) => s !== mad?.seat && ROLES[claimBySeat[s].role].team === "townsfolk")
                 .flatMap((s) => hiddenRoles.map((role) => ({ seat: s, role })))
             : [null];
 
@@ -147,7 +173,9 @@ export function solve(pz: SolverPuzzle): World[] {
             const assignment: RoleId[] = new Array(N);
             assignment[demonSeat] = demonRole;
             minionSeats.forEach((s, i) => { assignment[s] = minionRoles[i]; });
-            for (const s of goodSeats) assignment[s] = s === hidden?.seat ? hidden.role : claimBySeat[s].role;
+            for (const s of goodSeats) {
+              assignment[s] = s === hidden?.seat ? hidden.role : s === mad?.seat ? mad.role : claimBySeat[s].role;
+            }
 
             const goodTokens = goodSeats.map((s) => assignment[s]);
             if (new Set(goodTokens).size !== goodTokens.length) continue; // 실물 토큰 중복 불가
@@ -159,11 +187,12 @@ export function solve(pz: SolverPuzzle): World[] {
                 const ftSeat = assignment.indexOf("fortuneteller");
                 const rhChoices: (Seat | null)[] = ftSeat >= 0 ? goodSeats : [null];
                 for (const rh of rhChoices) {
-                  const world = tryWorld(pz, sched, claimBySeat, assignment, sc, sweet, rh, goodSeats);
+                  const world = tryWorld(pz, sched, claimBySeat, assignment, sc, sweet, rh, goodSeats, mad?.seat ?? null);
                   if (world) found.set(worldKey(world), world);
                 }
               }
             }
+          }
           }
           }
         }
@@ -206,14 +235,29 @@ function tryWorld(
   sweet: SweetheartCase | null,
   redHerring: Seat | null,
   goodSeats: Seat[],
+  madSeat: Seat | null = null,
 ): World | null {
   const sweetDrunk = sweet !== null && sweet.target !== null ? { target: sweet.target, since: sweet.since } : null;
   const ctx: Ctx = { pz, sched, assignment, claimBySeat, sc, redHerring, poison: null, sweet: sweetDrunk };
+
+  // 세레노부스 광기의 성립 조건: 마지막 밤에 세레노부스가 행동할 수 있어야 한다
+  const cerenoSeat = madSeat !== null ? assignment.indexOf("cerenovus") : -1;
+  if (madSeat !== null) {
+    const n = pz.nights;
+    const kept = (sc.vigorKeptSince?.get(cerenoSeat) ?? Infinity) <= n;
+    if (!sched.aliveAtNightStart(n)[cerenoSeat] && !kept) return null; // 죽은 세레노부스는 광기를 강제하지 못한다
+    const became = sc.becameDemonAt.get(cerenoSeat);
+    if (became !== undefined && became <= n) return null; // 데몬으로 승계했다면 능력이 없다
+    if (sc.minstrelNights?.has(n)) return null; // 전원 취함 밤 — 광기 무효
+    if (sweetDrunk !== null && sweetDrunk.target === cerenoSeat && sweetDrunk.since <= n) return null;
+    if (sc.extraDrunk?.[n]?.has(cerenoSeat)) return null; // 확정 취함 — 광기 무효
+  }
 
   // 선한 좌석(주정뱅이 포함)의 정보 수집 + 구조 검증 (깨어날 수 없었다면 그 주장은 참일 수 없다)
   const infos: GoodInfo[] = [];
   for (const s of goodSeats) {
     if (assignment[s] === "mutant" || assignment[s] === "lunatic") continue; // 광인·루나틱의 주장은 전부 날조 — 구조도 내용도 검증하지 않는다
+    if (s === madSeat) continue; // 세레노부스 광기 — 주장 전체가 강제된 날조
     const becameAt = sc.becameDemonAt.get(s); // 팡 구 점프로 데몬이 된 선한 좌석
     for (const info of claimBySeat[s].info) {
       if (!info.data) continue;
@@ -283,6 +327,8 @@ function tryWorld(
         required.set(night, pick);
       }
     }
+    // 광기가 성립하려면 마지막 밤의 세레노부스가 중독되지 않았어야 한다
+    if (madSeat !== null && required.get(pz.nights) === cerenoSeat) return null;
     for (const [night, target] of required) {
       if (poisonerSeat < 0) return null;
       if (isSweetDrunk(ctx, poisonerSeat, night)) return null; // 취한 독살범의 독은 듣지 않는다
@@ -327,6 +373,8 @@ function tryWorld(
   const vector: (Seat | null)[] = new Array(pz.nights + 1).fill(null);
   const tryNight = (night: number): World | null => {
     if (night > pz.nights) {
+      // 광기가 성립하려면 마지막 밤의 세레노부스가 중독되지 않았어야 한다
+      if (madSeat !== null && vector[pz.nights] === cerenoSeat) return null;
       const pctx: Ctx = { ...ctx, poison: vector };
       for (const i of soberInfos) {
         if (vector[i.night] === i.seat) continue; // 그 밤 중독 → 정보 무제약

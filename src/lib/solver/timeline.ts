@@ -398,6 +398,13 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
     const rec = claimBySeat[courtierSeat]?.info.find((i) => i.data?.type === "courtier");
     return rec?.data?.type === "courtier" ? { night: rec.night, role: rec.data.role } : null;
   })();
+  const profSeat = assignment.indexOf("professor");
+  // 교수의 1회 행동 기록 (밤, 죽은 좌석) — 주장에서 찾는다
+  const profRec = (() => {
+    if (profSeat < 0) return null;
+    const rec = claimBySeat[profSeat]?.info.find((i) => i.data?.type === "professor");
+    return rec?.data?.type === "professor" ? { night: rec.night, target: rec.data.target } : null;
+  })();
   const mcSeat = assignment.indexOf("moonchild");
   const gossipSeat = assignment.indexOf("gossip");
   const mmSeat = assignment.indexOf("mastermind");
@@ -902,6 +909,15 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
     const innRec = innSeat >= 0 && night >= 2 && aliveStart[innSeat] ? actionData(innSeat, "innkeeper", night) : undefined;
     const innProtected: [Seat, Seat] | null = innRec?.type === "innkeeper" ? innRec.targets : null;
     const sailorAlive = sailorSeat >= 0 && aliveStart[sailorSeat];
+
+    // 교수의 부활 시도 (1회, 기록 밤): 부활이 일어난 게임은 이 스키마에 입력될 수 없다
+    // (죽음 이벤트는 번복되지 않는다 — 샤바로스 역류 선례). 대상이 반드시 마을 사람으로
+    // 등록되는 시신이면 부활이 일어났어야 하므로, 교수가 그 밤 비정상이었어야 한다.
+    // (첩자 시신은 하수인으로, 주정뱅이 시신은 외부인으로 등록될 수 있어 ∃ 자유)
+    if (profRec !== null && profRec.night === night && aliveStart[profSeat]) {
+      const tok = tokenAt(st.became, profRec.target, night);
+      if (ROLES[tok].team === "townsfolk" && !require_(st, night, profSeat)) return;
+    }
     // 봉쇄 가능: 지목 기록이 악마를 가리키거나, 기록이 없어 ∃ 지목=악마
     const exoCanBlock = exoAlive && (exoTarget === demon || exoData === undefined);
 

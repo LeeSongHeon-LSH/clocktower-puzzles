@@ -187,6 +187,7 @@ function validateInfoData(v: unknown, players: number, where: string): InfoData 
     case "monk":
     case "exorcist":
     case "sailor":
+    case "professor":
       return { type: t, target: int(v.target, 0, players - 1, `${where} 좌석`) };
     case "innkeeper":
       return { type: "innkeeper", targets: seatPair(v.targets, players, where) };
