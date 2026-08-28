@@ -120,16 +120,51 @@ function blankInfo(role: RoleId, night: number, players: number): DraftInfo | nu
 // 화면과 buildShared가 같은 함수를 쓴다. 여기서 이미 죽은 좌석을 걸러 내므로
 // 인원수·밤 수를 줄였다 늘려도 솔버가 거부할 상태를 만들 수 없다.
 
+/** 낮 공개 행동 초안 (day는 행이 안다) */
+type DraftDayAction =
+  | { type: "slayerShot"; seat: Seat; target: Seat; died: boolean }
+  | { type: "nomination"; nominator: Seat; nominee: Seat }
+  | { type: "virginTrigger"; nominator: Seat; nominee: Seat };
+
 type LedgerRow =
   | { kind: "night"; index: number; label: string; picked: Seat[]; selectable: boolean[]; alive: number }
-  | { kind: "day"; index: number; label: string; picked: Seat | null; selectable: boolean[]; alive: number }
-  | { kind: "now"; label: string; alive: number };
+  | {
+      kind: "day"; index: number; label: string; picked: Seat | null; selectable: boolean[]; alive: number;
+      actions: DraftDayAction[]; virginExec: Seat | null; // 처녀 발동이 있으면 그 지명자가 그날의 처형이다
+    }
+  | { kind: "now"; index: number; label: string; alive: number; actions: DraftDayAction[]; selectable: boolean[] };
+
+/** 죽은 참여자·자기 지명 등 무효 행동을 거르고, 낮의 죽음(총격·처녀 발동)을 반영한다 */
+function applyDraftActions(
+  raw: DraftDayAction[],
+  alive: boolean[],
+  playerCount: number,
+  allowExecution: boolean,
+): { actions: DraftDayAction[]; virginExec: Seat | null } {
+  const actions: DraftDayAction[] = [];
+  let virginExec: Seat | null = null;
+  for (const act of raw) {
+    const involved = act.type === "slayerShot" ? [act.seat, act.target] : [act.nominator, act.nominee];
+    if (involved.some((s) => s >= playerCount || !alive[s])) continue;
+    if (act.type !== "slayerShot" && act.nominator === act.nominee) continue;
+    if (act.type === "virginTrigger") {
+      if (!allowExecution || virginExec !== null) continue; // 처형(=발동)은 하루 한 번, 마지막 낮엔 불가
+      virginExec = act.nominator;
+      alive[act.nominator] = false;
+    } else if (act.type === "slayerShot" && act.died) {
+      alive[act.target] = false;
+    }
+    actions.push(act);
+  }
+  return { actions, virginExec };
+}
 
 function buildLedger(
   nights: number,
   playerCount: number,
   deaths: Record<number, Seat[]>,
   executions: Record<number, Seat>,
+  dayActs: Record<number, DraftDayAction[]>,
 ): LedgerRow[] {
   const rows: LedgerRow[] = [];
   const alive = Array.from({ length: playerCount }, () => true);
@@ -144,12 +179,20 @@ function buildLedger(
 
     if (n === nights) break;
     const daySelectable = [...alive];
-    const ex = executions[n];
+    const { actions, virginExec } = applyDraftActions(dayActs[n] ?? [], alive, playerCount, true);
+    // 처녀 발동이 있으면 그것이 그날의 처형 — 별도 처형은 무시된다
+    const ex = virginExec !== null ? undefined : executions[n];
     const picked2 = ex !== undefined && ex < playerCount && alive[ex] ? ex : null;
     if (picked2 !== null) alive[picked2] = false;
-    rows.push({ kind: "day", index: n, label: `낮 ${n}`, picked: picked2, selectable: daySelectable, alive: count() });
+    rows.push({
+      kind: "day", index: n, label: `낮 ${n}`, picked: picked2, selectable: daySelectable,
+      alive: count(), actions, virginExec,
+    });
   }
-  rows.push({ kind: "now", label: `낮 ${nights}`, alive: count() });
+  const nowSelectable = [...alive];
+  // 현재 낮: 처형 전이므로 처녀 발동(=처형)은 없고, 총격·지명만 가능하다
+  const { actions } = applyDraftActions(dayActs[nights] ?? [], alive, playerCount, false);
+  rows.push({ kind: "now", index: nights, label: `낮 ${nights}`, alive: count(), actions, selectable: nowSelectable });
   return rows;
 }
 
@@ -158,17 +201,34 @@ function ledgerEvents(rows: LedgerRow[]): GameEvent[] {
   for (const row of rows) {
     if (row.kind === "night") {
       for (const seat of row.picked) events.push({ type: "death", night: row.index, seat });
-    } else if (row.kind === "day" && row.picked !== null) {
+      continue;
+    }
+    for (const act of row.actions) events.push({ ...act, day: row.index });
+    if (row.kind === "day" && row.picked !== null) {
       events.push({ type: "execution", day: row.index, seat: row.picked });
     }
   }
   return events;
 }
 
+/** 낮 행동 한 건이 문제에 실릴 문장. 풀이 화면의 타임라인과 같은 말을 쓴다. */
+function actionLine(act: DraftDayAction): string {
+  if (act.type === "slayerShot") {
+    return act.died
+      ? `${seatName(act.seat)}가 사냥꾼을 자처하며 ${seatName(act.target)}를 쐈다 — ${seatName(act.target)}가 죽었다!`
+      : `${seatName(act.seat)}가 사냥꾼을 자처하며 ${seatName(act.target)}를 쐈지만, 아무 일도 일어나지 않았다.`;
+  }
+  if (act.type === "nomination") {
+    return `${seatName(act.nominator)}가 ${seatName(act.nominee)}를 지명했지만, 아무 일도 일어나지 않았다.`;
+  }
+  return `${seatName(act.nominator)}가 ${seatName(act.nominee)}를 지명한 순간, ${seatName(act.nominator)}가 그 자리에서 처형됐다!`;
+}
+
 /** 원장 한 줄이 문제에 실릴 문장. 풀이 화면의 타임라인과 같은 말을 쓴다. */
 function ledgerLine(row: LedgerRow): string {
   if (row.kind === "now") return "지금 — 처형 전, 여기서 추리가 시작된다.";
   if (row.kind === "day") {
+    if (row.virginExec !== null) return `처녀 발동 — ${seatName(row.virginExec)}가 처형으로 죽었다.`;
     return row.picked === null ? "처형이 없었다." : `마을은 ${seatName(row.picked)}를 처형했다.`;
   }
   if (row.index === 1) return "첫 밤 — 악마는 죽이지 않는다.";
@@ -193,6 +253,83 @@ const MULTI_KILL_ROLES: RoleId[] = ["assassin", "godfather", "grandmother", "gam
 const field = "rounded border border-panel-edge bg-ink px-2 py-1 text-sm text-parchment";
 const label = "block text-xs text-faded";
 
+/** 낮 공개 행동(총격·지명·처녀 발동) 목록 + 추가 폼. day 행과 now 행이 함께 쓴다 */
+function DayActionEditor({
+  row,
+  onAdd,
+  onRemove,
+}: {
+  row: Extract<LedgerRow, { kind: "day" | "now" }>;
+  onAdd: (act: DraftDayAction) => void;
+  onRemove: (act: DraftDayAction) => void;
+}) {
+  const [type, setType] = useState<DraftDayAction["type"]>("nomination");
+  const [actor, setActor] = useState<Seat>(0);
+  const [target, setTarget] = useState<Seat>(1);
+  const [died, setDied] = useState(false);
+  const aliveSeats = row.selectable
+    .map((ok, s) => (ok ? s : null))
+    .filter((s): s is Seat => s !== null);
+  const canAdd =
+    aliveSeats.includes(actor) && aliveSeats.includes(target) && (type === "slayerShot" || actor !== target);
+
+  function add() {
+    if (!canAdd) return;
+    if (type === "slayerShot") onAdd({ type, seat: actor, target, died });
+    else onAdd({ type, nominator: actor, nominee: target });
+  }
+
+  return (
+    <div className="space-y-1">
+      {row.actions.map((act, i) => (
+        <p key={i} className="flex items-baseline justify-between gap-2 text-xs text-parchment">
+          <span>{actionLine(act)}</span>
+          <button type="button" onClick={() => onRemove(act)} className="shrink-0 text-faded underline hover:text-blood">
+            삭제
+          </button>
+        </p>
+      ))}
+      <div className="flex flex-wrap items-center gap-1.5 text-xs">
+        <select
+          aria-label="낮 행동 종류"
+          className={field}
+          value={type}
+          onChange={(e) => setType(e.target.value as DraftDayAction["type"])}
+        >
+          <option value="nomination">지명 (아무 일 없음)</option>
+          {row.kind === "day" && <option value="virginTrigger">처녀 발동 (지명자 즉시 처형)</option>}
+          <option value="slayerShot">사냥꾼 총격</option>
+        </select>
+        <select aria-label={type === "slayerShot" ? "총격자" : "지명자"} className={field} value={actor} onChange={(e) => setActor(Number(e.target.value))}>
+          {aliveSeats.map((s) => (
+            <option key={s} value={s}>{seatName(s)}</option>
+          ))}
+        </select>
+        <span className="text-faded">→</span>
+        <select aria-label="대상" className={field} value={target} onChange={(e) => setTarget(Number(e.target.value))}>
+          {aliveSeats.map((s) => (
+            <option key={s} value={s}>{seatName(s)}</option>
+          ))}
+        </select>
+        {type === "slayerShot" && (
+          <select aria-label="총격 결과" className={field} value={died ? "died" : "missed"} onChange={(e) => setDied(e.target.value === "died")}>
+            <option value="missed">불발 — 아무 일 없음</option>
+            <option value="died">명중 — 대상 사망</option>
+          </select>
+        )}
+        <button
+          type="button"
+          disabled={!canAdd}
+          onClick={add}
+          className={`${CHIP_BASE} ${canAdd ? CHIP_OFF : CHIP_DEAD}`}
+        >
+          낮 행동 추가
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function PuzzleCreator() {
   const [title, setTitle] = useState("");
   const [author, setAuthor] = useState("");
@@ -208,12 +345,13 @@ export function PuzzleCreator() {
   const [solution, setSolution] = useState<RoleId[]>(() => Array.from({ length: 7 }, () => "chef" as RoleId));
   const [deaths, setDeaths] = useState<Record<number, Seat[]>>({});
   const [executions, setExecutions] = useState<Record<number, Seat>>({});
+  const [dayActs, setDayActs] = useState<Record<number, DraftDayAction[]>>({});
   const [verdict, setVerdict] = useState<Verdict>({ kind: "idle" });
 
   const seats = useMemo(() => Array.from({ length: playerCount }, (_, i) => i), [playerCount]);
   const ledger = useMemo(
-    () => buildLedger(nights, playerCount, deaths, executions),
-    [nights, playerCount, deaths, executions],
+    () => buildLedger(nights, playerCount, deaths, executions, dayActs),
+    [nights, playerCount, deaths, executions, dayActs],
   );
   /** 킬 실패(아무도 안 죽은 밤)를 설명할 수 있는 역할이 대본에 있는가 */
   const hasKillFailExplainer = KILL_FAIL_ROLES.some((r) => pool.includes(r));
@@ -252,6 +390,17 @@ export function PuzzleCreator() {
       else next[day] = seat;
       return next;
     });
+    setVerdict({ kind: "idle" });
+  }
+
+  function addDayAction(day: number, act: DraftDayAction) {
+    setDayActs((prev) => ({ ...prev, [day]: [...(prev[day] ?? []), act] }));
+    setVerdict({ kind: "idle" });
+  }
+
+  /** 화면에 보이는(=유효한) 행동 목록 기준 인덱스로 지운다 */
+  function removeDayAction(day: number, act: DraftDayAction) {
+    setDayActs((prev) => ({ ...prev, [day]: (prev[day] ?? []).filter((a) => a !== act) }));
     setVerdict({ kind: "idle" });
   }
 
@@ -568,6 +717,8 @@ export function PuzzleCreator() {
           경과한 밤을 늘리면 칸도 따라 늘어납니다.{" "}
           <strong className="text-parchment">아무 일도 없던 밤과 낮 역시 하나의 단서입니다</strong> — 비워 두면
           “아무도 죽지 않았다”, “처형이 없었다”로 문제에 그대로 실립니다. 밤에는 여러 명을 고를 수 있습니다.
+          낮에는 공개 행동(지명·처녀 발동·사냥꾼 총격)을 추가할 수 있고, 처녀 발동이 있는 낮은 그
+          지명자가 처형으로 죽어 별도 처형을 고를 수 없습니다.
         </p>
 
         <ol className="overflow-hidden rounded border border-panel-edge bg-panel">
@@ -629,7 +780,7 @@ export function PuzzleCreator() {
                     </div>
                   )}
 
-                  {row.kind === "day" && (
+                  {row.kind === "day" && row.virginExec === null && (
                     <div className="flex flex-wrap gap-1.5" role="group" aria-label={`낮 ${row.index}에 처형된 좌석`}>
                       <button
                         type="button"
@@ -657,6 +808,14 @@ export function PuzzleCreator() {
                         );
                       })}
                     </div>
+                  )}
+
+                  {(row.kind === "day" || row.kind === "now") && (
+                    <DayActionEditor
+                      row={row}
+                      onAdd={(act) => addDayAction(row.index, act)}
+                      onRemove={(act) => removeDayAction(row.index, act)}
+                    />
                   )}
 
                   <p className="flex flex-wrap items-baseline justify-between gap-x-3 text-xs">

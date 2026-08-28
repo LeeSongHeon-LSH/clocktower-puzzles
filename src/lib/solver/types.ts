@@ -103,6 +103,8 @@ export const SOLVER_ROLES: readonly RoleId[] = [
   "undertaker",
   "monk", // 보호 행동 주장 → 킬 실패 설명·보호 위반 시 중독 강제 (timeline.ts)
   "ravenkeeper",
+  "virgin", // 낮 지명 이벤트로 검증 — 발동(virginTrigger)은 멀쩡·첫 지명·지명자 TF 등록 강제
+  "slayer", // 낮 총격 이벤트(slayerShot)로 검증 — 명중은 실제 사냥꾼·멀쩡함·대상 데몬 등록 강제
   "soldier", // 킬 실패 설명. 밤에 죽었다면 그 밤 중독이 강제된다
   "mayor", // 능력이 진행 중 게임에 관측 가능한 흔적을 남기지 않는다 — 구성 전용.
   //         (킬 튕김은 "임프가 그 좌석을 직접 노렸다"와 관측상 동치라 별도 모델 불요)
@@ -205,7 +207,32 @@ export interface Claim {
 
 export type GameEvent =
   | { type: "execution"; day: number; seat: Seat }
-  | { type: "death"; night: number; seat: Seat }; // 밤 사망 (데몬 킬)
+  | { type: "death"; night: number; seat: Seat } // 밤 사망 (데몬 킬)
+  // ── 낮 공개 행동 (2026-08-28 14차) ──
+  // 총격: 누구든 사냥꾼을 주장하며 공개적으로 쏠 수 있다 (악역의 허세 포함).
+  // died=true면 그 낮의 사망 — 실제 사냥꾼·멀쩡함·대상의 데몬 등록이 강제된다.
+  | { type: "slayerShot"; day: number; seat: Seat; target: Seat; died: boolean }
+  // 지명: 아무 일도 일어나지 않은 지명 기록. 처녀(실제)가 지명당했다면 능력이 소진되고,
+  // 발동했어야 하는 조건이면 처녀의 중독이 강제된다.
+  | { type: "nomination"; day: number; nominator: Seat; nominee: Seat }
+  // 처녀 발동: 지명자가 그 자리에서 즉시 처형됐다 — 그날의 처형으로 취급된다.
+  // 지명 대상이 멀쩡한 처녀(첫 지명)이고 지명자가 마을 사람으로 등록됨이 강제된다.
+  | { type: "virginTrigger"; day: number; nominator: Seat; nominee: Seat };
+
+/** 이벤트에서 죽은 좌석 하나 (지명·불발 총격은 null) */
+export function eventDeadSeat(e: GameEvent): Seat | null {
+  switch (e.type) {
+    case "execution":
+    case "death":
+      return e.seat;
+    case "slayerShot":
+      return e.died ? e.target : null;
+    case "virginTrigger":
+      return e.nominator;
+    case "nomination":
+      return null;
+  }
+}
 
 // ── 솔버 입력 ────────────────────────────────────────────────────
 

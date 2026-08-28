@@ -6,7 +6,8 @@ import { useMemo, useState } from "react";
 import type { Puzzle } from "@/lib/puzzles/schema";
 import { seatName } from "@/lib/puzzles/schema";
 import { EDITION_LABELS, ROLES, TEAM_LABELS, roleLabel } from "@/data/roles";
-import type { RoleId, Team } from "@/lib/solver/types";
+import type { GameEvent, RoleId, Team } from "@/lib/solver/types";
+import { eventDeadSeat } from "@/lib/solver/types";
 import { renderInfo } from "@/lib/render";
 import { loadProgress, saveProgress, useProgress } from "@/lib/progress";
 import { clearNotes, saveNote, useSeatNotes } from "@/lib/notes";
@@ -36,7 +37,7 @@ export function PuzzleClient({ puzzle }: { puzzle: Puzzle }) {
     sessionDone ?? (saved === "solved" || saved === "gaveup" ? saved : null);
 
   const deadSeats = useMemo(
-    () => new Set(puzzle.events.map((e) => e.seat)),
+    () => new Set(puzzle.events.map(eventDeadSeat).filter((s): s is number => s !== null)),
     [puzzle.events],
   );
 
@@ -112,17 +113,37 @@ export function PuzzleClient({ puzzle }: { puzzle: Puzzle }) {
 
   // ── 타임라인: 밤1 → 낮1 → 밤2 → … → 현재 ───────────────────
   const timeline = useMemo(() => {
+    /** 낮 d의 공개 행동 문장들 (이벤트 배열 순서 = 일어난 순서) */
+    const dayLines = (d: number): string[] =>
+      puzzle.events.flatMap((e) => {
+        if (e.type === "slayerShot" && e.day === d) {
+          return e.died
+            ? [`${seatName(e.seat)}가 사냥꾼을 자처하며 ${seatName(e.target)}를 쐈다 — ${seatName(e.target)}가 죽었다!`]
+            : [`${seatName(e.seat)}가 사냥꾼을 자처하며 ${seatName(e.target)}를 쐈지만, 아무 일도 일어나지 않았다.`];
+        }
+        if (e.type === "nomination" && e.day === d) {
+          return [`${seatName(e.nominator)}가 ${seatName(e.nominee)}를 지명했지만, 아무 일도 일어나지 않았다.`];
+        }
+        if (e.type === "virginTrigger" && e.day === d) {
+          return [`${seatName(e.nominator)}가 ${seatName(e.nominee)}를 지명한 순간, ${seatName(e.nominator)}가 그 자리에서 처형됐다!`];
+        }
+        return [];
+      });
+
     const items: { label: string; text: string; kind: "night" | "day" | "now" }[] = [
       { label: "밤 1", text: "마을이 잠들고, 정보 역할들이 깨어났다.", kind: "night" },
     ];
     for (let d = 1; d < puzzle.nights; d++) {
-      const exec = puzzle.events.find((e) => e.type === "execution" && e.day === d);
-      items.push({
-        label: `낮 ${d}`,
-        text: exec ? `마을은 ${seatName(exec.seat)}를 처형했다.` : "처형이 없었다.",
-        kind: "day",
-      });
-      const dead = puzzle.events.filter((e) => e.type === "death" && e.night === d + 1);
+      const exec = puzzle.events.find(
+        (e): e is Extract<GameEvent, { type: "execution" }> => e.type === "execution" && e.day === d,
+      );
+      const lines = dayLines(d);
+      if (exec) lines.push(`마을은 ${seatName(exec.seat)}를 처형했다.`);
+      else if (!puzzle.events.some((e) => e.type === "virginTrigger" && e.day === d)) lines.push("처형이 없었다.");
+      items.push({ label: `낮 ${d}`, text: lines.join(" "), kind: "day" });
+      const dead = puzzle.events.filter(
+        (e): e is Extract<GameEvent, { type: "death" }> => e.type === "death" && e.night === d + 1,
+      );
       items.push({
         label: `밤 ${d + 1}`,
         text: dead.length
@@ -133,7 +154,7 @@ export function PuzzleClient({ puzzle }: { puzzle: Puzzle }) {
     }
     items.push({
       label: `낮 ${puzzle.nights}`,
-      text: "지금 — 당신의 추리 차례다.",
+      text: [...dayLines(puzzle.nights), "지금 — 당신의 추리 차례다."].join(" "),
       kind: "now",
     });
     return items;

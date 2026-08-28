@@ -229,9 +229,29 @@ function validateClaim(v: unknown, players: number, nights: number): Claim {
 
 function validateEvent(v: unknown, players: number, nights: number): GameEvent {
   if (!isRecord(v)) throw new Error("사건 형식이 잘못됐습니다.");
-  const seat = int(v.seat, 0, players - 1, "사건 좌석");
-  if (v.type === "execution") return { type: "execution", day: int(v.day, 1, nights, "처형한 낮"), seat };
-  if (v.type === "death") return { type: "death", night: int(v.night, 2, nights, "사망한 밤"), seat };
+  if (v.type === "execution") {
+    return { type: "execution", day: int(v.day, 1, nights, "처형한 낮"), seat: int(v.seat, 0, players - 1, "사건 좌석") };
+  }
+  if (v.type === "death") {
+    return { type: "death", night: int(v.night, 2, nights, "사망한 밤"), seat: int(v.seat, 0, players - 1, "사건 좌석") };
+  }
+  if (v.type === "slayerShot") {
+    return {
+      type: "slayerShot",
+      day: int(v.day, 1, nights, "총격한 낮"),
+      seat: int(v.seat, 0, players - 1, "총격자 좌석"),
+      target: int(v.target, 0, players - 1, "총격 대상 좌석"),
+      died: v.died === true,
+    };
+  }
+  if (v.type === "nomination" || v.type === "virginTrigger") {
+    return {
+      type: v.type,
+      day: int(v.day, 1, nights, "지명한 낮"),
+      nominator: int(v.nominator, 0, players - 1, "지명자 좌석"),
+      nominee: int(v.nominee, 0, players - 1, "지명 대상 좌석"),
+    };
+  }
   throw new Error("알 수 없는 사건 종류입니다.");
 }
 

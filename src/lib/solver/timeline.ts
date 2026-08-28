@@ -44,10 +44,19 @@ import type { Claim, RoleId, Seat, SolverPuzzle } from "./types";
 
 // ── Schedule: 이벤트만으로 결정되는 생존 상태 ─────────────────────
 
+/** 낮 공개 행동 (일어난 순서 = 이벤트 배열 순서) */
+export type DayAction =
+  | { type: "slayerShot"; seat: Seat; target: Seat; died: boolean }
+  | { type: "nomination"; nominator: Seat; nominee: Seat }
+  | { type: "virginTrigger"; nominator: Seat; nominee: Seat };
+
 export class Schedule {
   readonly nights: number;
   private readonly deathsAtNight = new Map<number, Seat[]>();
   private readonly execOnDay = new Map<number, Seat>();
+  private readonly virginDay = new Set<number>(); // execOnDay 중 처녀 발동으로 인한 낮
+  private readonly actionsOnDay = new Map<number, DayAction[]>();
+  private readonly slainByDay = new Map<number, Seat[]>(); // 총격 사망 (처형 아님)
   /** aliveStart[n] = 밤 n 시작 시점 생존 배열, aliveAfter[n] = 밤 n 킬 이후 */
   private readonly aliveStart: boolean[][] = [];
   private readonly aliveAfter: boolean[][] = [];
@@ -61,10 +70,29 @@ export class Schedule {
         if (same.includes(ev.seat)) throw new Error(`밤 ${ev.night}: 좌석 ${ev.seat}의 사망이 중복`);
         same.push(ev.seat);
         this.deathsAtNight.set(ev.night, same);
+      } else if (ev.type === "execution" || ev.type === "virginTrigger") {
+        const day = ev.day;
+        const seat = ev.type === "execution" ? ev.seat : ev.nominator;
+        if (day < 1 || day > pz.nights - 1) throw new Error(`처형 시점이 범위 밖: 낮 ${day}`);
+        if (this.execOnDay.has(day)) throw new Error(`낮 ${day}에 처형이 2건`);
+        this.execOnDay.set(day, seat);
+        if (ev.type === "virginTrigger") {
+          this.virginDay.add(day);
+          this.pushAction(day, { type: "virginTrigger", nominator: ev.nominator, nominee: ev.nominee });
+        }
+      } else if (ev.type === "slayerShot") {
+        // 현재 낮(nights)의 총격도 허용 — "오늘 쐈는데 안 죽었다/죽었다"가 단서가 된다
+        if (ev.day < 1 || ev.day > pz.nights) throw new Error(`총격 시점이 범위 밖: 낮 ${ev.day}`);
+        this.pushAction(ev.day, { type: "slayerShot", seat: ev.seat, target: ev.target, died: ev.died });
+        if (ev.died) {
+          const slain = this.slainByDay.get(ev.day) ?? [];
+          slain.push(ev.target);
+          this.slainByDay.set(ev.day, slain);
+        }
       } else {
-        if (ev.day < 1 || ev.day > pz.nights - 1) throw new Error(`처형 시점이 범위 밖: 낮 ${ev.day}`);
-        if (this.execOnDay.has(ev.day)) throw new Error(`낮 ${ev.day}에 처형이 2건`);
-        this.execOnDay.set(ev.day, ev.seat);
+        if (ev.day < 1 || ev.day > pz.nights) throw new Error(`지명 시점이 범위 밖: 낮 ${ev.day}`);
+        if (ev.nominator === ev.nominee) throw new Error(`낮 ${ev.day}: 자기 자신을 지명할 수 없습니다`);
+        this.pushAction(ev.day, { type: "nomination", nominator: ev.nominator, nominee: ev.nominee });
       }
     }
     let alive = Array.from({ length: pz.playerCount }, () => true);
@@ -79,13 +107,32 @@ export class Schedule {
         }
       }
       this.aliveAfter[night] = [...alive];
+      // 낮의 죽음: 이벤트 배열 순서대로 (총격·처녀 발동), 마지막에 일반 처형
+      for (const act of this.actionsOnDay.get(night) ?? []) {
+        const involved = act.type === "slayerShot" ? [act.seat, act.target] : [act.nominator, act.nominee];
+        for (const s of involved) {
+          if (!alive[s]) throw new Error(`낮 ${night}: 이미 죽은 좌석 ${s}이 낮 행동에 참여`);
+        }
+        const dies = act.type === "slayerShot" ? (act.died ? act.target : null)
+          : act.type === "virginTrigger" ? act.nominator : null;
+        if (dies !== null) {
+          alive = [...alive];
+          alive[dies] = false;
+        }
+      }
       const executed = this.execOnDay.get(night);
-      if (executed !== undefined) {
+      if (executed !== undefined && !this.virginDay.has(night)) {
         if (!alive[executed]) throw new Error(`낮 ${night}: 이미 죽은 좌석 ${executed}을 처형`);
         alive = [...alive];
         alive[executed] = false;
       }
     }
+  }
+
+  private pushAction(day: number, act: DayAction) {
+    const list = this.actionsOnDay.get(day) ?? [];
+    list.push(act);
+    this.actionsOnDay.set(day, list);
   }
 
   /** 밤 night에 죽은 채 발견된 좌석들 (없으면 빈 배열) */
@@ -95,6 +142,18 @@ export class Schedule {
   executedOnDay(day: number): Seat | null {
     return this.execOnDay.get(day) ?? null;
   }
+  /** 낮 day의 처형이 처녀 발동으로 인한 것인가 */
+  isVirginExecution(day: number): boolean {
+    return this.virginDay.has(day);
+  }
+  /** 낮 day의 공개 행동 (일어난 순서) */
+  dayActions(day: number): DayAction[] {
+    return this.actionsOnDay.get(day) ?? [];
+  }
+  /** 낮 day에 총격으로 죽은 좌석들 (처형 아님) */
+  slainOnDay(day: number): Seat[] {
+    return this.slainByDay.get(day) ?? [];
+  }
   aliveAtNightStart(night: number): boolean[] {
     return this.aliveStart[night];
   }
@@ -103,7 +162,9 @@ export class Schedule {
     return this.aliveAfter[night];
   }
   aliveNow(): boolean[] {
-    return this.aliveAfter[this.nights];
+    const alive = [...this.aliveAfter[this.nights]];
+    for (const s of this.slainByDay.get(this.nights) ?? []) alive[s] = false; // 현재 낮의 총격 사망
+    return alive;
   }
 }
 
@@ -205,6 +266,10 @@ interface St {
   vigorKept: Map<Seat, number>;
   /** 비고르모르티스 전용: 좌석 → 이웃 독을 받고 있었을 수 있는 시작 밤 (관대 집합) */
   vigorPoisonMaybe: Map<Seat, number>;
+  /** 사냥꾼(실제)이 능력을 소진했는가 — 공개 총격 1회 (명중·불발 무관) */
+  slayerUsed: boolean;
+  /** 처녀(실제)가 첫 지명을 받아 능력이 소진됐는가 (중독 상태였어도 소진) */
+  virginSpent: boolean;
 }
 
 function cloneSt(s: St): St {
@@ -229,6 +294,8 @@ function cloneSt(s: St): St {
     fangGuJumpTarget: s.fangGuJumpTarget,
     vigorKept: new Map(s.vigorKept),
     vigorPoisonMaybe: new Map(s.vigorPoisonMaybe),
+    slayerUsed: s.slayerUsed,
+    virginSpent: s.virginSpent,
   };
 }
 
@@ -301,6 +368,8 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
   const swSeat = assignment.indexOf("scarletwoman");
   const gamblerSeat = assignment.indexOf("gambler");
   const tinkerSeat = assignment.indexOf("tinker");
+  const virginSeat = assignment.indexOf("virgin");
+  const slayerSeat = assignment.indexOf("slayer");
   const mcSeat = assignment.indexOf("moonchild");
   const gossipSeat = assignment.indexOf("gossip");
   const mmSeat = assignment.indexOf("mastermind");
@@ -475,17 +544,107 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
   }
 
   function doDay(st: St, day: number) {
+    // 낮 공개 행동(총격·지명·처녀 발동)의 제약을 먼저 반영한다 — 분기가 생길 수 있다
+    for (const s of applyDayActions(st, day)) doDayRest(s, day);
+  }
+
+  /**
+   * 낮 day의 공개 행동을 일어난 순서대로 적용한 St 분기들. 빈 배열 = 이 세계는 모순.
+   * 총격 명중이 실제 데몬을 잡으면 좀부울 가짜 죽음/탕녀 승계로 분기한다
+   * (마스터마인드는 '처형'만 연장하므로 총격 사망에는 발동하지 않는다).
+   */
+  function applyDayActions(st: St, day: number): St[] {
+    const actions = sched.dayActions(day);
+    if (actions.length === 0) return [st];
+    const aliveAtDay = sched.aliveAfterNight(day);
+    let branches: St[] = [cloneSt(st)];
+    for (const act of actions) {
+      const next: St[] = [];
+      for (const s of branches) {
+        if (act.type === "slayerShot") {
+          const shooterIsSlayer = slayerSeat >= 0 && act.seat === slayerSeat;
+          if (act.died) {
+            // 명중: 실제 사냥꾼의 첫 총격 + 멀쩡함 + 대상이 데몬으로 등록
+            if (!shooterIsSlayer || s.slayerUsed) continue;
+            const tok = tokenAt(s.became, act.target, day);
+            if (ROLES[tok].team !== "demon" && tok !== "recluse") continue;
+            if (!forbid_(s, day, slayerSeat)) continue;
+            s.slayerUsed = true;
+            if (act.target === s.demon) {
+              // 실제 데몬이 낮에 총으로 죽었다 — 좀부울 가짜 죽음 / 탕녀 승계만 게임을 지속시킨다
+              if (demonRole === "zombuul" && s.zombuulFakeDeadAt === null) {
+                const c = cloneSt(s);
+                if (forbid_(c, day, act.target)) {
+                  c.zombuulFakeDeadAt = day + 0.5;
+                  next.push(c);
+                }
+              }
+              if (swSeat >= 0 && swSeat !== act.target && aliveAtDay[swSeat]
+                && !s.became.has(swSeat) && countTrue(aliveAtDay) >= 5) {
+                const c = cloneSt(s);
+                const real = demonRole !== "zombuul" || require_(c, day, act.target);
+                if (real && forbid_(c, day, swSeat)) {
+                  c.demon = swSeat;
+                  c.became.set(swSeat, day + 0.5);
+                  c.poChoseNone = false;
+                  next.push(c);
+                }
+              }
+            } else {
+              next.push(s); // 은둔자가 데몬으로 등록돼 죽었다 (∃)
+            }
+          } else {
+            // 불발: 실제 사냥꾼이었다면 공개 사용으로 능력이 소진된다
+            if (shooterIsSlayer && !s.slayerUsed) {
+              s.slayerUsed = true;
+              const tok = tokenAt(s.became, act.target, day);
+              // 멀쩡한 사냥꾼이 반드시 데몬으로 등록되는 대상을 쐈다면 죽었어야 한다 → 사냥꾼 중독 강제
+              if (ROLES[tok].team === "demon" && !require_(s, day, slayerSeat)) continue;
+            }
+            next.push(s); // 허세 총격(비사냥꾼)·소진 후 재총격은 자유
+          }
+        } else if (act.type === "nomination") {
+          if (virginSeat >= 0 && act.nominee === virginSeat && !s.virginSpent) {
+            s.virginSpent = true; // 첫 지명 — 발동 여부와 무관하게 소진 (중독 상태였어도)
+            const ntok = tokenAt(s.became, act.nominator, day);
+            // 반드시 마을 사람으로 등록되는 지명자였다면 발동했어야 한다 → 처녀의 중독 강제
+            // (첩자 지명자는 하수인으로 등록됐을 수 있다 ∃ — 자유)
+            if (ROLES[ntok].team === "townsfolk" && !require_(s, day, virginSeat)) continue;
+          }
+          next.push(s);
+        } else {
+          // virginTrigger: 지명 대상이 멀쩡한 실제 처녀(첫 지명), 지명자가 마을 사람으로 등록
+          if (virginSeat < 0 || act.nominee !== virginSeat) continue;
+          if (s.virginSpent) continue;
+          s.virginSpent = true;
+          if (!forbid_(s, day, virginSeat)) continue;
+          const ntok = tokenAt(s.became, act.nominator, day);
+          if (ROLES[ntok].team !== "townsfolk" && ntok !== "spy") continue;
+          // 지명자의 즉시 처형은 Schedule이 그날의 처형으로 반영한다 —
+          // 성자·어릿광대·대부/음유시인 트리거는 일반 처형 경로(doDayRest)가 처리한다
+          next.push(s);
+        }
+      }
+      branches = next;
+    }
+    return branches;
+  }
+
+  function doDayRest(st: St, day: number) {
     if (day === pz.nights) {
       finish(st); // 현재 시점: k일차 낮, 처형 전
       return;
     }
+    // 총격 사망(처형 아님)한 은둔자는 외부인 사망으로 대부를 발동시킬 수 있다 (∃)
+    const slain = sched.slainOnDay(day);
+    const slainMay = slain.some((x) => tokenAt(st.became, x, day) === "recluse");
     const executed = sched.executedOnDay(day);
     if (executed === null) {
-      doNight(st, day + 1, "none", false);
+      doNight(st, day + 1, slainMay ? "may" : "none", false);
       return;
     }
     const aliveAtDay = sched.aliveAfterNight(day);
-    const aliveBefore = countTrue(aliveAtDay);
+    const aliveBefore = countTrue(aliveAtDay) - slain.length;
     let branches: { st: St; demonless: boolean }[];
     if (executed === st.demon) {
       branches = [];
@@ -537,11 +696,12 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
     // 가짜 죽음 좀부울은 등록상 죽었지만 실제로 살아 있다 — 종료 판정에서 생존자로 센다
     if (aliveBefore - 1 + (s.zombuulFakeDeadAt !== null ? 1 : 0) <= 2) continue;
 
-    // 트리거 계산: 처형으로 죽은 좌석의 토큰 등록
+    // 트리거 계산: 처형으로 죽은 좌석의 토큰 등록 (+ 총격으로 죽은 은둔자 ∃)
     const token = tokenAt(s.became, executed, day);
     let gfTrigger: Trigger = "none";
     if (token === "recluse" || token === "spy") gfTrigger = "may"; // 오등록 선택은 텔러 몫 (∃)
     else if (ROLES[token].team === "outsider") gfTrigger = "must";
+    if (gfTrigger === "none" && slainMay) gfTrigger = "may";
 
     let minstrelMode: Trigger = "none";
     if (minstrelSeat >= 0 && executed !== minstrelSeat && aliveAtDay[minstrelSeat]) {
@@ -996,6 +1156,8 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
     fangGuJumpTarget: null,
     vigorKept: new Map(),
     vigorPoisonMaybe: new Map(),
+    slayerUsed: false,
+    virginSpent: false,
   };
 
   // 스위트하트 사망 순간의 상태 제약: 취함 발동에는 멀쩡함이, 미발동에는 중독이 필요하다

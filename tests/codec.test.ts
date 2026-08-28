@@ -117,4 +117,23 @@ describe("검증 — 신뢰할 수 없는 입력", () => {
     solution[solution.findIndex((r) => r !== "imp")] = "juggler";
     expect(() => validateShared({ ...b, solution })).toThrow(/역할 풀/);
   });
+
+  it("낮 공개 행동 이벤트(총격·지명·처녀 발동)가 왕복에 보존된다", async () => {
+    const b = base();
+    const events = [
+      { type: "slayerShot", day: 1, seat: 0, target: 1, died: false },
+      { type: "nomination", day: 1, nominator: 2, nominee: 3 },
+      { type: "virginTrigger", day: 1, nominator: 4, nominee: 3 },
+    ];
+    const round = await decodePuzzle(await encodePuzzle(validateShared({ ...b, events })));
+    expect(round.events).toEqual(events);
+  });
+
+  it("낮 행동 이벤트의 좌석이 범위 밖이면 거부한다", () => {
+    const b = base();
+    expect(() => validateShared({ ...b, events: [{ type: "slayerShot", day: 1, seat: 99, target: 1, died: true }] }))
+      .toThrow(/총격자 좌석/);
+    expect(() => validateShared({ ...b, events: [{ type: "nomination", day: 1, nominator: 0, nominee: -1 }] }))
+      .toThrow(/지명 대상 좌석/);
+  });
 });
