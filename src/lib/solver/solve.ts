@@ -9,7 +9,7 @@ import { ROLES } from "@/data/roles";
 import { composition } from "./composition";
 import { checkContent } from "./roles";
 import { checkContentFalse } from "./roles/false-info";
-import { Ctx, isDrunk, isNdPoisoned, isSweetDrunk, wakes } from "./ctx";
+import { Ctx, isDrunk, isNdPoisoned, isPukkaPoisoned, isSweetDrunk, wakes } from "./ctx";
 import { DemonScenario, demonScenarios, Schedule, SweetheartCase } from "./timeline";
 import type { Claim, InfoData, RoleId, Seat, SolverPuzzle, World } from "./types";
 import { SOLVER_ROLES, worldKey } from "./types";
@@ -233,6 +233,7 @@ function tryWorld(
         if (sc.minstrelNights?.has(i.night)) continue; // 전원 취함 밤의 정보는 무제약
         if (isSweetDrunk(ctx, i.seat, i.night)) continue; // 스위트하트 취함 — 정보 무제약
         if (isNdPoisoned(ctx, i.seat, i.night)) continue; // 노 다시 이웃 독 가능 — 정보 무제약
+        if (isPukkaPoisoned(ctx, i.seat, i.night)) continue; // 푸카 독 가능 — 정보 무제약
         if (checkContent(ctx, i.seat, i.data, i.night)) continue;
         const existing = required.get(i.night);
         if (existing !== undefined && existing !== i.seat) return null;
@@ -315,6 +316,7 @@ function tryWorld(
         if (sc.minstrelNights?.has(i.night)) continue; // 전원 취함 밤
         if (isSweetDrunk(pctx, i.seat, i.night)) continue; // 스위트하트 취함
         if (isNdPoisoned(pctx, i.seat, i.night)) continue; // 노 다시 이웃 독 가능
+        if (isPukkaPoisoned(pctx, i.seat, i.night)) continue; // 푸카 독 가능
         if (vortoxSeat >= 0) {
           if (vector[i.night] === vortoxSeat) continue; // Vortox가 중독된 밤 — 무제약 (관대한 근사)
           if (!checkContentFalse(pctx, i.seat, i.data, i.night)) return null;

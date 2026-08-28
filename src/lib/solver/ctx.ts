@@ -35,6 +35,11 @@ export function isNdPoisoned(ctx: Ctx, seat: Seat, night: number): boolean {
   return ctx.sc.nodashiiPoisoned?.[night]?.has(seat) ?? false;
 }
 
+/** 푸카의 독 — 밤 night에 받고 있었을 수 있는가 (관대 집합, timeline이 계산) */
+export function isPukkaPoisoned(ctx: Ctx, seat: Seat, night: number): boolean {
+  return ctx.sc.pukkaPoisoned?.[night]?.has(seat) ?? false;
+}
+
 export function isPoisoned(ctx: Ctx, seat: Seat, night: number): boolean {
   return ctx.poison !== null && ctx.poison[night] === seat;
 }
@@ -149,6 +154,12 @@ export function wakes(ctx: Ctx, seat: Seat, night: number): boolean {
       if (ctx.sched.executedOnDay(night - 1) !== null) return false;
       // 가짜 죽음 후에도 (등록상 사망) 비밀리에 계속 깨어나 킬한다
       if (ctx.sc.zombuulFakeDeadAt != null && ctx.sc.zombuulFakeDeadAt < night) return true;
+      return aliveStart[seat];
+    }
+    case "pukka": {
+      // 밤1부터 깨어나 중독 대상을 고른다 (킬은 밤2부터) — 봉쇄 밤은 예외
+      if (ctx.sc.exorcistBlocked?.has(night)) return false;
+      if (ctx.sc.becameDemonAt.get(seat) === night) return true;
       return aliveStart[seat];
     }
     case "imp":

@@ -24,6 +24,13 @@
 // - 샤바로스는 밤마다 2명을 고르는데 시신도 고를 수 있어 실제 사망 0~2건이 전부 설명
 //   없이 성립한다 (관대한 방향). 역류(부활)는 이벤트로 표현 불가 — "might"라 비발동 ∃가
 //   항상 성립하고, 역류가 발동한 게임은 입력될 수 없다.
+// - 푸카: 밤 n의 킬 = 밤 n-1의 중독 선택 (밤1부터 선택, 밤2부터 킬). 킬에는 선택 밤과
+//   실행 밤 모두의 멀쩡함이 강제된다. 킬 부재는 선택 실패(군인·수도사는 선택 밤 기준)·
+//   선택 무효(그 밤 비정상)·그 낮 처형자가 선택이었던 경우(공짜)·죽음 단계 무산(실행 밤
+//   비정상 — 알 수 없는 중독 생존자가 남는 '누수')으로 설명한다. 푸카 독을 받았을 수
+//   있는 좌석은 관대 집합으로 계산한다 (nodashiiPoisoned 선례 — require 만족·forbid
+//   불파괴). 누수의 독 지속은 그 두 밤까지로 한정하고, 봉쇄·무산이 다음 밤 선택 부재로
+//   이어지는 연쇄는 강제하지 않는다 (전부 세계를 늘리는 관대한 방향).
 // - 좀부울: 직전 낮에 처형 사망이 있으면 깨어나지 않는다 (그 밤 킬 불가·킬 부재 공짜).
 //   첫 죽음은 가짜 — 이벤트는 그대로 두되(등록상 사망) 비밀리에 생존해 계속 킬하고,
 //   탕녀 승계도 발동하지 않는다. 죽는 순간 중독됐다면 정말로 죽는다 (그쪽만 승계 분기).
@@ -137,6 +144,13 @@ export interface DemonScenario {
    * 만족시키지만, 정상 동작 강제(forbid)를 깨뜨리지는 않는다 — 확실한 중독이 아니기 때문.
    */
   nodashiiPoisoned?: Set<Seat>[];
+  /**
+   * 푸카 세계: 밤 n에 푸카의 독을 받고 '있었을 수 있는' 좌석들 (관대 집합).
+   * 킬 희생자(선택 밤·실행 밤), 그 낮 처형된 선택, 무산 누수(생존자 전원), 마지막 밤의
+   * 새 선택(결과가 아직 없어 생존자 누구든)을 담는다. nodashiiPoisoned와 같은 규약 —
+   * 정보 무제약, require 만족, forbid 불파괴.
+   */
+  pukkaPoisoned?: Set<Seat>[];
 }
 
 /**
@@ -172,6 +186,8 @@ interface St {
   poChoseNone: boolean;
   /** 좀부울 전용: 가짜 죽음 시점 (밤 n = n, 낮 d = d + 0.5). null = 아직 안 죽음 */
   zombuulFakeDeadAt: number | null;
+  /** 푸카 전용: 밤별 '푸카 독을 받았을 수 있는' 좌석 (관대 집합 — pukkaPoisoned로 방출) */
+  pukkaMaybe: Map<number, Set<Seat>>;
   /** 할머니의 실제 손주. null = 미확정 (밤1 정보가 취함/중독이었거나 주장이 없음) */
   grandchild: Seat | null;
 }
@@ -192,8 +208,14 @@ function cloneSt(s: St): St {
     foolDodgeUsed: s.foolDodgeUsed,
     poChoseNone: s.poChoseNone,
     zombuulFakeDeadAt: s.zombuulFakeDeadAt,
+    pukkaMaybe: new Map([...s.pukkaMaybe].map(([k, v]) => [k, new Set(v)])),
     grandchild: s.grandchild,
   };
+}
+
+function pukkaMark(st: St, night: number, seat: Seat) {
+  if (!st.pukkaMaybe.has(night)) st.pukkaMaybe.set(night, new Set());
+  st.pukkaMaybe.get(night)!.add(seat);
 }
 
 function countTrue(arr: boolean[]): number {
@@ -320,6 +342,7 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
   function require_(st: St, night: number, seat: Seat): boolean {
     if (sweetTarget === seat && sweetSince <= night) return true; // 이미 취해 있다 — 독살 불요
     if (demonRole === "nodashii" && ndPoisonedAt(st.demonNights[night] ?? st.demon, night).has(seat)) return true;
+    if (demonRole === "pukka" && st.pukkaMaybe.get(night)?.has(seat)) return true;
     if (!hasPoisoner) return false;
     if (sweetTarget === poisonerSeat && sweetSince <= night) return false; // 취한 독살범의 독은 듣지 않는다
     if (st.minstrelNights.includes(night)) return false; // 그 밤엔 독살범도 취해 있다
@@ -328,6 +351,24 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
     if (st.forbidden.get(night)?.has(seat)) return false;
     st.required.set(night, seat);
     return true;
+  }
+
+  /**
+   * 푸카 세계의 밤별 '독을 받았을 수 있는' 좌석 (finish 시점). 진행 중 표시한 집합에
+   * 마지막 밤의 새 선택을 더한다 — 그 결과(다음 밤 사망)가 아직 미래라 생존자 누구든
+   * 선택이었을 수 있다. 봉쇄 밤은 선택 자체가 없고 음유시인 밤은 선택이 무효라 제외.
+   */
+  function pukkaSets(st: St): Set<Seat>[] {
+    const out = Array.from({ length: pz.nights + 1 }, (_, n) => new Set(st.pukkaMaybe.get(n) ?? []));
+    const last = pz.nights;
+    const demonAtLast = st.demonNights[last] ?? st.demon;
+    if (sched.aliveAtNightStart(last)[demonAtLast]
+        && !st.exorcistBlocked.includes(last) && !st.minstrelNights.includes(last)) {
+      sched.aliveAtNightStart(last).forEach((a, x) => {
+        if (a && x !== demonAtLast) out[last].add(x);
+      });
+    }
+    return out;
   }
 
   /** 밤 night에 seat의 능력 정상 동작을 강제 (취하지도 독살되지도 않음). 모순이면 false */
@@ -373,6 +414,7 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
         ? Array.from({ length: pz.nights + 1 }, (_, n) =>
             n === 0 ? new Set<Seat>() : ndPoisonedAt(st.demonNights[n] ?? st.demon, n))
         : undefined,
+      pukkaPoisoned: demonRole === "pukka" ? pukkaSets(st) : undefined,
     });
   }
 
@@ -516,6 +558,13 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
     // 봉쇄 가능: 지목 기록이 악마를 가리키거나, 기록이 없어 ∃ 지목=악마
     const exoCanBlock = exoAlive && (exoTarget === demon || exoData === undefined);
 
+    // 푸카: 밤 night의 킬/킬 부재는 밤 night-1의 중독 선택에서 온다 —
+    // 군인·수도사 보호 판정은 선택 밤 기준 (수도사는 밤2부터 행동)
+    const pkPrev = night - 1;
+    const pkMonkAlive = demonRole === "pukka" && monkSeat >= 0 && pkPrev >= 2 && sched.aliveAtNightStart(pkPrev)[monkSeat];
+    const pkMonkData = pkMonkAlive ? actionData(monkSeat, "monk", pkPrev) : undefined;
+    const pkMonkTarget = pkMonkData && "target" in pkMonkData ? pkMonkData.target : null;
+
     // 도박사의 이 밤 추측 기록
     const gambleData = gamblerSeat >= 0 && aliveStart[gamblerSeat] ? actionData(gamblerSeat, "gambler", night) : undefined;
     const gamble = gambleData && gambleData.type === "gambler" ? gambleData : undefined;
@@ -638,13 +687,21 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
         } else if (demonKills.length > 0) {
           impVariants.push((s) => {
             if (!forbid_(s, night, demon)) return false; // 킬이 성공했으니 데몬은 중독 아님
+            // 푸카의 킬은 선택 밤에도 멀쩡했어야 성립한다 (비정상이면 선택 무효 → 킬 없음)
+            if (demonRole === "pukka" && !forbid_(s, pkPrev, demon)) return false;
             // 봉쇄됐어야 하는 밤에 킬이 났다 → 구마사제가 중독됐던 것
             if (exoTarget === demon && !require_(s, night, exoSeat)) return false;
             for (const k of demonKills) {
+              if (demonRole === "pukka") {
+                // 군인·수도사 보호는 선택 밤 기준으로 뚫려야 한다 → 그 밤의 중독 강제
+                if (k === soldierSeat && !require_(s, pkPrev, soldierSeat)) return false;
+                if (pkMonkTarget !== null && pkMonkTarget === k && !require_(s, pkPrev, monkSeat)) return false;
+              } else {
               // 멀쩡한 군인은 데몬에게 죽지 않는다
               if (k === soldierSeat && !require_(s, night, soldierSeat)) return false;
               // 수도사가 이 대상을 보호했다고 기록했다 → 수도사가 중독됐던 것
               if (monkTarget !== null && monkTarget === k && !require_(s, night, monkSeat)) return false;
+              }
               // 확실한 찻집 여인 보호를 뚫었다 → 찻집 여인의 중독
               if (tlForced(aliveStart, k) && !require_(s, night, tealadySeat)) return false;
               // 회피 미사용 어릿광대를 죽였다 → 어릿광대의 중독
@@ -653,6 +710,10 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
               if (s.grandchild !== null && k === s.grandchild && gmSeat >= 0 && aliveStart[gmSeat] && !deaths.includes(gmSeat)) {
                 if (!require_(s, night, gmSeat)) return false;
               }
+            }
+            // 푸카의 희생자는 선택 밤부터 죽는 밤까지 푸카 독을 받고 있었다 (죽기 직전 정보가 중독 정보)
+            if (demonRole === "pukka") {
+              for (const k of demonKills) { pukkaMark(s, pkPrev, k); pukkaMark(s, night, k); }
             }
             s.poChoseNone = false; // Po: 대상을 골랐다 — '아무도 안 함'이 아니다
             return true;
@@ -678,7 +739,44 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
               impVariants.push((s) => { s.poChoseNone = true; return true; });
             }
           }
-          if (demonRole !== "po" || !st.poChoseNone) {
+          if (demonRole === "pukka") {
+            // 밤 night의 킬 부재 = 밤 night-1의 선택이 죽음으로 이어지지 않았다
+            // (0) 이 데몬은 그 밤에 선택한 적이 없다 — 승계 직후·봉쇄 밤·음유시인 밤 (공짜)
+            if ((st.became.get(demon) ?? 0) > pkPrev
+              || st.exorcistBlocked.includes(pkPrev) || st.minstrelNights.includes(pkPrev)) {
+              impVariants.push(() => true);
+            }
+            // (1) 선택 무효 — 선택 밤에 푸카가 비정상이라 아무도 중독되지 않았다
+            if (hasPoisoner) impVariants.push((s) => require_(s, pkPrev, demon));
+            // (2) 선택 실패 — 멀쩡한 군인을 골랐다 / 수도사가 선택 대상을 보호했다 (선택 밤 기준)
+            if (soldierSeat >= 0 && sched.aliveAtNightStart(pkPrev)[soldierSeat]) {
+              impVariants.push((s) => forbid_(s, pkPrev, soldierSeat));
+            }
+            if (pkMonkAlive && (pkMonkTarget === null || sched.aliveAtNightStart(pkPrev)[pkMonkTarget])) {
+              impVariants.push((s) => forbid_(s, pkPrev, monkSeat));
+            }
+            // (3) 그 낮 처형자가 선택이었다 — 죽기 전에 처형됐다 (공짜, 그 좌석은 중독됐던 것)
+            const executee = sched.executedOnDay(pkPrev);
+            if (executee !== null) {
+              impVariants.push((s) => {
+                if (!forbid_(s, pkPrev, demon)) return false; // 선택이 유효했어야 중독됐다
+                pukkaMark(s, pkPrev, executee);
+                return true;
+              });
+            }
+            // (4) 죽음 단계 무산 — 실행 밤에 푸카가 비정상. 유효한 선택이 죽지 않고 남는다
+            //     (누수: 누가 중독됐는지 알 수 없다 — 그 두 밤의 관대 집합에 생존자 전원)
+            if (hasPoisoner) {
+              impVariants.push((s) => {
+                if (!require_(s, night, demon)) return false;
+                if (!forbid_(s, pkPrev, demon)) return false;
+                sched.aliveAtNightStart(pkPrev).forEach((a, x) => {
+                  if (a && x !== demon) { pukkaMark(s, pkPrev, x); pukkaMark(s, night, x); }
+                });
+                return true;
+              });
+            }
+          } else if (demonRole !== "po" || !st.poChoseNone) {
             // '선택은 했으나 실패' 계열 — Po라면 다음 밤 3킬이 열리지 않는다
             if (hasPoisoner) impVariants.push((s) => require_(s, night, demon));
             if (soldierSeat >= 0 && aliveStart[soldierSeat]) {
@@ -780,6 +878,7 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
     foolDodgeUsed: false,
     poChoseNone: false,
     zombuulFakeDeadAt: null,
+    pukkaMaybe: new Map(),
     grandchild: null,
   };
 
