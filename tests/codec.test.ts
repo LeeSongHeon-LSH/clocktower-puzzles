@@ -124,6 +124,7 @@ describe("검증 — 신뢰할 수 없는 입력", () => {
       { type: "slayerShot", day: 1, seat: 0, target: 1, died: false },
       { type: "nomination", day: 1, nominator: 2, nominee: 3 },
       { type: "virginTrigger", day: 1, nominator: 4, nominee: 3 },
+      { type: "vote", day: 1, seat: 2 },
     ];
     const round = await decodePuzzle(await encodePuzzle(validateShared({ ...b, events })));
     expect(round.events).toEqual(events);

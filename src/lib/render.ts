@@ -46,10 +46,20 @@ export function renderInfo(data: InfoData): string {
       return `${seatName(data.target)}를 악마로부터 보호했다`;
     case "exorcist":
       return `${seatName(data.target)}를 지목했다 (악마라면 그 밤 깨어나지 못한다)`;
+    case "sailor":
+      return `${seatName(data.target)}를 골랐다 — 나 또는 그가 아침까지 취한다`;
+    case "innkeeper":
+      return `${pair(...data.targets)}를 보호했다 — 둘은 오늘 밤 죽지 않고, 하나가 취한다`;
+    case "courtier":
+      return `${roleLabel(data.role)}을(를) 골랐다 — 그 역할이 3일 밤낮 취한다`;
     case "dreamer":
       return `${seatName(data.target)}는 ${roleLabel(data.goodRole)} 아니면 ${roleLabel(data.evilRole)}이다`;
     case "oracle":
       return `죽은 플레이어 중 악인: ${data.count}명`;
+    case "flowergirl":
+      return data.yes ? "어제 악마가 투표했다" : "어제 악마는 투표하지 않았다";
+    case "towncrier":
+      return data.yes ? "어제 하수인이 지명했다" : "어제 하수인은 지명하지 않았다";
     case "grandmother":
       return `내 손주는 ${seatName(data.target)} — ${roleLabel(data.shownRole)}이다`;
     case "gambler":

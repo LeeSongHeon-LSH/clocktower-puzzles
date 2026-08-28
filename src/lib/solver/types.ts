@@ -119,6 +119,9 @@ export const SOLVER_ROLES: readonly RoleId[] = [
   "imp",
   // ── BMR ──
   "grandmother", // 밤1 손주 정보 + 손주가 임프에게 죽으면 연쇄 사망
+  "sailor", // 밤마다 나/대상 중 하나가 취한다 (∃ 분기) — 멀쩡하면 죽지 않는다 (암살자는 관통)
+  "innkeeper", // 밤마다 2명 보호 + 그중 1명 취함 (∃ 분기) — 행동 기록이 취함 좌석을 확정한다
+  "courtier", // 1회, 역할 하나를 3밤 3낮 취하게 한다 — 데몬을 고르면 킬 실패가 설명된다
   "gambler", // 밤마다 (좌석, 역할) 추측 — 틀리면 죽는다. 추측 기록이 곧 단서
   "minstrel", // 하수인이 처형돼 죽으면 다음 밤 전원 취함 (그 밤엔 킬도 정보도 없다)
   "tealady", // 살아 있는 양옆 이웃이 모두 선하면 그들은 죽지 않는다
@@ -144,6 +147,8 @@ export const SOLVER_ROLES: readonly RoleId[] = [
   "klutz", // 죽으면 1명 공개 지목, 악이면 패배 — 지목 정보가 스키마에 없어 제약 없음 (구성 전용)
   "eviltwin", // 선한 쌍둥이와 서로를 안다 — 진행 중 게임에 관측 제약 없음 (구성 전용, 밤에 깨지 않음)
   "witch", // 밤마다 저주 — 저주 사망(낮, 지명 시)은 이벤트로 표현 불가, 기상 전용
+  "flowergirl", // 밤마다 어제 악마가 투표했는지 배운다 — '아니오'가 기록된 투표자를 제약
+  "towncrier", // 밤마다 어제 하수인이 지명했는지 배운다 — '아니오'가 기록된 지명자를 제약
   "vortox", // 임프 대체 데몬: 마을 사람 정보가 전부 거짓 + 처형 없는 낮이 지나면 악의 승리
   "fanggu", // 임프 대체 데몬: 첫 외부인 킬이 점프가 된다 — 외부인이 팡 구가 되고 원래 팡 구가 죽는다 (1회). [+1 외부인]
   "vigormortis", // 임프 대체 데몬: 죽인 하수인이 능력을 유지하고 마을 사람 이웃 1명을 계속 중독. [−1 외부인]
@@ -181,9 +186,16 @@ export type InfoData =
   // 행동 기록 (정보가 아니라 선택의 기록 — 참/거짓 판정 대상이 아니고 제약은 timeline이 소비)
   | { type: "monk"; target: Seat }
   | { type: "exorcist"; target: Seat }
+  | { type: "sailor"; target: Seat } // 밤마다: 나 또는 대상이 취한다 (어느 쪽인지는 텔러 몫 ∃)
+  | { type: "innkeeper"; targets: [Seat, Seat] } // 밤마다(밤2부터): 둘은 그 밤 죽지 않고, 하나가 취한다
+  | { type: "courtier"; role: RoleId } // 1회: 그 역할(토큰)이 3밤 3낮 취한다
   // 추가 정보 역할
   | { type: "dreamer"; target: Seat; goodRole: RoleId; evilRole: RoleId }
   | { type: "oracle"; count: number }
+  // 밤 n의 정보는 낮 n-1을 가리킨다. "예"는 미기록 투표/지명이 있을 수 있어 항상 성립하고
+  // (관대한 방향), "아니오"가 그날 기록된 투표자/지명자의 등록을 제약한다.
+  | { type: "flowergirl"; yes: boolean } // 어제 악마가 투표했는가
+  | { type: "towncrier"; yes: boolean } // 어제 하수인이 지명했는가
   | { type: "grandmother"; target: Seat; shownRole: RoleId }
   | { type: "gambler"; target: Seat; role: RoleId } // 행동+추측 기록 (틀리면 죽었을 것)
   | { type: "sage"; targets: [Seat, Seat] };
@@ -217,7 +229,11 @@ export type GameEvent =
   | { type: "nomination"; day: number; nominator: Seat; nominee: Seat }
   // 처녀 발동: 지명자가 그 자리에서 즉시 처형됐다 — 그날의 처형으로 취급된다.
   // 지명 대상이 멀쩡한 처녀(첫 지명)이고 지명자가 마을 사람으로 등록됨이 강제된다.
-  | { type: "virginTrigger"; day: number; nominator: Seat; nominee: Seat };
+  | { type: "virginTrigger"; day: number; nominator: Seat; nominee: Seat }
+  // 투표 기록: seat가 그 낮 투표에 손을 들었다 (공개 관측). **부분 기록**이다 —
+  // 기록에 없다고 투표하지 않은 것은 아니다. 유령 투표가 있어 죽은 좌석도 가능하다.
+  // 꽃파는 소녀의 "악마 투표 없음"이 기록된 투표자를 물어뜯는 근거가 된다.
+  | { type: "vote"; day: number; seat: Seat };
 
 /** 이벤트에서 죽은 좌석 하나 (지명·불발 총격은 null) */
 export function eventDeadSeat(e: GameEvent): Seat | null {
@@ -230,6 +246,7 @@ export function eventDeadSeat(e: GameEvent): Seat | null {
     case "virginTrigger":
       return e.nominator;
     case "nomination":
+    case "vote":
       return null;
   }
 }

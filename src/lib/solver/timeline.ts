@@ -89,6 +89,9 @@ export class Schedule {
           slain.push(ev.target);
           this.slainByDay.set(ev.day, slain);
         }
+      } else if (ev.type === "vote") {
+        // 투표는 죽음을 만들지 않고, 유령 투표가 있어 죽은 좌석도 가능하다 — 범위만 검증
+        if (ev.day < 1 || ev.day > pz.nights) throw new Error(`투표 시점이 범위 밖: 낮 ${ev.day}`);
       } else {
         if (ev.day < 1 || ev.day > pz.nights) throw new Error(`지명 시점이 범위 밖: 낮 ${ev.day}`);
         if (ev.nominator === ev.nominee) throw new Error(`낮 ${ev.day}: 자기 자신을 지명할 수 없습니다`);
@@ -212,6 +215,11 @@ export interface DemonScenario {
    * 정보 무제약, require 만족, forbid 불파괴.
    */
   pukkaPoisoned?: Set<Seat>[];
+  /**
+   * 이동식 취함 원천(선원·여관주인·대신)의 확정 취함: extraDrunk[n] = 밤 n(과 낮 n)에
+   * 취해 있던 좌석들. 이 시나리오(분기) 안에서는 확실하다 — 그 좌석의 그 밤 정보는 무제약이다.
+   */
+  extraDrunk?: Set<Seat>[];
   /** 비고르모르티스 세계: 좌석 → 그 밤부터 죽었지만 능력을 유지한다 (비고르모르티스의 킬) */
   vigorKeptSince?: Map<Seat, number>;
   /**
@@ -270,6 +278,11 @@ interface St {
   slayerUsed: boolean;
   /** 처녀(실제)가 첫 지명을 받아 능력이 소진됐는가 (중독 상태였어도 소진) */
   virginSpent: boolean;
+  /**
+   * 이동식 취함 원천(선원·여관주인·대신)의 **확정** 취함: 밤 n → 그 밤(과 다음 낮) 취한 좌석들.
+   * 이 분기(St) 안에서는 확실하다 — require_를 만족시키고 forbid_를 깨뜨린다.
+   */
+  drunkNights: Map<number, Set<Seat>>;
 }
 
 function cloneSt(s: St): St {
@@ -296,7 +309,13 @@ function cloneSt(s: St): St {
     vigorPoisonMaybe: new Map(s.vigorPoisonMaybe),
     slayerUsed: s.slayerUsed,
     virginSpent: s.virginSpent,
+    drunkNights: new Map([...s.drunkNights].map(([k, v]) => [k, new Set(v)])),
   };
+}
+
+function markDrunk(st: St, night: number, seat: Seat) {
+  if (!st.drunkNights.has(night)) st.drunkNights.set(night, new Set());
+  st.drunkNights.get(night)!.add(seat);
 }
 
 function pukkaMark(st: St, night: number, seat: Seat) {
@@ -370,6 +389,15 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
   const tinkerSeat = assignment.indexOf("tinker");
   const virginSeat = assignment.indexOf("virgin");
   const slayerSeat = assignment.indexOf("slayer");
+  const sailorSeat = assignment.indexOf("sailor");
+  const innSeat = assignment.indexOf("innkeeper");
+  const courtierSeat = assignment.indexOf("courtier");
+  // 대신의 1회 행동 기록 (밤, 역할) — 주장에서 찾는다 (진실 주장 규약)
+  const courtierRec = (() => {
+    if (courtierSeat < 0) return null;
+    const rec = claimBySeat[courtierSeat]?.info.find((i) => i.data?.type === "courtier");
+    return rec?.data?.type === "courtier" ? { night: rec.night, role: rec.data.role } : null;
+  })();
   const mcSeat = assignment.indexOf("moonchild");
   const gossipSeat = assignment.indexOf("gossip");
   const mmSeat = assignment.indexOf("mastermind");
@@ -378,7 +406,7 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
   const foolSeat = assignment.indexOf("fool");
 
   /** 좌석의 주장에서 특정 밤의 행동 기록 데이터 */
-  function actionData(seat: Seat, type: "monk" | "exorcist" | "gambler", night: number) {
+  function actionData(seat: Seat, type: "monk" | "exorcist" | "gambler" | "sailor" | "innkeeper", night: number) {
     return claimBySeat[seat]?.info.find((i) => i.night === night && i.data?.type === type)?.data;
   }
 
@@ -456,6 +484,7 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
   /** 밤 night에 seat의 능력 비정상 동작을 강제 (스위트하트 취함, 노 다시 독, 또는 독살). 모순이면 false */
   function require_(st: St, night: number, seat: Seat): boolean {
     if (sweetTarget === seat && sweetSince <= night) return true; // 이미 취해 있다 — 독살 불요
+    if (st.drunkNights.get(night)?.has(seat)) return true; // 이동식 취함 원천에 이미 취해 있다
     if (demonRole === "nodashii" && ndPoisonedAt(st.demonNights[night] ?? st.demon, night).has(seat)) return true;
     if (demonRole === "pukka" && st.pukkaMaybe.get(night)?.has(seat)) return true;
     if (demonRole === "vigormortis" && (st.vigorPoisonMaybe.get(seat) ?? Infinity) <= night) return true;
@@ -490,6 +519,7 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
   /** 밤 night에 seat의 능력 정상 동작을 강제 (취하지도 독살되지도 않음). 모순이면 false */
   function forbid_(st: St, night: number, seat: Seat): boolean {
     if (sweetTarget === seat && sweetSince <= night) return false; // 취해 있어 정상 동작 불가
+    if (st.drunkNights.get(night)?.has(seat)) return false; // 이동식 취함 원천에 취해 있다
     if (st.required.get(night) === seat) return false;
     if (!st.forbidden.has(night)) st.forbidden.set(night, new Set());
     st.forbidden.get(night)!.add(seat);
@@ -532,6 +562,9 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
             n === 0 ? new Set<Seat>() : ndPoisonedAt(st.demonNights[n] ?? st.demon, n))
         : undefined,
       pukkaPoisoned: demonRole === "pukka" ? pukkaSets(st) : undefined,
+      extraDrunk: st.drunkNights.size > 0
+        ? Array.from({ length: pz.nights + 1 }, (_, n) => new Set(st.drunkNights.get(n) ?? []))
+        : undefined,
       vigorKeptSince: demonRole === "vigormortis" ? new Map(st.vigorKept) : undefined,
       vigorPoisoned: demonRole === "vigormortis"
         ? Array.from({ length: pz.nights + 1 }, (_, n) => {
@@ -689,6 +722,8 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
     const s = br.st;
     // 멀쩡한 성자 처형 = 게임 종료 → 처형된 성자는 그 밤 독살됐어야 한다 (데몬이 됐다면 성자가 아니다)
     if (assignment[executed] === "saint" && !s.became.has(executed) && !require_(s, day, executed)) continue;
+    // 멀쩡한 선원은 처형으로도 죽지 않는다 → 취했거나 중독됐어야 한다 (그 밤의 취함이 낮까지 지속)
+    if (executed === sailorSeat && !require_(s, day, executed)) continue;
     // 보호가 확실한 찻집 여인의 이웃은 처형으로도 죽지 않는다 → 찻집 여인의 중독 강제
     if (tlForced(aliveAtDay, executed, s.became) && !require_(s, day, tealadySeat)) continue;
     // 회피를 쓰지 않은 어릿광대는 처형으로 죽지 않는다 → 그 밤의 중독 강제
@@ -729,6 +764,96 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
   /** demonless: 마스터마인드 연장 밤 — 데몬이 죽어 있어 데몬 킬도, 킬 부재 설명도 없다 */
   function doNight(st: St, night: number, trigger: Trigger, minstrelActive: boolean, demonless = false) {
     st.demonNights[night] = st.demon;
+    // 이동식 취함 원천(선원·여관주인·대신)의 선택을 분기로 열거한 뒤 밤을 진행한다
+    for (const s of drunkSourceBranches(st, night, minstrelActive)) {
+      doNightRest(s, night, trigger, minstrelActive, demonless);
+    }
+  }
+
+  /**
+   * 밤 night의 이동식 취함 분기들. 각 분기의 취함은 **확정**이다 (require 만족·forbid 파괴).
+   * - 선원: (자신이 취함 — 공짜) / (멀쩡 — 기록된 대상이 확정 취함). 중독된 선원(아무도 안 취함)은
+   *   관측상 '자신이 취함'과 같아 별도 분기가 없다.
+   * - 여관주인: 기록된 두 대상 중 하나가 취함(여관주인 멀쩡 강제 — 보호도 확실해진다) / 무효(중독 강제)
+   * - 대신: 기록된 역할 토큰의 좌석이 3밤 취함(멀쩡 강제) / 무효(중독 강제)
+   * 빈 배열 = 이 세계는 기록과 모순 (죽은 좌석을 골랐다 등).
+   */
+  function drunkSourceBranches(st: St, night: number, minstrelActive: boolean): St[] {
+    if (minstrelActive) return [st]; // 전원 취함 밤 — 원천 분기가 무의미하다
+    const aliveStart = sched.aliveAtNightStart(night);
+    let branches: St[] = [st];
+
+    if (sailorSeat >= 0 && aliveStart[sailorSeat]) {
+      const rec = actionData(sailorSeat, "sailor", night);
+      const target = rec?.type === "sailor" ? rec.target : null;
+      if (target !== null && !aliveStart[target]) return []; // 죽은 좌석을 고를 수 없다
+      branches = branches.flatMap((base) => {
+        const out: St[] = [];
+        const self = cloneSt(base);
+        markDrunk(self, night, sailorSeat);
+        out.push(self);
+        const sober = cloneSt(base);
+        if (target !== null) {
+          if (forbid_(sober, night, sailorSeat)) { // 멀쩡해야 대상이 취한다
+            markDrunk(sober, night, target);
+            out.push(sober);
+          }
+        } else {
+          out.push(sober); // 기록 없는 밤 — 대상 미상, 취함 표시 없이 진행 (관대한 방향)
+        }
+        return out;
+      });
+    }
+
+    if (innSeat >= 0 && night >= 2 && aliveStart[innSeat]) {
+      const rec = actionData(innSeat, "innkeeper", night);
+      if (rec?.type === "innkeeper") {
+        const [a, b] = rec.targets;
+        if (!aliveStart[a] || !aliveStart[b]) return []; // 죽은 좌석을 고를 수 없다
+        branches = branches.flatMap((base) => {
+          const out: St[] = [];
+          for (const t of a === b ? [a] : [a, b]) {
+            const c = cloneSt(base);
+            if (forbid_(c, night, innSeat)) { // 멀쩡해야 취함(과 보호)이 성립한다
+              markDrunk(c, night, t);
+              out.push(c);
+            }
+          }
+          const voided = cloneSt(base);
+          if (require_(voided, night, innSeat)) out.push(voided); // 무효 — 보호도 취함도 없다
+          return out;
+        });
+      }
+      // 기록 없는 밤: 대상 미상 — 취함·보호 표시 없이 진행 (관대한 방향)
+    }
+
+    if (courtierRec !== null && courtierRec.night === night
+      && aliveStart[courtierSeat] && !st.became.has(courtierSeat)) {
+      const chosen = courtierRec.role;
+      branches = branches.flatMap((base) => {
+        const out: St[] = [];
+        const eff = cloneSt(base);
+        if (forbid_(eff, night, courtierSeat)) {
+          // 그 역할 토큰의 좌석이 이 밤부터 3밤 3낮 취한다 (게임에 없으면 소진만)
+          let targetSeat = -1;
+          for (let x = 0; x < assignment.length; x++) {
+            if (tokenAt(base.became, x, night) === chosen) { targetSeat = x; break; }
+          }
+          if (targetSeat >= 0) {
+            for (let k = 0; k < 3 && night + k <= pz.nights; k++) markDrunk(eff, night + k, targetSeat);
+          }
+          out.push(eff);
+        }
+        const voided = cloneSt(base);
+        if (require_(voided, night, courtierSeat)) out.push(voided); // 무효 — 아무도 안 취한다
+        return out;
+      });
+    }
+
+    return branches;
+  }
+
+  function doNightRest(st: St, night: number, trigger: Trigger, minstrelActive: boolean, demonless = false) {
     const deaths = sched.diedAtNight(night);
     if (night === 1) {
       // 첫 밤에는 아무 킬 수단도 작동하지 않는다
@@ -773,6 +898,10 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
     const exoAlive = exoSeat >= 0 && aliveStart[exoSeat];
     const exoData = exoAlive ? actionData(exoSeat, "exorcist", night) : undefined;
     const exoTarget = exoData && "target" in exoData ? exoData.target : null;
+    // 여관주인의 이 밤 보호 대상 (기록이 있을 때만 — 없으면 보호를 강제하지 않는다, 관대한 방향)
+    const innRec = innSeat >= 0 && night >= 2 && aliveStart[innSeat] ? actionData(innSeat, "innkeeper", night) : undefined;
+    const innProtected: [Seat, Seat] | null = innRec?.type === "innkeeper" ? innRec.targets : null;
+    const sailorAlive = sailorSeat >= 0 && aliveStart[sailorSeat];
     // 봉쇄 가능: 지목 기록이 악마를 가리키거나, 기록이 없어 ∃ 지목=악마
     const exoCanBlock = exoAlive && (exoTarget === demon || exoData === undefined);
 
@@ -825,6 +954,10 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
         const sideEffects = (killedByDemonlike: boolean): Mut => (s) => {
           // 찻집 여인의 확실한 보호를 뚫은 죽음 → 찻집 여인의 중독 (암살자는 보호 무시)
           if (tlForced(aliveStart, d, s.became) && !require_(s, night, tealadySeat)) return false;
+          // 멀쩡한 선원은 죽지 않는다 → 취했거나(자기 선택) 중독됐어야 한다 (암살자는 관통)
+          if (d === sailorSeat && !require_(s, night, sailorSeat)) return false;
+          // 여관주인이 보호한 좌석의 죽음 → 여관주인이 비정상이었어야 한다 (암살자는 관통)
+          if (innProtected !== null && innProtected.includes(d) && !require_(s, night, innSeat)) return false;
           // 회피 미사용 어릿광대의 죽음 → 그 밤 중독 (암살자·자기 죽음 계열은 회피 무관)
           if (killedByDemonlike && d === foolSeat && !s.foolDodgeUsed && !require_(s, night, foolSeat)) return false;
           return true;
@@ -924,6 +1057,10 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
               // 수도사가 이 대상을 보호했다고 기록했다 → 수도사가 중독됐던 것
               if (monkTarget !== null && monkTarget === k && !require_(s, night, monkSeat)) return false;
               }
+              // 멀쩡한 선원은 데몬에게도 죽지 않는다 → 취함/중독 강제
+              if (k === sailorSeat && !require_(s, night, sailorSeat)) return false;
+              // 여관주인이 보호한 좌석은 그 밤 죽지 않는다 → 여관주인 비정상 강제
+              if (innProtected !== null && innProtected.includes(k) && !require_(s, night, innSeat)) return false;
               // 팡 구: 점프 미사용 상태에서는 외부인이 킬로 죽을 수 없다 — 첫 외부인 공격은
               // 점프가 된다 (은둔자는 하수인 오등록으로 정상 사망 가능 ∃)
               if (demonRole === "fanggu" && !s.fangGuJumpUsed) {
@@ -1011,13 +1148,18 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
               impVariants.push(() => true);
             }
             // (1) 선택 무효 — 선택 밤에 푸카가 비정상이라 아무도 중독되지 않았다
-            if (hasPoisoner) impVariants.push((s) => require_(s, pkPrev, demon));
+            impVariants.push((s) => require_(s, pkPrev, demon)); // 독살 또는 이동식 취함 — require_가 원천을 검사한다
             // (2) 선택 실패 — 멀쩡한 군인을 골랐다 / 수도사가 선택 대상을 보호했다 (선택 밤 기준)
             if (soldierSeat >= 0 && sched.aliveAtNightStart(pkPrev)[soldierSeat]) {
               impVariants.push((s) => forbid_(s, pkPrev, soldierSeat));
             }
             if (pkMonkAlive && (pkMonkTarget === null || sched.aliveAtNightStart(pkPrev)[pkMonkTarget])) {
               impVariants.push((s) => forbid_(s, pkPrev, monkSeat));
+            }
+            // (2') 죽음 저지 — 멀쩡한 선원/여관주인 보호가 실행 밤의 죽음을 막았다
+            if (sailorAlive) impVariants.push((s) => forbid_(s, night, sailorSeat));
+            if (innSeat >= 0 && night >= 2 && aliveStart[innSeat]) {
+              impVariants.push((s) => forbid_(s, night, innSeat));
             }
             // (3) 그 낮 처형자가 선택이었다 — 죽기 전에 처형됐다 (공짜, 그 좌석은 중독됐던 것)
             const executee = sched.executedOnDay(pkPrev);
@@ -1030,7 +1172,7 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
             }
             // (4) 죽음 단계 무산 — 실행 밤에 푸카가 비정상. 유효한 선택이 죽지 않고 남는다
             //     (누수: 누가 중독됐는지 알 수 없다 — 그 두 밤의 관대 집합에 생존자 전원)
-            if (hasPoisoner) {
+            {
               impVariants.push((s) => {
                 if (!require_(s, night, demon)) return false;
                 if (!forbid_(s, pkPrev, demon)) return false;
@@ -1042,7 +1184,7 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
             }
           } else if (demonRole !== "po" || !st.poChoseNone) {
             // '선택은 했으나 실패' 계열 — Po라면 다음 밤 3킬이 열리지 않는다
-            if (hasPoisoner) impVariants.push((s) => require_(s, night, demon));
+            impVariants.push((s) => require_(s, night, demon)); // 독살 또는 이동식 취함 — require_가 원천을 검사한다
             if (soldierSeat >= 0 && aliveStart[soldierSeat]) {
               impVariants.push((s) => forbid_(s, night, soldierSeat)); // 데몬이 멀쩡한 군인을 노렸다
             }
@@ -1051,6 +1193,12 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
             }
             if (tlCanProtect) {
               impVariants.push((s) => forbid_(s, night, tealadySeat)); // 보호받는 이웃을 노렸다
+            }
+            if (sailorAlive) {
+              impVariants.push((s) => forbid_(s, night, sailorSeat)); // 멀쩡한 선원을 노렸다
+            }
+            if (innSeat >= 0 && night >= 2 && aliveStart[innSeat]) {
+              impVariants.push((s) => forbid_(s, night, innSeat)); // 여관주인이 데몬의 대상을 보호했다
             }
             if (foolSeat >= 0 && aliveStart[foolSeat] && !st.foolDodgeUsed) {
               impVariants.push((s) => {
@@ -1158,6 +1306,7 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
     vigorPoisonMaybe: new Map(),
     slayerUsed: false,
     virginSpent: false,
+    drunkNights: new Map(),
   };
 
   // 스위트하트 사망 순간의 상태 제약: 취함 발동에는 멀쩡함이, 미발동에는 중독이 필요하다

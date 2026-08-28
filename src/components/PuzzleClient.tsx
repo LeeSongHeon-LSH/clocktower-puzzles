@@ -113,9 +113,15 @@ export function PuzzleClient({ puzzle }: { puzzle: Puzzle }) {
 
   // ── 타임라인: 밤1 → 낮1 → 밤2 → … → 현재 ───────────────────
   const timeline = useMemo(() => {
-    /** 낮 d의 공개 행동 문장들 (이벤트 배열 순서 = 일어난 순서) */
-    const dayLines = (d: number): string[] =>
-      puzzle.events.flatMap((e) => {
+    /** 낮 d의 공개 행동 문장들 (이벤트 배열 순서 = 일어난 순서, 투표는 한 문장으로 묶는다) */
+    const dayLines = (d: number): string[] => {
+      const voters = puzzle.events.filter(
+        (e): e is Extract<GameEvent, { type: "vote" }> => e.type === "vote" && e.day === d,
+      );
+      const voteLine = voters.length > 0
+        ? [`이날 투표에 손을 든 사람: ${voters.map((e) => seatName(e.seat)).join(", ")}.`]
+        : [];
+      return [...voteLine, ...puzzle.events.flatMap((e) => {
         if (e.type === "slayerShot" && e.day === d) {
           return e.died
             ? [`${seatName(e.seat)}가 사냥꾼을 자처하며 ${seatName(e.target)}를 쐈다 — ${seatName(e.target)}가 죽었다!`]
@@ -128,7 +134,8 @@ export function PuzzleClient({ puzzle }: { puzzle: Puzzle }) {
           return [`${seatName(e.nominator)}가 ${seatName(e.nominee)}를 지명한 순간, ${seatName(e.nominator)}가 그 자리에서 처형됐다!`];
         }
         return [];
-      });
+      })];
+    };
 
     const items: { label: string; text: string; kind: "night" | "day" | "now" }[] = [
       { label: "밤 1", text: "마을이 잠들고, 정보 역할들이 깨어났다.", kind: "night" },

@@ -68,6 +68,7 @@ const INFO_ROLES: RoleId[] = [
   "washerwoman", "librarian", "investigator", "chef", "empath", "fortuneteller",
   "undertaker", "ravenkeeper", "clockmaker", "seamstress", "mathematician", "chambermaid",
   "monk", "exorcist", "dreamer", "oracle", "grandmother", "gambler", "sage",
+  "flowergirl", "towncrier", "sailor", "innkeeper", "courtier",
 ];
 
 interface DraftInfo {
@@ -111,6 +112,11 @@ function blankInfo(role: RoleId, night: number, players: number): DraftInfo | nu
     case "grandmother": return { night: 1, data: { type: "grandmother", target: 0, shownRole: "chef" } };
     case "gambler": return { night: Math.max(2, night), data: { type: "gambler", target: 0, role: "chef" } };
     case "sage": return { night: Math.max(2, night), data: { type: "sage", targets: pair } };
+    case "flowergirl": return { night: Math.max(2, night), data: { type: "flowergirl", yes: false } };
+    case "towncrier": return { night: Math.max(2, night), data: { type: "towncrier", yes: false } };
+    case "sailor": return { night, data: { type: "sailor", target: 0 } };
+    case "innkeeper": return { night: Math.max(2, night), data: { type: "innkeeper", targets: pair } };
+    case "courtier": return { night, data: { type: "courtier", role: "imp" } };
     default: return null;
   }
 }
@@ -246,7 +252,7 @@ const CHIP_EXEC_ON = "border-brass bg-brass/15 text-parchment";
 const CHIP_NONE_ON = "border-faded/70 text-parchment";
 
 /** 킬 실패를 설명할 수 있는 역할들 — 솔버의 임프 킬 부재 분기와 같은 목록 (timeline.ts) */
-const KILL_FAIL_ROLES: RoleId[] = ["poisoner", "soldier", "monk", "exorcist", "tealady", "fool", "minstrel"];
+const KILL_FAIL_ROLES: RoleId[] = ["poisoner", "soldier", "monk", "exorcist", "tealady", "fool", "minstrel", "sailor", "innkeeper", "courtier"];
 /** 한 밤 2인 이상 사망을 설명할 수 있는 역할들 */
 const MULTI_KILL_ROLES: RoleId[] = ["assassin", "godfather", "grandmother", "gambler", "tinker"];
 
@@ -346,6 +352,7 @@ export function PuzzleCreator() {
   const [deaths, setDeaths] = useState<Record<number, Seat[]>>({});
   const [executions, setExecutions] = useState<Record<number, Seat>>({});
   const [dayActs, setDayActs] = useState<Record<number, DraftDayAction[]>>({});
+  const [votes, setVotes] = useState<Record<number, Seat[]>>({});
   const [verdict, setVerdict] = useState<Verdict>({ kind: "idle" });
 
   const seats = useMemo(() => Array.from({ length: playerCount }, (_, i) => i), [playerCount]);
@@ -404,6 +411,16 @@ export function PuzzleCreator() {
     setVerdict({ kind: "idle" });
   }
 
+  /** 투표 기록 토글 — 유령 투표가 있어 죽은 좌석도 기록될 수 있다 */
+  function toggleVote(day: number, seat: Seat) {
+    setVotes((prev) => {
+      const cur = prev[day] ?? [];
+      const next = cur.includes(seat) ? cur.filter((s) => s !== seat) : [...cur, seat].sort((a, b) => a - b);
+      return { ...prev, [day]: next };
+    });
+    setVerdict({ kind: "idle" });
+  }
+
   /** 인원수가 바뀌면 좌석 배열들을 맞춘다 */
   function resizeTo(n: number) {
     setPlayerCount(n);
@@ -434,7 +451,14 @@ export function PuzzleCreator() {
   }
 
   function buildShared(): SharedPuzzle {
-    const events = ledgerEvents(ledger);
+    const events: GameEvent[] = [
+      ...ledgerEvents(ledger),
+      ...Object.entries(votes).flatMap(([day, vs]) =>
+        Number(day) <= nights
+          ? vs.filter((s) => s < playerCount).map((seat) => ({ type: "vote" as const, day: Number(day), seat }))
+          : [],
+      ),
+    ];
 
     const demonSeat = solution.findIndex((r) => ROLES[r].team === "demon");
     return {
@@ -818,6 +842,26 @@ export function PuzzleCreator() {
                     />
                   )}
 
+                  {(row.kind === "day" || row.kind === "now") && pool.includes("flowergirl") && (
+                    <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label={`낮 ${row.index}에 투표한 좌석`}>
+                      <span className="text-[11px] text-faded">투표 기록 (죽은 좌석도 유령 투표 가능)</span>
+                      {seats.map((seat) => {
+                        const on = (votes[row.index] ?? []).includes(seat);
+                        return (
+                          <button
+                            key={seat}
+                            type="button"
+                            aria-pressed={on}
+                            onClick={() => toggleVote(row.index, seat)}
+                            className={`${CHIP_BASE} ${on ? CHIP_EXEC_ON : CHIP_OFF}`}
+                          >
+                            {seatName(seat)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
                   <p className="flex flex-wrap items-baseline justify-between gap-x-3 text-xs">
                     <span className={row.kind === "now" ? "text-parchment" : "text-brass"}>{ledgerLine(row)}</span>
                     <span className="tabular-nums text-faded">생존 {row.alive}명</span>
@@ -1044,10 +1088,27 @@ function InfoEditor({
           </>
         )}
 
-        {(d.type === "monk" || d.type === "exorcist") && (
+        {(d.type === "monk" || d.type === "exorcist" || d.type === "sailor") && (
           <>
             {seatSelect(d.target, (s) => set({ ...d, target: s }))}
-            <span className="text-xs text-faded">{d.type === "monk" ? "를 보호" : "를 지목"}</span>
+            <span className="text-xs text-faded">
+              {d.type === "monk" ? "를 보호" : d.type === "exorcist" ? "를 지목" : "를 선택 (나 또는 그가 취한다)"}
+            </span>
+          </>
+        )}
+
+        {d.type === "innkeeper" && (
+          <>
+            {seatSelect(d.targets[0], (a) => set({ type: "innkeeper", targets: [a, d.targets[1]] }), "a")}
+            {seatSelect(d.targets[1], (b) => set({ type: "innkeeper", targets: [d.targets[0], b] }), "b")}
+            <span className="text-xs text-faded">를 보호 (하나가 취한다)</span>
+          </>
+        )}
+
+        {d.type === "courtier" && (
+          <>
+            {roleSelect(d.role, (r) => set({ type: "courtier", role: r }))}
+            <span className="text-xs text-faded">이(가) 3일 밤낮 취한다</span>
           </>
         )}
 
@@ -1066,6 +1127,15 @@ function InfoEditor({
             <span className="text-xs text-faded">죽은 악인</span>
             {numberSelect(d.count, seats.length, (n) => set({ type: "oracle", count: n }))}
           </>
+        )}
+
+        {(d.type === "flowergirl" || d.type === "towncrier") && (
+          <button type="button" className="rounded border border-panel-edge px-2 py-1 text-xs text-parchment"
+            onClick={() => set({ ...d, yes: !d.yes })}>
+            {d.type === "flowergirl"
+              ? (d.yes ? "어제 악마가 투표했다" : "어제 악마는 투표하지 않았다")
+              : (d.yes ? "어제 하수인이 지명했다" : "어제 하수인은 지명하지 않았다")}
+          </button>
         )}
 
         {d.type === "gambler" && (

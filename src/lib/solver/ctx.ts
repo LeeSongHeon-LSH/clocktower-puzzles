@@ -45,6 +45,11 @@ export function isVigorPoisoned(ctx: Ctx, seat: Seat, night: number): boolean {
   return ctx.sc.vigorPoisoned?.[night]?.has(seat) ?? false;
 }
 
+/** 이동식 취함 원천(선원·여관주인·대신)에 그 밤 확정 취해 있었는가 (시나리오 분기별) */
+export function isExtraDrunk(ctx: Ctx, seat: Seat, night: number): boolean {
+  return ctx.sc.extraDrunk?.[night]?.has(seat) ?? false;
+}
+
 /** 비고르모르티스에게 죽어 능력을 유지 중인가 (밤 night 기준) */
 export function vigorKept(ctx: Ctx, seat: Seat, night: number): boolean {
   return (ctx.sc.vigorKeptSince?.get(seat) ?? Infinity) <= night;
@@ -124,7 +129,16 @@ export function wakes(ctx: Ctx, seat: Seat, night: number): boolean {
     case "monk":
     case "exorcist":
     case "gambler":
+    case "innkeeper":
       return night >= 2 && aliveStart[seat];
+    case "sailor":
+      return aliveStart[seat]; // 밤1부터 매밤 깨어나 선택한다
+    case "courtier": {
+      // 1회용: 실제 사용 밤은 그 좌석의 주장에 기록된 밤 (재봉사와 같은 규약)
+      const claim = ctx.claimBySeat[seat];
+      const used = claim.role === "courtier" ? claim.info.find((i) => i.data?.type === "courtier") : undefined;
+      return used !== undefined && used.night === night && aliveStart[seat];
+    }
     case "sage":
       // 데몬에게 죽은 그 밤에만 깨어난다 (암살자·대부의 킬은 트리거가 아니다)
       return ctx.sc.impKillDuringNight?.[night]?.includes(seat) ?? false;
@@ -133,6 +147,8 @@ export function wakes(ctx: Ctx, seat: Seat, night: number): boolean {
     case "dreamer":
       return aliveStart[seat]; // 악마보다 먼저 행동 — 그 밤에 죽더라도 이미 깨어났다
     case "oracle":
+    case "flowergirl":
+    case "towncrier":
       return night >= 2 && aliveAfter[seat];
     case "grandmother":
       return night === 1;

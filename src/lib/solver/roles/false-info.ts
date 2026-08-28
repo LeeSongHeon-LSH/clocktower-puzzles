@@ -15,6 +15,9 @@ import { seamstress } from "./seamstress";
 import { monk } from "./monk";
 import { exorcist } from "./exorcist";
 import { gambler } from "./gambler";
+import { flowergirl } from "./flowergirl";
+import { towncrier } from "./towncrier";
+import { courtier, innkeeper, sailor } from "./drunk-sources";
 
 /** [min, max] 범위의 등록 가능 값 중 claimed와 다른 값이 존재하는가 (범위는 항상 비어 있지 않다) */
 function rangeCanDiffer(min: number, max: number, claimed: number): boolean {
@@ -157,6 +160,11 @@ export function checkContentFalse(ctx: Ctx, seat: Seat, data: InfoData, night: n
     case "sage":
       if (data.targets[0] === data.targets[1]) return false;
       return !data.targets.includes(ctx.sc.demonDuringNight[night]);
+    // "예"가 거짓 = "아니오"가 참 (기록된 투표자/지명자 제약), "아니오"가 거짓 = 미기록 ∃ — 항상 성립
+    case "flowergirl":
+      return data.yes ? flowergirl(ctx, seat, { type: "flowergirl", yes: false }, night) : true;
+    case "towncrier":
+      return data.yes ? towncrier(ctx, seat, { type: "towncrier", yes: false }, night) : true;
     // 행동 기록 — 정보가 아니므로 Vortox 세계에서도 구조 검증 그대로
     case "monk":
       return monk(ctx, seat, data, night);
@@ -164,5 +172,11 @@ export function checkContentFalse(ctx: Ctx, seat: Seat, data: InfoData, night: n
       return exorcist(ctx, seat, data, night);
     case "gambler":
       return gambler(ctx, seat, data, night);
+    case "sailor":
+      return sailor(ctx, seat, data, night);
+    case "innkeeper":
+      return innkeeper(ctx, seat, data, night);
+    case "courtier":
+      return courtier(ctx, seat, data, night);
   }
 }

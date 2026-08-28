@@ -186,7 +186,12 @@ function validateInfoData(v: unknown, players: number, where: string): InfoData 
       return { type: "chambermaid", targets: seatPair(v.targets, players, where), count: count(2) };
     case "monk":
     case "exorcist":
+    case "sailor":
       return { type: t, target: int(v.target, 0, players - 1, `${where} 좌석`) };
+    case "innkeeper":
+      return { type: "innkeeper", targets: seatPair(v.targets, players, where) };
+    case "courtier":
+      return { type: "courtier", role: roleId(v.role, where) };
     case "dreamer":
       return {
         type: "dreamer",
@@ -196,6 +201,9 @@ function validateInfoData(v: unknown, players: number, where: string): InfoData 
       };
     case "oracle":
       return { type: "oracle", count: count(players) };
+    case "flowergirl":
+    case "towncrier":
+      return { type: t, yes: v.yes === true };
     case "grandmother":
       return { type: "grandmother", target: int(v.target, 0, players - 1, `${where} 좌석`), shownRole: roleId(v.shownRole, where) };
     case "gambler":
@@ -243,6 +251,9 @@ function validateEvent(v: unknown, players: number, nights: number): GameEvent {
       target: int(v.target, 0, players - 1, "총격 대상 좌석"),
       died: v.died === true,
     };
+  }
+  if (v.type === "vote") {
+    return { type: "vote", day: int(v.day, 1, nights, "투표한 낮"), seat: int(v.seat, 0, players - 1, "투표자 좌석") };
   }
   if (v.type === "nomination" || v.type === "virginTrigger") {
     return {
