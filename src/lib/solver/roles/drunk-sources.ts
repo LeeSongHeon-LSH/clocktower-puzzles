@@ -4,6 +4,7 @@
 
 import { Ctx } from "../ctx";
 import type { InfoData, Seat } from "../types";
+import { PHILOSOPHER_GAINABLE } from "../types";
 
 type SailorData = Extract<InfoData, { type: "sailor" }>;
 type InnkeeperData = Extract<InfoData, { type: "innkeeper" }>;
@@ -23,6 +24,21 @@ export function innkeeper(ctx: Ctx, seat: Seat, data: InnkeeperData, night: numb
 
 export function courtier(ctx: Ctx, _seat: Seat, data: CourtierData, _night: number): boolean {
   return ctx.pz.rolePool.includes(data.role); // 대본에 있는 역할만 고를 수 있다
+}
+
+type SnakeData = Extract<InfoData, { type: "snakecharmer" }>;
+
+/** 뱀 조련사: 살아 있는 다른 플레이어를 지목한다 (효과는 timeline·solve가 소비) */
+export function snakecharmer(ctx: Ctx, seat: Seat, data: SnakeData, night: number): boolean {
+  if (data.target === seat) return false;
+  return ctx.sched.aliveAtNightStart(night)[data.target];
+}
+
+type PhilosopherData = Extract<InfoData, { type: "philosopher" }>;
+
+/** 철학자: 대본 안의 획득 가능한 선한 능력만 고를 수 있다 */
+export function philosopher(ctx: Ctx, _seat: Seat, data: PhilosopherData, _night: number): boolean {
+  return ctx.pz.rolePool.includes(data.role) && PHILOSOPHER_GAINABLE.includes(data.role);
 }
 
 type ProfessorData = Extract<InfoData, { type: "professor" }>;

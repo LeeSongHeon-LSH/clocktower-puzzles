@@ -1,6 +1,7 @@
 // 체커들이 공유하는 평가 컨텍스트와 공용 유틸.
 
 import type { Claim, RoleId, Seat, SolverPuzzle } from "./types";
+import { ONE_SHOT_INFO_ROLES } from "./types";
 import { DemonScenario, Schedule, tokenRoleAt } from "./timeline";
 import type { TokenView } from "./registration";
 
@@ -105,7 +106,11 @@ export function aliveNeighbors(alive: boolean[], seat: Seat): [Seat, Seat] | nul
  * 주정뱅이·중독자도 깨어난다(가짜 정보를 받는다). 객실 청소부·수학자 검증의 기반.
  */
 export function wakes(ctx: Ctx, seat: Seat, night: number): boolean {
-  const role = believedRole(ctx, seat, night);
+  return wakesAs(ctx, seat, night, believedRole(ctx, seat, night));
+}
+
+/** 특정 역할(believedRole 또는 철학자의 획득 능력)의 기상 규칙 */
+function wakesAs(ctx: Ctx, seat: Seat, night: number, role: RoleId): boolean {
   const aliveStart = ctx.sched.aliveAtNightStart(night);
   const aliveAfter = ctx.sched.aliveAfterNight(night);
   switch (role) {
@@ -132,6 +137,7 @@ export function wakes(ctx: Ctx, seat: Seat, night: number): boolean {
     case "innkeeper":
       return night >= 2 && aliveStart[seat];
     case "sailor":
+    case "snakecharmer": // 밤마다 지목한다 (교환 후의 새 조련사도 — 영구 중독이지만 깨어난다)
       return aliveStart[seat]; // 밤1부터 매밤 깨어나 선택한다
     case "courtier":
     case "professor": {
@@ -139,6 +145,17 @@ export function wakes(ctx: Ctx, seat: Seat, night: number): boolean {
       const claim = ctx.claimBySeat[seat];
       const used = claim.role === role ? claim.info.find((i) => i.data?.type === role) : undefined;
       return used !== undefined && used.night === night && aliveStart[seat];
+    }
+    case "philosopher": {
+      // 사용 밤(주장 기록)부터 획득한 능력의 기상 규칙을 따른다.
+      // 획득 즉시형(빨래꾼·요리사 등)은 획득한 밤에만 깨어난다.
+      const claim = ctx.claimBySeat[seat];
+      const rec = claim.role === "philosopher" ? claim.info.find((i) => i.data?.type === "philosopher") : undefined;
+      if (rec === undefined || rec.data?.type !== "philosopher") return false;
+      if (night < rec.night) return false;
+      if (night === rec.night) return aliveStart[seat]; // 능력을 고르는 밤 (즉시형 정보 포함)
+      if (ONE_SHOT_INFO_ROLES.includes(rec.data.role)) return false;
+      return wakesAs(ctx, seat, night, rec.data.role);
     }
     case "sage":
       // 데몬에게 죽은 그 밤에만 깨어난다 (암살자·대부의 킬은 트리거가 아니다)

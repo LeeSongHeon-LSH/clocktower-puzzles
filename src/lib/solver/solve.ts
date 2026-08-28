@@ -10,9 +10,9 @@ import { composition } from "./composition";
 import { checkContent } from "./roles";
 import { checkContentFalse } from "./roles/false-info";
 import { Ctx, isDrunk, isExtraDrunk, isNdPoisoned, isPukkaPoisoned, isSweetDrunk, isVigorPoisoned, wakes } from "./ctx";
-import { DemonScenario, demonScenarios, Schedule, SweetheartCase } from "./timeline";
+import { DemonScenario, demonScenarios, RoleSwapCase, Schedule, SweetheartCase, tokenRoleAt } from "./timeline";
 import type { Claim, InfoData, RoleId, Seat, SolverPuzzle, World } from "./types";
-import { SOLVER_ROLES, worldKey } from "./types";
+import { PHILOSOPHER_GAINABLE, SOLVER_ROLES, SWAPPABLE_ROLES, worldKey } from "./types";
 
 function combinations<T>(arr: T[], k: number): T[][] {
   if (k === 0) return [[]];
@@ -73,6 +73,26 @@ function validatePuzzle(pz: SolverPuzzle): Claim[] {
     // 점프한 스위트하트는 능력을 잃는데, 스위트하트 취함 열거가 점프와 얽히는 처리가 아직 없다 — 건전성 위해 거부
     throw new Error("팡 구와 스위트하트는 아직 한 퍼즐에서 함께 지원되지 않습니다");
   }
+  const hasBarber = pz.rolePool.includes("barber");
+  if (hasBarber) {
+    // 주장 날조 수단이 있으면 숨은 교환(주장이 드러내지 않는 교환)이 은닉될 수 있다 — 건전성 위해 거부
+    for (const bad of ["drunk", "mutant", "lunatic", "cerenovus", "fanggu"] as RoleId[]) {
+      if (pz.rolePool.includes(bad)) {
+        throw new Error(`이발사와 ${ROLES[bad].ko}은(는) 아직 한 퍼즐에서 함께 지원되지 않습니다`);
+      }
+    }
+    // 하수인이 2명이면 하수인 간 교환이 주장에 드러나지 않는다 — 건전성 위해 거부
+    if (pz.playerCount >= 10) throw new Error("이발사 퍼즐은 9인 이하만 지원됩니다 (하수인 간 교환 은닉)");
+  }
+  if (pz.rolePool.includes("snakecharmer")) {
+    // barber(roleSwap 충돌)·fanggu/zombuul(승계·가짜 죽음과 교환의 교차)·탕녀(승계한 데몬과의
+    // 교환은 토큰 타임라인이 아직 표현 못 함) — 건전성 위해 거부
+    for (const bad of ["barber", "fanggu", "zombuul", "scarletwoman"] as RoleId[]) {
+      if (pz.rolePool.includes(bad)) {
+        throw new Error(`뱀 조련사와 ${ROLES[bad].ko}은(는) 아직 한 퍼즐에서 함께 지원되지 않습니다`);
+      }
+    }
+  }
   const unmodeled = assignableRoles(pz).filter((r) => !SOLVER_ROLES.includes(r));
   if (unmodeled.length > 0) {
     throw new Error(`솔버가 아직 모르는 역할입니다: ${unmodeled.map((r) => ROLES[r].ko).join(", ")}`);
@@ -85,14 +105,37 @@ function validatePuzzle(pz: SolverPuzzle): Claim[] {
       // 숨은 외부인(주정뱅이·광인·루나틱)은 자기 정체를 모르거나 감춘다 — 공개 주장하지 않는다
       throw new Error(`주장할 수 없는 역할: ${c.role}`);
     }
+    if (hasBarber && ROLES[c.role].team === "minion") {
+      // 하수인 역할 주장은 악역이 낀 교환을 드러내는 유일한 통로인데 그 열거가 아직 없다 — 거부
+      throw new Error(`이발사 퍼즐에서 하수인 역할 주장(${c.role})은 지원되지 않습니다`);
+    }
     for (const info of c.info) {
       if (info.night < 1 || info.night > pz.nights) throw new Error(`좌석 ${c.seat}: 정보 밤 범위 밖 (밤 ${info.night})`);
-      if (info.data && info.data.type !== c.role) {
-        throw new Error(`좌석 ${c.seat}: 주장 역할(${c.role})과 정보 타입(${info.data.type}) 불일치`);
+      if (info.asRole !== undefined) {
+        if (c.role === "philosopher") {
+          // 철학자의 획득 능력 정보 — 사용 기록의 역할·시점과 일치해야 한다
+          const rec = c.info.find((i) => i.data?.type === "philosopher");
+          if (rec?.data?.type !== "philosopher" || rec.data.role !== info.asRole || info.night < rec.night) {
+            throw new Error(`좌석 ${c.seat}: 철학자의 획득 능력 정보는 사용 기록(밤·역할)과 일치해야 합니다`);
+          }
+        } else {
+          if (!hasBarber) throw new Error(`좌석 ${c.seat}: 당시 역할(asRole)은 이발사가 풀에 있을 때만 쓸 수 있습니다`);
+          if (!SWAPPABLE_ROLES.includes(info.asRole) || !SWAPPABLE_ROLES.includes(c.role)) {
+            throw new Error(`좌석 ${c.seat}: 교환 이력에 쓸 수 없는 역할입니다 (${info.asRole} → ${c.role})`);
+          }
+        }
+      }
+      if (info.data && info.data.type !== (info.asRole ?? c.role)) {
+        throw new Error(`좌석 ${c.seat}: 당시 역할(${info.asRole ?? c.role})과 정보 타입(${info.data.type}) 불일치`);
       }
     }
     if (c.info.filter((i) => i.data?.type === "artist").length > 1) {
       throw new Error(`좌석 ${c.seat}: 화가의 질문은 게임당 1회입니다`);
+    }
+    const philoRecs = c.info.filter((i) => i.data?.type === "philosopher");
+    if (philoRecs.length > 1) throw new Error(`좌석 ${c.seat}: 철학자의 능력 획득은 게임당 1회입니다`);
+    if (philoRecs[0]?.data?.type === "philosopher" && !PHILOSOPHER_GAINABLE.includes(philoRecs[0].data.role)) {
+      throw new Error(`좌석 ${c.seat}: 철학자가 획득할 수 없는 역할입니다 (${philoRecs[0].data.role})`);
     }
     claimBySeat[c.seat] = c;
   }
@@ -185,13 +228,41 @@ export function solve(pz: SolverPuzzle): World[] {
             const tfCount = goodSeats.filter((s) => ROLES[assignment[s]].team === "townsfolk").length;
             if (tfCount !== comp.townsfolk) continue;
 
-            for (const sweet of sweetheartCases(pz, sched, assignment, seats)) {
-              for (const sc of demonScenarios(pz, sched, assignment, sweet)) {
-                const ftSeat = assignment.indexOf("fortuneteller");
-                const rhChoices: (Seat | null)[] = ftSeat >= 0 ? goodSeats : [null];
-                for (const rh of rhChoices) {
-                  const world = tryWorld(pz, sched, claimBySeat, assignment, sc, sweet, rh, goodSeats, mad?.seat ?? null);
-                  if (world) found.set(worldKey(world), world);
+            // 역할 교환 분기: 이발사(선한 두 좌석의 교차 셋업) / 뱀 조련사(데몬 승계형 교환) / 없음
+            type SwapBranch =
+              | { kind: "none" }
+              | { kind: "barber"; c: RoleSwapCase }
+              | { kind: "snake"; t: number };
+            const swapBranches: SwapBranch[] = roleSwapCases(pz, sched, assignment, goodSeats, claimBySeat)
+              .map((c): SwapBranch => (c === null ? { kind: "none" } : { kind: "barber", c }));
+            for (const t of snakeSwapNights(pz, sched, assignment, demonSeat, claimBySeat)) {
+              swapBranches.push({ kind: "snake", t });
+            }
+
+            for (const br of swapBranches) {
+              let setup = assignment;
+              let tokenSwap: RoleSwapCase | null = null;
+              let snakeNight: number | null = null;
+              let snakeOldDemon: { seat: Seat; since: number } | null = null;
+              if (br.kind === "barber") {
+                // 이발사 교환 세계의 셋업은 두 좌석의 주장 역할을 서로 바꾼 것이다
+                setup = [...assignment];
+                [setup[br.c.a], setup[br.c.b]] = [setup[br.c.b], setup[br.c.a]];
+                tokenSwap = br.c;
+              } else if (br.kind === "snake") {
+                tokenSwap = { since: br.t, a: assignment.indexOf("snakecharmer"), b: demonSeat };
+                snakeNight = br.t;
+                snakeOldDemon = { seat: demonSeat, since: br.t };
+              }
+              for (const sweet of sweetheartCases(pz, sched, setup, seats)) {
+                for (const sc of demonScenarios(pz, sched, setup, sweet, tokenSwap, snakeNight)) {
+                  const ftSeat = setup.indexOf("fortuneteller");
+                  const rhChoices: (Seat | null)[] = ftSeat >= 0 ? goodSeats : [null];
+                  for (const rh of rhChoices) {
+                    // 월드의 assignment는 **최종(현재) 그리모어** — 교환 전 이력만 다른 세계는 같은 해다
+                    const world = tryWorld(pz, sched, claimBySeat, setup, sc, sweet, rh, goodSeats, mad?.seat ?? null, assignment, snakeOldDemon);
+                    if (world) found.set(worldKey(world), world);
+                  }
                 }
               }
             }
@@ -203,6 +274,72 @@ export function solve(pz: SolverPuzzle): World[] {
     }
   }
   return [...found.values()];
+}
+
+/**
+ * 이발사 교환 케이스 열거 (20차). 이발사가 배정에 없거나 죽지 않았으면 [null] (교환 없음).
+ * 죽었다면 "교환 없음"(may)과, 교환 가능한 선한 두 좌석의 모든 쌍을 분기한다.
+ * 교환된 좌석의 셋업 역할은 서로의 주장 역할이므로, 숨은 교환은 정직한 좌석의 주장과
+ * 스스로 모순된다 — 주장(asRole 이력 또는 정보 없음)이 드러내는 교환만 살아남는다.
+ * since: 밤 사망은 그 밤(공식 밤 순서상 킬 직후 교환 → 그 밤 정보는 새 역할), 처형은 다음 밤.
+ */
+function roleSwapCases(
+  pz: SolverPuzzle,
+  sched: Schedule,
+  assignment: RoleId[],
+  goodSeats: Seat[],
+  claimBySeat: Claim[],
+): (RoleSwapCase | null)[] {
+  const out: (RoleSwapCase | null)[] = [null];
+  const bSeat = assignment.indexOf("barber");
+  if (bSeat < 0) return out;
+  let since = -1;
+  for (let n = 2; n <= pz.nights; n++) {
+    if (sched.diedAtNight(n).includes(bSeat)) since = n;
+  }
+  for (let d = 1; d <= pz.nights - 1; d++) {
+    if (sched.executedOnDay(d) === bSeat) since = d + 1;
+  }
+  if (since < 1 || since > pz.nights) return out;
+  const alive = sched.aliveAtNightStart(since);
+  for (let i = 0; i < goodSeats.length; i++) {
+    for (let j = i + 1; j < goodSeats.length; j++) {
+      const a = goodSeats[i];
+      const b = goodSeats[j];
+      if (!alive[a] || !alive[b]) continue;
+      const ra = claimBySeat[a].role;
+      const rb = claimBySeat[b].role;
+      if (ra === rb) continue;
+      if (!SWAPPABLE_ROLES.includes(ra) || !SWAPPABLE_ROLES.includes(rb)) continue;
+      out.push({ since, a, b });
+    }
+  }
+  return out;
+}
+
+/**
+ * 뱀 조련사 교환 케이스 열거 (21차). 교환 세계는 **옛 데몬 좌석이 최종적으로 뱀 조련사를
+ * 주장**할 때만 성립하고 (자기 배제 — 교환됐다면 이제 선한 조련사라 진실을 말한다),
+ * 교환 밤 t는 조련사의 지목 기록 중 원 데몬 좌석을 겨눈 것에서 온다.
+ */
+function snakeSwapNights(
+  pz: SolverPuzzle,
+  sched: Schedule,
+  assignment: RoleId[],
+  demonSeat: Seat,
+  claimBySeat: Claim[],
+): number[] {
+  const s = assignment.indexOf("snakecharmer");
+  if (s < 0) return [];
+  if (claimBySeat[demonSeat].role !== "snakecharmer") return [];
+  const out: number[] = [];
+  for (const info of claimBySeat[s].info) {
+    if (info.data?.type === "snakecharmer" && info.data.target === demonSeat
+      && sched.aliveAtNightStart(info.night)[s]) {
+      out.push(info.night);
+    }
+  }
+  return out;
 }
 
 /**
@@ -239,6 +376,9 @@ function tryWorld(
   redHerring: Seat | null,
   goodSeats: Seat[],
   madSeat: Seat | null = null,
+  finalAssignment: RoleId[] = assignment, // 교환 세계의 최종(현재) 그리모어 — World에 실린다
+  /** 뱀 조련사 교환의 옛 데몬 — since부터 선한 뱀 조련사가 되어 진실을 주장한다 (영구 중독) */
+  snakeOldDemon: { seat: Seat; since: number } | null = null,
 ): World | null {
   const sweetDrunk = sweet !== null && sweet.target !== null ? { target: sweet.target, since: sweet.since } : null;
   const ctx: Ctx = { pz, sched, assignment, claimBySeat, sc, redHerring, poison: null, sweet: sweetDrunk };
@@ -265,11 +405,30 @@ function tryWorld(
     for (const info of claimBySeat[s].info) {
       if (!info.data) continue;
       if (becameAt !== undefined && becameAt <= info.night) continue; // 데몬이 된 뒤의 주장은 날조
+      // 정보를 받은 시점의 실제 역할이 주장(당시 역할 asRole 포함)과 일치해야 한다 —
+      // 이발사 교환 세계에서 교환 이력이 없는 주장, 교환 없는 세계에서의 이력 주장을 함께 거른다.
+      // 철학자의 획득 능력 정보(asRole)는 예외 — 토큰은 철학자 그대로다 (검증은 validatePuzzle).
+      if (assignment[s] !== "drunk"
+        && !(assignment[s] === "philosopher" && info.asRole !== undefined)
+        && tokenRoleAt(assignment, sc, s, info.night) !== (info.asRole ?? claimBySeat[s].role)) {
+        return null;
+      }
       if (info.data.type === "artist" || info.data.type === "savant") {
         // 낮 정보 (night n = 낮 n) — 밤에 깨지 않으므로 그 낮의 생존만 요구한다
         if (!sched.aliveAfterNight(info.night)[s]) return null;
       } else if (!wakes(ctx, s, info.night)) return null;
       infos.push({ seat: s, night: info.night, data: info.data });
+    }
+  }
+
+  // 뱀 조련사 교환의 옛 데몬: since부터 선한 조련사로서 진실을 주장한다 — 역할 이력과
+  // 기상 가능성은 검증하되, 내용은 검사하지 않는다 (새 조련사는 영구 중독)
+  if (snakeOldDemon !== null) {
+    for (const info of claimBySeat[snakeOldDemon.seat].info) {
+      if (!info.data) continue;
+      if (tokenRoleAt(assignment, sc, snakeOldDemon.seat, info.night)
+        !== (info.asRole ?? claimBySeat[snakeOldDemon.seat].role)) return null;
+      if (!wakes(ctx, snakeOldDemon.seat, info.night)) return null;
     }
   }
 
@@ -344,7 +503,7 @@ function tryWorld(
     }
     const poisonTargets: (Seat | null)[] = new Array(pz.nights + 1).fill(null);
     for (const [night, target] of required) poisonTargets[night] = target;
-    return { assignment: [...assignment], currentDemonSeat: sc.currentDemonSeat, poisonTargets, redHerring, sweetheartDrunk: sweetDrunk?.target ?? null };
+    return { assignment: [...finalAssignment], currentDemonSeat: sc.currentDemonSeat, poisonTargets, redHerring, sweetheartDrunk: sweetDrunk?.target ?? null };
   }
 
   // 열거 경로 (수학자 포함 퍼즐): 밤별 독살 대상을 전수 열거
@@ -395,7 +554,7 @@ function tryWorld(
           if (!checkContentFalse(pctx, i.seat, i.data, i.night)) return null;
         } else if (!checkContent(pctx, i.seat, i.data, i.night)) return null;
       }
-      return { assignment: [...assignment], currentDemonSeat: sc.currentDemonSeat, poisonTargets: [...vector], redHerring, sweetheartDrunk: sweetDrunk?.target ?? null };
+      return { assignment: [...finalAssignment], currentDemonSeat: sc.currentDemonSeat, poisonTargets: [...vector], redHerring, sweetheartDrunk: sweetDrunk?.target ?? null };
     }
     for (const opt of optionsPerNight[night]) {
       vector[night] = opt;

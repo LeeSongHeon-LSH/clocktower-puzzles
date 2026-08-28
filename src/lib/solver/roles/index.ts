@@ -23,7 +23,7 @@ import { dreamer } from "./dreamer";
 import { oracle } from "./oracle";
 import { flowergirl } from "./flowergirl";
 import { towncrier } from "./towncrier";
-import { courtier, innkeeper, professor, sailor } from "./drunk-sources";
+import { courtier, innkeeper, philosopher, professor, sailor, snakecharmer } from "./drunk-sources";
 import { artist, savant } from "./props";
 import { grandmother } from "./grandmother";
 import { gambler } from "./gambler";
@@ -54,6 +54,8 @@ export function checkContent(ctx: Ctx, seat: Seat, data: InfoData, night: number
     case "innkeeper": return innkeeper(ctx, seat, data, night);
     case "courtier": return courtier(ctx, seat, data, night);
     case "professor": return professor(ctx, seat, data, night);
+    case "snakecharmer": return snakecharmer(ctx, seat, data, night);
+    case "philosopher": return philosopher(ctx, seat, data, night);
     case "artist": return artist(ctx, seat, data, night); // night = 낮
     case "savant": return savant(ctx, seat, data, night); // night = 낮
     case "grandmother": return grandmother(ctx, seat, data, night);

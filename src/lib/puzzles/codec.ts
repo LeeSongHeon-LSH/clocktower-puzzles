@@ -203,11 +203,14 @@ function validateInfoData(v: unknown, players: number, where: string): InfoData 
     case "exorcist":
     case "sailor":
     case "professor":
+    case "snakecharmer":
       return { type: t, target: int(v.target, 0, players - 1, `${where} 좌석`) };
     case "innkeeper":
       return { type: "innkeeper", targets: seatPair(v.targets, players, where) };
     case "courtier":
       return { type: "courtier", role: roleId(v.role, where) };
+    case "philosopher":
+      return { type: "philosopher", role: roleId(v.role, where) };
     case "artist":
       return { type: "artist", question: validateProp(v.question, players, where), yes: v.yes === true };
     case "savant": {
@@ -257,6 +260,7 @@ function validateClaim(v: unknown, players: number, nights: number): Claim {
       night,
       text: str(raw.text, LIMITS.maxText, `좌석 ${seat} 밤 ${night} 서술`, false),
       data: raw.data === undefined ? undefined : validateInfoData(raw.data, players, `좌석 ${seat} 밤 ${night}`),
+      asRole: raw.asRole === undefined ? undefined : roleId(raw.asRole, `좌석 ${seat} 밤 ${night} 당시 역할`),
     };
   });
   return { seat, role, info };

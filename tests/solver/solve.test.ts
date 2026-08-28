@@ -98,8 +98,8 @@ describe("solve: 솔버가 모르는 역할 거부", () => {
   it("주장 역할이 미구현이면 거부한다", () => {
     const pz: SolverPuzzle = {
       ...base,
-      rolePool: [...base.rolePool, "snakecharmer"],
-      claims: base.claims.map((c, i) => (i === 2 ? { ...c, role: "snakecharmer" as const } : c)),
+      rolePool: [...base.rolePool, "pithag"],
+      claims: base.claims.map((c, i) => (i === 2 ? { ...c, role: "pithag" as const } : c)),
     };
     expect(() => solve(pz)).toThrow(/모르는 역할/);
   });

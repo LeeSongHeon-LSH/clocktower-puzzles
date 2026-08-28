@@ -3,7 +3,7 @@
 
 import { roleLabel } from "@/data/roles";
 import { seatName } from "@/lib/puzzles/schema";
-import type { InfoData, Prop, Seat } from "@/lib/solver/types";
+import type { InfoData, Prop, RoleId, Seat } from "@/lib/solver/types";
 
 function pair(a: Seat, b: Seat): string {
   return `${seatName(a)}·${seatName(b)}`;
@@ -21,6 +21,12 @@ export function renderProp(p: Prop): string {
     case "roleInPlay":
       return `${roleLabel(p.role)}이(가) 판에 있다`;
   }
+}
+
+/** 주장 정보 한 건의 표시 문장 — 교환 이력(asRole)이 있으면 당시 역할을 앞에 밝힌다 */
+export function renderClaimInfo(inf: { data?: InfoData; text?: string; asRole?: RoleId }): string {
+  const body = inf.text ?? (inf.data ? renderInfo(inf.data) : "");
+  return inf.asRole !== undefined ? `(당시 ${roleLabel(inf.asRole)}로서) ${body}` : body;
 }
 
 export function renderInfo(data: InfoData): string {
@@ -68,6 +74,10 @@ export function renderInfo(data: InfoData): string {
       return `${roleLabel(data.role)}을(를) 골랐다 — 그 역할이 3일 밤낮 취한다`;
     case "professor":
       return `${seatName(data.target)}의 시신을 골랐다 — 마을 사람이었다면 되살아났을 것이다`;
+    case "snakecharmer":
+      return `${seatName(data.target)}를 지목했다 — 악마라면 역할과 진영이 뒤바뀐다`;
+    case "philosopher":
+      return `${roleLabel(data.role)}의 능력을 얻었다 — 그 역할이 판에 있다면 원주인은 취한다`;
     case "artist":
       return `낮에 물었다: "${renderProp(data.question)}?" — 답은 "${data.yes ? "그렇다" : "아니다"}"`;
     case "savant":

@@ -8,7 +8,7 @@ import { seatName } from "@/lib/puzzles/schema";
 import { EDITION_LABELS, ROLES, TEAM_LABELS, roleLabel } from "@/data/roles";
 import type { GameEvent, RoleId, Team } from "@/lib/solver/types";
 import { eventDeadSeat } from "@/lib/solver/types";
-import { renderInfo } from "@/lib/render";
+import { renderClaimInfo } from "@/lib/render";
 import { loadProgress, saveProgress, useProgress } from "@/lib/progress";
 import { clearNotes, saveNote, useSeatNotes } from "@/lib/notes";
 import { MARKS, TownSquare, type SeatAnnotation, type TownSquareReveal } from "@/components/TownSquare";
@@ -236,7 +236,7 @@ export function PuzzleClient({ puzzle }: { puzzle: Puzzle }) {
                   {selectedClaim.info.map((inf, i) => (
                     <li key={i}>
                       <span className="mr-2 text-xs text-faded">밤 {inf.night}</span>
-                      {inf.text ?? (inf.data ? renderInfo(inf.data) : "")}
+                      {renderClaimInfo(inf)}
                     </li>
                   ))}
                 </ul>
@@ -330,7 +330,7 @@ export function PuzzleClient({ puzzle }: { puzzle: Puzzle }) {
                   {c.info.map((inf, i) => (
                     <li key={i}>
                       <span className="mr-2 text-xs text-faded">밤 {inf.night}</span>
-                      {inf.text ?? (inf.data ? renderInfo(inf.data) : "")}
+                      {renderClaimInfo(inf)}
                     </li>
                   ))}
                 </ul>

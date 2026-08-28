@@ -220,6 +220,8 @@ export interface DemonScenario {
    * 취해 있던 좌석들. 이 시나리오(분기) 안에서는 확실하다 — 그 좌석의 그 밤 정보는 무제약이다.
    */
   extraDrunk?: Set<Seat>[];
+  /** 이발사 교환 (있으면 tokenRoleAt이 since부터 a·b의 토큰을 맞바꾼다) */
+  roleSwap?: RoleSwapCase;
   /** 비고르모르티스 세계: 좌석 → 그 밤부터 죽었지만 능력을 유지한다 (비고르모르티스의 킬) */
   vigorKeptSince?: Map<Seat, number>;
   /**
@@ -227,6 +229,17 @@ export interface DemonScenario {
    * (관대 집합 — nodashiiPoisoned와 같은 규약: 정보 무제약, require 만족, forbid 불파괴).
    */
   vigorPoisoned?: Set<Seat>[];
+}
+
+/**
+ * 이발사 교환 케이스 (solve가 배정별로 열거 — 스위트하트 선례).
+ * since = 교환된 토큰이 관측되는 첫 밤 (밤 사망 → 그 밤, 처형 → 다음 밤).
+ * a·b는 선한 좌석이고 둘의 **셋업 역할이 서로의 최종 주장 역할**이다 (교차 구성).
+ */
+export interface RoleSwapCase {
+  since: number;
+  a: Seat;
+  b: Seat;
 }
 
 /**
@@ -365,7 +378,15 @@ function neighborsOf(alive: boolean[], seat: Seat): [Seat, Seat] | null {
  * 게임이 이미 끝났어야 하는 경로(데몬 사망 후 승계 불가, 생존 2인 이하)는 제외.
  * 빈 배열 = 이 배정은 이벤트와 모순.
  */
-export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: RoleId[], sweet?: SweetheartCase | null): DemonScenario[] {
+export function demonScenarios(
+  pz: SolverPuzzle,
+  sched: Schedule,
+  assignment: RoleId[],
+  sweet?: SweetheartCase | null,
+  swap?: RoleSwapCase | null,
+  /** 뱀 조련사 교환 밤 — 있으면 swap이 (조련사, 원 데몬) 토큰 교환이고, 그 밤 데몬이 조련사 좌석으로 옮겨간다 */
+  snakeSwapNight?: number | null,
+): DemonScenario[] {
   const origDemonSeat = assignment.findIndex((r) => ROLES[r].team === "demon");
   if (origDemonSeat < 0) return [];
   const demonRole = assignment[origDemonSeat]; // 승계자의 토큰도 이 역할이 된다 (탕녀는 '그 악마'가 된다)
@@ -405,6 +426,13 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
     const rec = claimBySeat[profSeat]?.info.find((i) => i.data?.type === "professor");
     return rec?.data?.type === "professor" ? { night: rec.night, target: rec.data.target } : null;
   })();
+  const philoSeat = assignment.indexOf("philosopher");
+  // 철학자의 1회 행동 기록 (밤, 획득 역할) — 주장에서 찾는다
+  const philoRec = (() => {
+    if (philoSeat < 0) return null;
+    const rec = claimBySeat[philoSeat]?.info.find((i) => i.data?.type === "philosopher");
+    return rec?.data?.type === "philosopher" ? { night: rec.night, role: rec.data.role } : null;
+  })();
   const mcSeat = assignment.indexOf("moonchild");
   const gossipSeat = assignment.indexOf("gossip");
   const mmSeat = assignment.indexOf("mastermind");
@@ -413,7 +441,7 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
   const foolSeat = assignment.indexOf("fool");
 
   /** 좌석의 주장에서 특정 밤의 행동 기록 데이터 */
-  function actionData(seat: Seat, type: "monk" | "exorcist" | "gambler" | "sailor" | "innkeeper", night: number) {
+  function actionData(seat: Seat, type: "monk" | "exorcist" | "gambler" | "sailor" | "innkeeper" | "snakecharmer", night: number) {
     return claimBySeat[seat]?.info.find((i) => i.night === night && i.data?.type === type)?.data;
   }
 
@@ -534,6 +562,10 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
   }
 
   function tokenAt(became: Map<Seat, number>, seat: Seat, time: number): RoleId {
+    if (swap != null && time >= swap.since) {
+      if (seat === swap.a) return assignment[swap.b];
+      if (seat === swap.b) return assignment[swap.a];
+    }
     const since = became.get(seat);
     if (since !== undefined && since <= time) return demonRole;
     return assignment[seat];
@@ -572,6 +604,7 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
       extraDrunk: st.drunkNights.size > 0
         ? Array.from({ length: pz.nights + 1 }, (_, n) => new Set(st.drunkNights.get(n) ?? []))
         : undefined,
+      roleSwap: swap ?? undefined,
       vigorKeptSince: demonRole === "vigormortis" ? new Map(st.vigorKept) : undefined,
       vigorPoisoned: demonRole === "vigormortis"
         ? Array.from({ length: pz.nights + 1 }, (_, n) => {
@@ -768,8 +801,29 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
 
   type Mut = (s: St) => boolean;
 
+  const charmerSeat = assignment.indexOf("snakecharmer");
+
   /** demonless: 마스터마인드 연장 밤 — 데몬이 죽어 있어 데몬 킬도, 킬 부재 설명도 없다 */
   function doNight(st: St, night: number, trigger: Trigger, minstrelActive: boolean, demonless = false) {
+    // 뱀 조련사 교환 (밤 순서상 맨 처음): 멀쩡한 조련사의 기록된 지목이 당시 데몬이어야 한다.
+    // 성립하면 조련사가 그 밤부터 데몬이 되고 (승계), 옛 데몬은 선한 뱀 조련사가 된다
+    // (토큰은 sc.roleSwap이 바꾼다 — 영구 중독이라 능력은 없다).
+    if (snakeSwapNight != null && night === snakeSwapNight) {
+      if (st.became.has(charmerSeat)) return;
+      const rec = actionData(charmerSeat, "snakecharmer", night);
+      if (rec?.type !== "snakecharmer" || rec.target !== st.demon) return; // 지목 기록 ≠ 당시 데몬 — 모순
+      if (!sched.aliveAtNightStart(night)[charmerSeat]) return;
+      if (!forbid_(st, night, charmerSeat)) return; // 멀쩡했어야 교환이 일어난다
+      st.demon = charmerSeat;
+      st.became.set(charmerSeat, night);
+      st.poChoseNone = false;
+    } else if (charmerSeat >= 0 && !st.became.has(charmerSeat)
+      && sched.aliveAtNightStart(night)[charmerSeat]
+      && (snakeSwapNight == null || night < snakeSwapNight)) {
+      // 교환이 일어나지 않은 밤: 기록된 지목이 당시 데몬이었다면 조련사가 비정상이었어야 한다
+      const rec = actionData(charmerSeat, "snakecharmer", night);
+      if (rec?.type === "snakecharmer" && rec.target === st.demon && !require_(st, night, charmerSeat)) return;
+    }
     st.demonNights[night] = st.demon;
     // 이동식 취함 원천(선원·여관주인·대신)의 선택을 분기로 열거한 뒤 밤을 진행한다
     for (const s of drunkSourceBranches(st, night, minstrelActive)) {
@@ -832,6 +886,34 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
         });
       }
       // 기록 없는 밤: 대상 미상 — 취함·보호 표시 없이 진행 (관대한 방향)
+    }
+
+    // 철학자의 능력 획득 (사용 밤): (효과 — 원주인이 있으면 그 밤부터 영구 취함) /
+    // (무효 — 사용 밤 중독: 능력을 얻지 못했고, 이후 철학자의 정보는 전부 가짜다)
+    if (philoRec !== null && philoRec.night === night
+      && aliveStart[philoSeat] && !st.became.has(philoSeat)) {
+      const chosen = philoRec.role;
+      branches = branches.flatMap((base) => {
+        const out: St[] = [];
+        const eff = cloneSt(base);
+        if (forbid_(eff, night, philoSeat)) {
+          let holder = -1;
+          for (let x = 0; x < assignment.length; x++) {
+            if (x !== philoSeat && tokenAt(base.became, x, night) === chosen) { holder = x; break; }
+          }
+          if (holder >= 0) {
+            for (let k = night; k <= pz.nights; k++) markDrunk(eff, k, holder); // 원주인 영구 취함
+          }
+          out.push(eff);
+        }
+        const voided = cloneSt(base);
+        if (require_(voided, night, philoSeat)) {
+          // 능력을 얻지 못했다 — 이후 철학자의 '획득 능력' 정보는 전부 무제약 (가짜)
+          for (let k = night; k <= pz.nights; k++) markDrunk(voided, k, philoSeat);
+          out.push(voided);
+        }
+        return out;
+      });
     }
 
     if (courtierRec !== null && courtierRec.night === night
@@ -1354,8 +1436,13 @@ export function demonScenarios(pz: SolverPuzzle, sched: Schedule, assignment: Ro
   return results;
 }
 
-/** 밤 night 시점의 토큰 역할 (데몬 승계 반영 — 승계자는 그 판의 데몬 역할이 된다) */
+/** 밤 night 시점의 토큰 역할 (데몬 승계 + 역할 교환 반영 — 교환이 우선한다: 뱀 조련사 교환에서 옛 데몬의 became(0)이 새 토큰을 가리면 안 된다) */
 export function tokenRoleAt(assignment: RoleId[], sc: DemonScenario, seat: Seat, night: number): RoleId {
+  const sw = sc.roleSwap;
+  if (sw !== undefined && night >= sw.since) {
+    if (seat === sw.a) return assignment[sw.b];
+    if (seat === sw.b) return assignment[sw.a];
+  }
   const since = sc.becameDemonAt.get(seat);
   if (since !== undefined && since <= night) {
     return assignment.find((r) => ROLES[r].team === "demon") ?? "imp";

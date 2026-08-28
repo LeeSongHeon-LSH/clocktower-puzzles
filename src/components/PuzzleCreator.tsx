@@ -14,6 +14,7 @@ import { solve } from "@/lib/solver/solve";
 import {
   ROLE_IDS,
   SOLVER_ROLES,
+  SWAPPABLE_ROLES,
   type GameEvent,
   type InfoData,
   type Prop,
@@ -70,11 +71,14 @@ const INFO_ROLES: RoleId[] = [
   "undertaker", "ravenkeeper", "clockmaker", "seamstress", "mathematician", "chambermaid",
   "monk", "exorcist", "dreamer", "oracle", "grandmother", "gambler", "sage",
   "flowergirl", "towncrier", "sailor", "innkeeper", "courtier", "professor", "artist", "savant",
+  "snakecharmer", "philosopher",
 ];
 
 interface DraftInfo {
   night: number;
   data: InfoData;
+  /** 이 정보를 받을 당시의 역할 (이발사 교환 이력) — 데이터 타입은 이 역할을 따른다 */
+  asRole?: RoleId;
 }
 
 interface DraftClaim {
@@ -119,6 +123,8 @@ function blankInfo(role: RoleId, night: number, players: number): DraftInfo | nu
     case "innkeeper": return { night: Math.max(2, night), data: { type: "innkeeper", targets: pair } };
     case "courtier": return { night, data: { type: "courtier", role: "imp" } };
     case "professor": return { night: Math.max(2, night), data: { type: "professor", target: 0 } };
+    case "snakecharmer": return { night, data: { type: "snakecharmer", target: 0 } };
+    case "philosopher": return { night, data: { type: "philosopher", role: "empath" } };
     case "artist": return { night, data: { type: "artist", question: { kind: "isDemon", seat: 0 }, yes: false } };
     case "savant":
       return { night, data: { type: "savant", statements: [{ kind: "isEvil", seat: 0 }, { kind: "roleInPlay", role: "drunk" }] } };
@@ -1061,6 +1067,28 @@ function InfoEditor({
           onChange={(e) => onChange({ ...info, night: Number(e.target.value) })}>
           {Array.from({ length: nights }, (_, i) => i + 1).map((n) => <option key={n} value={n}>밤 {n}</option>)}
         </select>
+        {pool.includes("barber") && (
+          <select
+            className={field}
+            aria-label="당시 역할 (이발사 교환 이력)"
+            value={info.asRole ?? ""}
+            onChange={(e) => {
+              const r = e.target.value as RoleId | "";
+              if (r === "") {
+                onChange({ night: info.night, data: info.data });
+              } else {
+                // 데이터 타입은 당시 역할을 따른다 — 그 역할의 기본 정보로 교체
+                const blank = blankInfo(r, info.night, seats.length);
+                if (blank) onChange({ night: info.night, data: blank.data, asRole: r });
+              }
+            }}
+          >
+            <option value="">현재 역할로서</option>
+            {SWAPPABLE_ROLES.filter((r) => pool.includes(r)).map((r) => (
+              <option key={r} value={r}>당시 {ROLES[r].ko}로서</option>
+            ))}
+          </select>
+        )}
 
         {pair && (d.type === "washerwoman" || d.type === "investigator" || d.type === "librarian") && (
           <>
@@ -1118,14 +1146,15 @@ function InfoEditor({
           </>
         )}
 
-        {(d.type === "monk" || d.type === "exorcist" || d.type === "sailor" || d.type === "professor") && (
+        {(d.type === "monk" || d.type === "exorcist" || d.type === "sailor" || d.type === "professor" || d.type === "snakecharmer") && (
           <>
             {seatSelect(d.target, (s) => set({ ...d, target: s }))}
             <span className="text-xs text-faded">
               {d.type === "monk" ? "를 보호"
                 : d.type === "exorcist" ? "를 지목"
                 : d.type === "sailor" ? "를 선택 (나 또는 그가 취한다)"
-                : "의 시신을 선택 (마을 사람이면 부활)"}
+                : d.type === "professor" ? "의 시신을 선택 (마을 사람이면 부활)"
+                : "를 지목 (악마라면 역할·진영 교환)"}
             </span>
           </>
         )}
@@ -1142,6 +1171,13 @@ function InfoEditor({
           <>
             {roleSelect(d.role, (r) => set({ type: "courtier", role: r }))}
             <span className="text-xs text-faded">이(가) 3일 밤낮 취한다</span>
+          </>
+        )}
+
+        {d.type === "philosopher" && (
+          <>
+            {roleSelect(d.role, (r) => set({ type: "philosopher", role: r }), ["townsfolk"])}
+            <span className="text-xs text-faded">의 능력을 얻는다 (원주인은 영구 취함)</span>
           </>
         )}
 

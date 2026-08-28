@@ -146,6 +146,7 @@ export const SOLVER_ROLES: readonly RoleId[] = [
   "sweetheart", // 죽으면 그때부터 1명이 취한다 — 대상(또는 사망 시 중독으로 미발동)을 열거
   "mutant", // 외부인임을 숨기려 마을 사람을 사칭한다 — 주장 전체가 날조 (주정뱅이와 대칭, 밤에 깨지 않음)
   "klutz", // 죽으면 1명 공개 지목, 악이면 패배 — 지목 정보가 스키마에 없어 제약 없음 (구성 전용)
+  "barber", // 죽으면 데몬이 두 좌석의 역할을 바꿀 수 있다 — 교환(단일 역할 타임라인)은 주장의 asRole 이력이 드러낼 때만 성립
   "eviltwin", // 선한 쌍둥이와 서로를 안다 — 진행 중 게임에 관측 제약 없음 (구성 전용, 밤에 깨지 않음)
   "witch", // 밤마다 저주 — 저주 사망(낮, 지명 시)은 이벤트로 표현 불가, 기상 전용
   "cerenovus", // 밤마다 광기 강제 — 마지막 밤의 선택이 선한 좌석 1개의 주장 전체를 날조로 만들 수 있다 (solve가 열거)
@@ -158,6 +159,8 @@ export const SOLVER_ROLES: readonly RoleId[] = [
   "vigormortis", // 임프 대체 데몬: 죽인 하수인이 능력을 유지하고 마을 사람 이웃 1명을 계속 중독. [−1 외부인]
   "nodashii", // 임프 대체 데몬: 양옆의 가장 가까운 마을 사람 둘이 계속 중독 (timeline이 밤별 집합 계산)
   "clockmaker",
+  "snakecharmer", // 밤마다 지목 — 데몬 적중 시 역할·진영 교환(승계형 타임라인) + 새 조련사 영구 중독
+  "philosopher", // 1회 선한 능력 획득(주장 기반 위임 + asRole) — 원주인은 영구 취함, 무효 사용은 영구 가짜 능력
   "dreamer",
   "oracle",
   "seamstress",
@@ -204,6 +207,8 @@ export type InfoData =
   | { type: "innkeeper"; targets: [Seat, Seat] } // 밤마다(밤2부터): 둘은 그 밤 죽지 않고, 하나가 취한다
   | { type: "courtier"; role: RoleId } // 1회: 그 역할(토큰)이 3밤 3낮 취한다
   | { type: "professor"; target: Seat } // 1회(밤2부터): 죽은 좌석 선택 — 마을 사람이면 부활했을 것
+  | { type: "snakecharmer"; target: Seat } // 밤마다: 지목 — 데몬이면 역할·진영 교환 + 새 조련사 영구 중독
+  | { type: "philosopher"; role: RoleId } // 1회: 선한 능력 획득 — 원주인(있다면)은 영구 취함
   // 낮 정보 (night n = 낮 n — 독 지속 창과 일치). 밤에 깨지 않는다.
   | { type: "artist"; question: Prop; yes: boolean } // 1회, 낮: 예/아니오 질문 — 멀쩡하면 진실
   | { type: "savant"; statements: [Prop, Prop] } // 매일 낮: 둘 중 정확히 하나만 참 (Vortox: 둘 다 거짓)
@@ -224,7 +229,38 @@ export interface ClaimInfo {
   /** 사람이 읽는 서술. 생략하면 UI가 data에서 자동 생성한다 (역할명 사전과 항상 동기화) */
   text?: string;
   data?: InfoData; // 솔버 입력. 정보성 주장엔 필수, 순수 서사엔 생략 가능
+  /**
+   * 이 정보를 받을 당시의 역할 (이발사 교환 이력 — 20차). 생략하면 주장 역할.
+   * 풀에 이발사가 있을 때만 허용되고, data.type은 asRole과 일치해야 한다.
+   */
+  asRole?: RoleId;
 }
+
+/**
+ * 이발사 교환에 참여할 수 있는 역할 — **마을 사람** 정보/구성 역할만.
+ * 능력이 타임라인 좌석 조회에 얽힌 역할(군인·수도사·선원 등)은 제외한다: 그런 역할의
+ * 교환 세계는 주장으로 표현할 수 없으므로 열거에서 빼도 건전하다. 외부인(은둔자·집사)도
+ * 제외한다 — 팀이 섞이면 팀 기반 판정(찻집 여인·노 다시 이웃 등)이 교환에 흔들린다.
+ */
+export const SWAPPABLE_ROLES: readonly RoleId[] = [
+  "washerwoman", "librarian", "investigator", "chef", "empath", "fortuneteller",
+  "undertaker", "ravenkeeper", "clockmaker", "dreamer", "oracle", "juggler",
+  "mathematician", "chambermaid", "flowergirl", "towncrier", "savant", "artist", "mayor",
+];
+
+/**
+ * 철학자가 획득할 수 있는 능력 — SWAPPABLE에서 점쟁이(붉은 청어 부여 미표현)와
+ * 저글러(밤2 고정 규칙이 획득 시점과 어긋남)를 뺀 것. 밖의 획득 세계는 주장으로
+ * 표현할 수 없으므로 (검증이 거부한다) 열거에서 빼도 건전하다.
+ */
+export const PHILOSOPHER_GAINABLE: readonly RoleId[] = SWAPPABLE_ROLES.filter(
+  (r) => r !== "fortuneteller" && r !== "juggler",
+);
+
+/** 획득 즉시 한 번만 정보를 주는 역할 — 획득한 밤에만 깨어난다 */
+export const ONE_SHOT_INFO_ROLES: readonly RoleId[] = [
+  "washerwoman", "librarian", "investigator", "chef", "clockmaker",
+];
 
 /** 좌석 하나의 공개 주장: 역할 + 밤 정보들 */
 export interface Claim {

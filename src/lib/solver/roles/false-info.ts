@@ -17,7 +17,7 @@ import { exorcist } from "./exorcist";
 import { gambler } from "./gambler";
 import { flowergirl } from "./flowergirl";
 import { towncrier } from "./towncrier";
-import { courtier, innkeeper, professor, sailor } from "./drunk-sources";
+import { courtier, innkeeper, philosopher, professor, sailor, snakecharmer } from "./drunk-sources";
 import { artistFalse, savantFalse } from "./props";
 
 /** [min, max] 범위의 등록 가능 값 중 claimed와 다른 값이 존재하는가 (범위는 항상 비어 있지 않다) */
@@ -181,6 +181,10 @@ export function checkContentFalse(ctx: Ctx, seat: Seat, data: InfoData, night: n
       return courtier(ctx, seat, data, night);
     case "professor":
       return professor(ctx, seat, data, night);
+    case "snakecharmer":
+      return snakecharmer(ctx, seat, data, night);
+    case "philosopher":
+      return philosopher(ctx, seat, data, night);
     // 낮 정보 — Vortox 세계에서 화가의 답은 거짓, 학자의 두 진술은 둘 다 거짓 (공식 룰링)
     case "artist":
       return artistFalse(ctx, seat, data, night);
