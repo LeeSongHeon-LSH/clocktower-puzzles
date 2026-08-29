@@ -31,7 +31,7 @@ export default function Home() {
           Blood on the Clocktower 상황 추리 퍼즐. 모든 플레이어의 공개 주장과
           밤의 사망 기록이 주어진다 — 그중 누군가는 거짓말을 하고 있다. 퍼즐은
           논리만으로 답이 하나로 확정되도록 기계 검증된다. 검증기가 아직 능력을 모르는
-          실험적 역할이 든 문제만 예외이고, 그런 문제에는 「솔버 미검증」 표시가 붙는다.
+          역할이 든 문제만 예외이고, 그런 문제에는 「솔버 미검증」 표시가 붙는다.
         </p>
       </section>
       <HomeClient puzzles={summaries} />

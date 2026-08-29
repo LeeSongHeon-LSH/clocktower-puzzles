@@ -37,13 +37,12 @@ const UNCLAIMABLE: RoleId[] = ["drunk", ...(ROLE_IDS as readonly RoleId[]).filte
 const TEAM_ORDER: Team[] = ["townsfolk", "outsider", "minion", "demon"];
 
 /**
- * 대본 후보. 실험적 역할은 따로 담아 기본값으로 접어 둔다 — 솔버가 능력을 모르는 데다
- * 수가 많아서 기본 판본 역할과 한 줄로 섞으면 고르기가 어려워진다.
+ * 대본 후보. ROLE_IDS가 이미 판본 순서(점철되는 혼란 → … → 실험적)라 그대로 쓰면
+ * 규칙 문서·역할 사전과 같은 차례가 되고, 점선 역할이 자연히 뒤쪽에 모인다.
  */
 const POOL_BY_TEAM = TEAM_ORDER.map((team) => ({
   team,
-  roles: (ROLE_IDS as readonly RoleId[]).filter((r) => ROLES[r].team === team && ROLES[r].edition !== "exp"),
-  experimental: (ROLE_IDS as readonly RoleId[]).filter((r) => ROLES[r].team === team && ROLES[r].edition === "exp"),
+  roles: (ROLE_IDS as readonly RoleId[]).filter((r) => ROLES[r].team === team),
 }));
 
 /** 진영색은 팔레트의 team 토큰을 그대로 쓴다 — 마을 광장·규칙 문서와 같은 색이다. */
@@ -71,12 +70,15 @@ const TEAM_STYLE: Record<Team, { rail: string; text: string; chipOn: string }> =
 };
 
 /**
- * 선택된 실험적 역할의 칩. 팀색 대신 황동을 쓴다 —
- * 이 사이트에서 황동은 "기계가 보증한 것/보증하지 못한 것"의 색이고
- * (「솔버 미검증」 태그·고지 배너와 같은 색), 점선은 능력이 모델링되지 않았다는 뜻이다.
- * 그래서 대본을 보면 어느 칩이 이 문제를 미검증 레인으로 끌고 가는지 한눈에 보인다.
+ * 선택된 점선 역할의 칩. 팀색 대신 황동을 쓴다 — 이 사이트에서 황동은 "기계가 보증한
+ * 것/보증하지 못한 것"의 색이고(「솔버 미검증」 태그·고지 배너와 같은 색), 점선은 능력이
+ * 모델링되지 않았다는 뜻이다. 그래서 대본만 봐도 어느 칩이 이 문제를 미검증 쪽으로
+ * 끌고 가는지 보인다.
+ *
+ * 판정 기준은 판본이 아니라 SOLVER_ROLES다 — 실험적 66종에 건달·마귀할멈(기본 판본이지만
+ * 아직 미모델링)이 더해져 점선은 68종이다. 그래서 UI는 "실험적"이 아니라 "점선"으로 부른다.
  */
-const EXPERIMENTAL_CHIP_ON = "border-brass bg-brass/15 text-brass";
+const DASHED_CHIP_ON = "border-brass bg-brass/15 text-brass";
 
 /** 정보를 만들어 내는 역할 = 정보 입력칸이 있는 역할 */
 const INFO_ROLES: RoleId[] = [
@@ -379,7 +381,6 @@ export function PuzzleCreator() {
   const [votes, setVotes] = useState<Record<number, Seat[]>>({});
   const [walkthrough, setWalkthrough] = useState("");
   const [verdict, setVerdict] = useState<Verdict>({ kind: "idle" });
-  const [showExperimental, setShowExperimental] = useState(false);
 
   const seats = useMemo(() => Array.from({ length: playerCount }, (_, i) => i), [playerCount]);
   const ledger = useMemo(
@@ -411,14 +412,6 @@ export function PuzzleCreator() {
     [playerCount, nights, pool, claims, solution],
   );
   const unverifiedLane = laneUnmodeled.length > 0;
-  /** 점선 칩이 화면에 하나라도 있는가 (접어 둬도 고른 것은 남는다) */
-  const poolHasExperimental = pool.some((r) => ROLES[r].edition === "exp");
-
-  /** 솔버가 능력을 아는 역할 전부 — 검증되는 가장 넓은 대본이다 */
-  function fillSolverPool() {
-    setPool([...SOLVER_ROLES]);
-    setVerdict({ kind: "idle" });
-  }
 
   const claimable = useMemo(() => pool.filter((r) => !UNCLAIMABLE.includes(r)), [pool]);
 
@@ -552,7 +545,7 @@ export function PuzzleCreator() {
     }
 
     // 구조 검사는 언제나 돌고, 전수 탐색은 검증이 성립할 때만 돈다.
-    // 좌석 범위·주장 중복·풀에 없는 역할 주장 같은 검사는 실험적 역할과 무관하게 살아 있다.
+    // 좌석 범위·주장 중복·풀에 없는 역할 주장 같은 검사는 점선 역할과 무관하게 살아 있다.
     let result;
     try {
       result = analyze(toPuzzle(shared, "draft"));
@@ -678,27 +671,10 @@ export function PuzzleCreator() {
           악마는 최소 1종 넣어야 합니다.
         </p>
 
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs">
-          <span className={narrowPool ? "text-brass" : "text-faded"}>
-            선택 <strong className="tabular-nums text-parchment">{pool.length}</strong>종 · 좌석{" "}
-            <strong className="tabular-nums text-parchment">{playerCount}</strong>명
-          </span>
-          <button
-            type="button"
-            onClick={fillSolverPool}
-            className="rounded border border-brass/60 px-2 py-1 text-brass hover:bg-brass/10"
-          >
-            검증되는 {SOLVER_ROLES.length}종 모두 담기
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowExperimental((v) => !v)}
-            aria-pressed={showExperimental}
-            className="rounded border border-panel-edge px-2 py-1 text-faded hover:text-parchment"
-          >
-            실험적 역할 {showExperimental ? "숨기기" : "보기"}
-          </button>
-        </div>
+        <p className={`text-xs ${narrowPool ? "text-brass" : "text-faded"}`}>
+          선택 <strong className="tabular-nums text-parchment">{pool.length}</strong>종 · 좌석{" "}
+          <strong className="tabular-nums text-parchment">{playerCount}</strong>명
+        </p>
         {narrowPool && (
           <p className="text-xs text-brass">
             대본이 좁습니다. {playerCount}자리에 {pool.length}종이면 어떤 역할이 쓰였는지 거의 다
@@ -711,32 +687,13 @@ export function PuzzleCreator() {
           </p>
         )}
 
-        {(showExperimental || poolHasExperimental) && (
-          <p className="max-w-prose text-xs leading-relaxed text-faded">
-            <span className="mr-1.5 inline-block rounded-full border border-dashed border-faded px-2 py-0.5 align-middle text-[11px]">
-              점선
-            </span>
-            은 검증기가 능력을 모르는 역할입니다. 골라도 되지만, 좌석에 배정되면 답이 하나인지
-            증명할 수 없습니다. 고르면 칩이{" "}
-            <span className="mx-0.5 inline-block rounded-full border border-dashed border-brass bg-brass/15 px-2 py-0.5 align-middle text-[11px] text-brass">
-              황동색
-            </span>
-            으로 켜지고, 아래 검증란이 그에 맞게 바뀝니다.
-          </p>
-        )}
-
         <p className="max-w-prose text-xs text-faded">
           공유 링크는 서버에 저장되지 않는 사적인 링크입니다 — 이 사이트 목록에 수록되는 것과는
           별개이고, 링크를 만드는 것이 수록 신청은 아닙니다.
         </p>
 
         <div className="space-y-3" role="group" aria-label="역할 풀">
-          {POOL_BY_TEAM.map(({ team, roles: base, experimental }) => {
-            // 접어 둔 상태에서도 이미 고른 실험적 역할은 남겨 둔다 — 안 보이는데 풀에 있으면 뺄 수가 없다.
-            const roles = [
-              ...base,
-              ...(showExperimental ? experimental : experimental.filter((r) => pool.includes(r))),
-            ];
+          {POOL_BY_TEAM.map(({ team, roles }) => {
             const picked = roles.filter((r) => pool.includes(r)).length;
             const style = TEAM_STYLE[team];
             return (
@@ -755,13 +712,14 @@ export function PuzzleCreator() {
                     return (
                       <button key={r} type="button" onClick={() => togglePool(r)} aria-pressed={on}
                         aria-label={modeled ? ROLES[r].ko : `${ROLES[r].ko} (솔버 미구현)`}
+                        title={modeled ? undefined : "점선 역할 — 검증기가 능력을 모릅니다. 좌석에 배정되면 유일해 검증을 건너뜁니다."}
                         className={`rounded-full border px-2.5 py-1 text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brass ${
                           modeled ? "" : "border-dashed"
                         } ${
                           on
                             ? modeled
                               ? style.chipOn
-                              : EXPERIMENTAL_CHIP_ON
+                              : DASHED_CHIP_ON
                             : "border-panel-edge text-faded hover:text-parchment"
                         }`}>
                         {ROLES[r].ko}
@@ -1057,10 +1015,10 @@ export function PuzzleCreator() {
               이 대본은 유일해를 증명할 수 없습니다
             </p>
             <p className="text-xs leading-relaxed text-faded">
-              아래 역할은 검증기가 능력을 모릅니다. 유일해 탐색을 건너뛰므로 답이 둘 이상일 수 있고,
-              푸는 사람에게 <strong className="text-parchment">「솔버 미검증」</strong>으로 표시됩니다.
-              좌석 범위·주장 형식 같은 구조 검사는 그대로 받습니다. 실험적 역할은 공식 알마낙에서
-              능력이 개정될 수 있습니다.
+              대본에서 테두리가 점선인 <strong className="text-parchment">점선 역할</strong>은 검증기가
+              능력을 모릅니다. 유일해 탐색을 건너뛰므로 답이 둘 이상일 수 있고, 푸는 사람에게{" "}
+              <strong className="text-parchment">「솔버 미검증」</strong>으로 표시됩니다. 좌석 범위·주장
+              형식 같은 구조 검사는 그대로 받습니다.
             </p>
             <ul className="flex flex-wrap gap-1.5">
               {laneUnmodeled.map((r) => (
@@ -1094,8 +1052,8 @@ export function PuzzleCreator() {
               답이 하나뿐인지는 확인하지 못했습니다 — 링크는 나갑니다.
             </p>
             <p className="max-w-prose text-faded">
-              아래 역할은 검증기가 능력을 모릅니다. 모르는 능력을 없는 셈 치고 세면 “유일해”가 거짓이
-              되므로 전수 탐색을 돌리지 않았습니다. 좌석 범위·주장 형식 같은 구조 검사는 통과했지만,
+              아래 점선 역할은 검증기가 능력을 모릅니다. 모르는 능력을 없는 셈 치고 세면 “유일해”가
+              거짓이 되므로 전수 탐색을 돌리지 않았습니다. 좌석 범위·주장 형식 같은 구조 검사는 통과했지만,
               <strong className="text-parchment"> 답이 둘 이상일 수 있습니다.</strong> 그러면 제대로 추론한
               사람이 오답 판정을 받습니다 — 푸는 사람에게도 그렇게 표시되고, 근거는 적어 두신 해설뿐입니다.
             </p>
@@ -1121,7 +1079,7 @@ export function PuzzleCreator() {
               </a>
             </div>
             <p className="max-w-prose text-faded">
-              위 역할만 검증되는 역할로 바꾸면 유일해를 증명받을 수 있습니다.
+              위 점선 역할만 실선 역할로 바꾸면 유일해를 증명받을 수 있습니다.
             </p>
           </div>
         )}

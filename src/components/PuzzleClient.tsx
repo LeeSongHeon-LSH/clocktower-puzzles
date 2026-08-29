@@ -233,13 +233,13 @@ export function PuzzleClient({ puzzle, verified = true }: { puzzle: Puzzle; veri
               <strong className="text-parchment">
                 논리만으로 그 답 하나에 도달할 수 있는지는 기계로 확인하지 못했습니다
               </strong>{" "}
-              — 대본에 검증기가 능력을 모르는 실험적 역할이 있어 전수 탐색을 돌리지 못했습니다.
+              — 대본에 검증기가 능력을 모르는 역할이 있어 전수 탐색을 돌리지 못했습니다.
               다른 배치도 모든 단서와 맞을 수 있고, 그러면 제대로 추론하고도 오답 판정이 나옵니다.
               아래 해설이 스토리텔러가 의도한 추론 경로입니다.
             </p>
           ) : (
             <p className="max-w-prose text-xs leading-relaxed text-faded">
-              대본에 검증기가 능력을 모르는 실험적 역할이 있어{" "}
+              대본에 검증기가 능력을 모르는 역할이 있어{" "}
               <strong className="text-parchment">답이 하나뿐인지 확인하지 못했습니다.</strong>{" "}
               답이 둘 이상일 수 있고, 그러면 제대로 추론하고도 오답 판정이 나옵니다. 근거는 만든
               사람이 쓴 해설뿐입니다.
