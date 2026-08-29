@@ -35,6 +35,15 @@ export interface Puzzle extends SolverPuzzle {
   author?: string;
   /** 상황 도입 서술 (선택) */
   intro?: string;
+  /**
+   * 실제로 진행된 판을 옮긴 문제.
+   *
+   * **파생 불가능한 사실이라 저자가 적는다** — 검증 게이트를 끄는 스위치가 아니라
+   * (그쪽은 퍼즐 내용에서 파생된다: solver의 unmodeledRoles) 풀이자에게 보여줄
+   * 근거의 종류를 고르는 표시다. 정답이 그날의 실제 그리모어라는 뜻이지,
+   * 논리만으로 그 답 하나에 도달할 수 있다는 뜻은 아니다.
+   */
+  realGame?: boolean;
   questions: PuzzleQuestion[];
   /** 최대 2개, 클릭해서 여는 단계형 힌트 */
   hints: string[];

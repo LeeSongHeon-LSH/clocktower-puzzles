@@ -15,7 +15,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 Blood on the Clocktower 상황 추리 퍼즐 웹앱. 설계 합의 내용은 `docs/REQUIREMENTS.md`, 구조는 `docs/ARCHITECTURE.md`가 진실 원본이다 — 코드 작업 전에 두 문서를 읽을 것.
 
 핵심 불변 규칙:
-- 모든 퍼즐은 `npm test`(솔버 전수 탐색)로 유일해가 증명되어야 배포 가능.
+- 퍼즐은 `npm test`(솔버 전수 탐색)로 유일해가 증명되어야 배포 가능. 예외는 솔버가 능력을
+  모르는 역할이 든 퍼즐 하나뿐이고, 그때도 **건너뛰는 건 유일해 탐색뿐**이다 — 구조 검사와
+  해설 필수는 그대로다 (`REQUIREMENTS.md` §2.5.1). 검증 가능 여부는 퍼즐 내용에서 파생되는
+  값이지 저자가 적는 필드가 아니다.
 - 역할명 UI 표기는 항상 `한국어(영어)` 형식, 사전은 `src/data/roles.ts` 한 곳에서만.
 - 솔버(`src/lib/solver/`)는 UI에 노출 금지 (스포일러).
 - 공식 BotC 아트/아이콘 사용 금지 (비공식 팬 프로젝트).

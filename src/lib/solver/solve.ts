@@ -40,7 +40,7 @@ function permutations<T>(arr: T[], k: number): T[][] {
  * - 주장 역할: 선하고 정직한 좌석의 토큰이 된다
  * - 주정뱅이: 풀에 있으면 선한 좌석 하나가 될 수 있다
  * 여기에 능력이 모델링되지 않은 역할이 섞이면 탐색이 그 능력을 없는 셈 치므로
- * "유일해"라는 결론 자체가 거짓이 된다. 그래서 세는 대신 거부한다.
+ * "유일해"라는 결론 자체가 거짓이 된다 — unmodeledRoles가 그 판정을 한다.
  */
 function assignableRoles(pz: SolverPuzzle): RoleId[] {
   const out = new Set<RoleId>(pz.rolePool.filter((r) => {
@@ -93,10 +93,6 @@ function validatePuzzle(pz: SolverPuzzle): Claim[] {
       }
     }
   }
-  const unmodeled = assignableRoles(pz).filter((r) => !SOLVER_ROLES.includes(r));
-  if (unmodeled.length > 0) {
-    throw new Error(`솔버가 아직 모르는 역할입니다: ${unmodeled.map((r) => ROLES[r].ko).join(", ")}`);
-  }
   for (const c of pz.claims) {
     if (c.seat < 0 || c.seat >= pz.playerCount) throw new Error(`잘못된 좌석: ${c.seat}`);
     if (claimBySeat[c.seat]) throw new Error(`좌석 ${c.seat}의 주장이 중복`);
@@ -145,15 +141,56 @@ function validatePuzzle(pz: SolverPuzzle): Claim[] {
   return claimBySeat;
 }
 
+/**
+ * 능력이 솔버에 없어 전수 탐색이 성립하지 않는 역할을 모은다.
+ *
+ * **선언이 아니라 파생값이다** — 퍼즐 내용에서 계산되므로 작성자가 끌 수 없다.
+ * 모르는 능력을 없는 셈 치고 세면 "유일해"라는 결론 자체가 거짓이 되므로,
+ * 여기가 비어 있지 않으면 열거를 하지 않는다 (해가 0개인 것과는 다르다).
+ */
+export function unmodeledRoles(pz: SolverPuzzle & { solution?: readonly RoleId[] }): RoleId[] {
+  const candidates = new Set<RoleId>([...assignableRoles(pz), ...(pz.solution ?? [])]);
+  return [...candidates].filter((r) => !SOLVER_ROLES.includes(r));
+}
+
+export interface Analysis {
+  /** 비어 있으면 유일해 판정이 성립한다 */
+  unmodeled: RoleId[];
+  /** unmodeled가 비어 있을 때만 채워진다 */
+  worlds: World[];
+}
+
+/**
+ * 구조 검사는 **언제나** 하고, 전수 탐색은 검증이 성립할 때만 한다.
+ *
+ * 좌석 범위·주장 중복·풀에 없는 역할 주장·주장 불가 역할·사건 원장 범위 —
+ * 이 검사들은 실험적 역할과 무관하게 전부 살아 있어야 한다. 건너뛰는 것은
+ * 유일해 탐색 하나뿐이다.
+ */
+export function analyze(pz: SolverPuzzle & { solution?: readonly RoleId[] }): Analysis {
+  const claimBySeat = validatePuzzle(pz);
+  const sched = new Schedule(pz); // 사건 원장 구조 검사 (시점 범위·중복)
+  const unmodeled = unmodeledRoles(pz);
+  if (unmodeled.length > 0) return { unmodeled, worlds: [] };
+  return { unmodeled, worlds: enumerate(pz, claimBySeat, sched) };
+}
+
+/** 유일해가 증명되어야 하는 경로용 — 검증이 성립하지 않으면 거부한다. */
+export function solve(pz: SolverPuzzle): World[] {
+  const { unmodeled, worlds } = analyze(pz);
+  if (unmodeled.length > 0) {
+    throw new Error(`솔버가 아직 모르는 역할입니다: ${unmodeled.map((r) => ROLES[r].ko).join(", ")}`);
+  }
+  return worlds;
+}
+
 interface GoodInfo {
   seat: Seat;
   night: number;
   data: InfoData;
 }
 
-export function solve(pz: SolverPuzzle): World[] {
-  const claimBySeat = validatePuzzle(pz);
-  const sched = new Schedule(pz);
+function enumerate(pz: SolverPuzzle, claimBySeat: Claim[], sched: Schedule): World[] {
   const N = pz.playerCount;
   const seats = Array.from({ length: N }, (_, i) => i);
   const minionsInPool = pz.rolePool.filter((r) => ROLES[r].team === "minion");
