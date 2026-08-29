@@ -413,6 +413,19 @@ export function PuzzleCreator() {
   );
   const unverifiedLane = laneUnmodeled.length > 0;
 
+  /**
+   * 대본에는 있지만 아직 어느 좌석도 될 수 없는 점선 역할.
+   *
+   * 선한 역할은 대본에 담기는 것만으로는 배정되지 않는다 — 선하고 정직한 좌석의 토큰은
+   * 그 좌석의 주장으로 고정되기 때문이다. 그래서 능력이 발동할 수 없고, 유일해 증명도
+   * 흔들리지 않는다. 반면 하수인·악마는 악역 자리 후보라 담기만 해도 배정 가능해진다.
+   * 이 차이를 화면이 말해 주지 않으면 "점선을 골랐는데 아무 일도 안 일어난다"로 읽힌다.
+   */
+  const dashedIdle = useMemo(
+    () => pool.filter((r) => !SOLVER_ROLES.includes(r) && !laneUnmodeled.includes(r)),
+    [pool, laneUnmodeled],
+  );
+
   const claimable = useMemo(() => pool.filter((r) => !UNCLAIMABLE.includes(r)), [pool]);
 
   function toggleDeath(night: number, seat: Seat) {
@@ -675,6 +688,14 @@ export function PuzzleCreator() {
           선택 <strong className="tabular-nums text-parchment">{pool.length}</strong>종 · 좌석{" "}
           <strong className="tabular-nums text-parchment">{playerCount}</strong>명
         </p>
+
+        {dashedIdle.length > 0 && (
+          <p className="max-w-prose text-xs leading-relaxed text-faded">
+            점선 역할 <strong className="tabular-nums text-parchment">{dashedIdle.length}</strong>종은
+            대본에만 있어 검증에 영향을 주지 않습니다 — 어느 좌석도 그 역할이 될 수 없기 때문입니다.
+            주장(3번)이나 정답 그리모어(5번)에 넣으면 그때 반영됩니다.
+          </p>
+        )}
         {narrowPool && (
           <p className="text-xs text-brass">
             대본이 좁습니다. {playerCount}자리에 {pool.length}종이면 어떤 역할이 쓰였는지 거의 다
