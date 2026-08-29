@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { PUZZLES } from "@/data/puzzles";
 import { HomeClient, type PuzzleSummary } from "@/components/HomeClient";
+import { unmodeledRoles } from "@/lib/solver/solve";
 
 export default function Home() {
   const summaries: PuzzleSummary[] = PUZZLES.map((p) => ({
@@ -12,6 +13,9 @@ export default function Home() {
     nights: p.nights,
     source: p.source ?? "official",
     author: p.author,
+    // 검증 여부는 선언이 아니라 퍼즐 내용에서 나온다 — 저자가 켜고 끌 수 없다
+    verified: unmodeledRoles(p).length === 0,
+    realGame: p.realGame,
   }));
 
   return (
@@ -25,8 +29,9 @@ export default function Home() {
         </h1>
         <p className="max-w-prose text-sm leading-relaxed text-faded">
           Blood on the Clocktower 상황 추리 퍼즐. 모든 플레이어의 공개 주장과
-          밤의 사망 기록이 주어진다 — 그중 누군가는 거짓말을 하고 있다. 모든
-          퍼즐은 논리만으로 답이 하나로 확정되도록 기계 검증되었다.
+          밤의 사망 기록이 주어진다 — 그중 누군가는 거짓말을 하고 있다. 퍼즐은
+          논리만으로 답이 하나로 확정되도록 기계 검증된다. 검증기가 아직 능력을 모르는
+          실험적 역할이 든 문제만 예외이고, 그런 문제에는 「솔버 미검증」 표시가 붙는다.
         </p>
       </section>
       <HomeClient puzzles={summaries} />
@@ -34,7 +39,7 @@ export default function Home() {
       <section className="rounded-lg border border-panel-edge bg-panel p-4">
         <p className="font-display text-lg font-bold">직접 만들어 볼 수도 있다</p>
         <p className="mt-1 max-w-prose text-sm leading-relaxed text-faded">
-          브라우저가 그 자리에서 답이 하나뿐인지 검증해 주고, 통과하면 공유 링크가 나옵니다.
+          브라우저가 그 자리에서 답이 하나뿐인지 검증해 주고 공유 링크를 만들어 줍니다.
           가입도 저장도 없습니다.
         </p>
         <p className="mt-3 flex flex-wrap gap-3 text-sm">

@@ -10,7 +10,7 @@ import { useMemo, useState } from "react";
 import { ROLES, TEAM_LABELS, roleLabel } from "@/data/roles";
 import { LIMITS, encodePuzzle, toPuzzle, type SharedPuzzle } from "@/lib/puzzles/codec";
 import { seatName, type Difficulty } from "@/lib/puzzles/schema";
-import { solve } from "@/lib/solver/solve";
+import { analyze, unmodeledRoles } from "@/lib/solver/solve";
 import {
   ROLE_IDS,
   SOLVER_ROLES,
@@ -70,6 +70,14 @@ const TEAM_STYLE: Record<Team, { rail: string; text: string; chipOn: string }> =
   },
 };
 
+/**
+ * 선택된 실험적 역할의 칩. 팀색 대신 황동을 쓴다 —
+ * 이 사이트에서 황동은 "기계가 보증한 것/보증하지 못한 것"의 색이고
+ * (「솔버 미검증」 태그·고지 배너와 같은 색), 점선은 능력이 모델링되지 않았다는 뜻이다.
+ * 그래서 대본을 보면 어느 칩이 이 문제를 미검증 레인으로 끌고 가는지 한눈에 보인다.
+ */
+const EXPERIMENTAL_CHIP_ON = "border-brass bg-brass/15 text-brass";
+
 /** 정보를 만들어 내는 역할 = 정보 입력칸이 있는 역할 */
 const INFO_ROLES: RoleId[] = [
   "washerwoman", "librarian", "investigator", "chef", "empath", "fortuneteller",
@@ -96,7 +104,7 @@ type Verdict =
   | { kind: "error"; message: string }
   | { kind: "multiple"; count: number; example: string }
   | { kind: "none" }
-  | { kind: "unsupported"; roles: RoleId[] }
+  | { kind: "unverified"; roles: RoleId[]; link: string }
   | { kind: "unique"; link: string };
 
 /** 역할에 맞는 기본 정보값 */
@@ -369,6 +377,7 @@ export function PuzzleCreator() {
   const [executions, setExecutions] = useState<Record<number, Seat>>({});
   const [dayActs, setDayActs] = useState<Record<number, DraftDayAction[]>>({});
   const [votes, setVotes] = useState<Record<number, Seat[]>>({});
+  const [walkthrough, setWalkthrough] = useState("");
   const [verdict, setVerdict] = useState<Verdict>({ kind: "idle" });
   const [showExperimental, setShowExperimental] = useState(false);
 
@@ -384,6 +393,26 @@ export function PuzzleCreator() {
   const minionKinds = pool.filter((r) => ROLES[r].team === "minion").length;
   /** 대본이 공개되므로 좌석 수에 비해 좁으면 그 자체가 답을 좁힌다 */
   const narrowPool = pool.length < playerCount + 4;
+
+  /**
+   * 지금 이 대본·주장·정답 배치가 유일해 증명을 받을 수 있는가 — 검증 버튼을 누르기 전에
+   * 실시간으로 판정한다. 솔버와 **같은 함수**를 쓴다 (판정이 한 곳에서만 나온다).
+   */
+  const laneUnmodeled = useMemo(
+    () =>
+      unmodeledRoles({
+        playerCount,
+        nights,
+        rolePool: pool,
+        events: [],
+        claims: claims.map((c, seat) => ({ seat, role: c.role, info: [] })),
+        solution,
+      }),
+    [playerCount, nights, pool, claims, solution],
+  );
+  const unverifiedLane = laneUnmodeled.length > 0;
+  /** 점선 칩이 화면에 하나라도 있는가 (접어 둬도 고른 것은 남는다) */
+  const poolHasExperimental = pool.some((r) => ROLES[r].edition === "exp");
 
   /** 솔버가 능력을 아는 역할 전부 — 검증되는 가장 넓은 대본이다 */
   function fillSolverPool() {
@@ -467,7 +496,20 @@ export function PuzzleCreator() {
     setVerdict({ kind: "idle" });
   }
 
+  /** 해설은 한 줄 = 한 단계다 */
+  const walkthroughSteps = walkthrough
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
   function buildShared(): SharedPuzzle {
+    if (walkthroughSteps.length > LIMITS.maxWalkthrough) {
+      throw new Error(`해설은 최대 ${LIMITS.maxWalkthrough}단계입니다 (지금 ${walkthroughSteps.length}줄).`);
+    }
+    const tooLong = walkthroughSteps.findIndex((w) => w.length > LIMITS.maxText);
+    if (tooLong >= 0) {
+      throw new Error(`해설 ${tooLong + 1}번째 줄이 너무 깁니다 (최대 ${LIMITS.maxText}자).`);
+    }
     const events: GameEvent[] = [
       ...ledgerEvents(ledger),
       ...Object.entries(votes).flatMap(([day, vs]) =>
@@ -490,6 +532,7 @@ export function PuzzleCreator() {
       events,
       questions: [{ id: "demon" as const, text: "지금 이 순간의 악마는 누구인가?", answerSeats: [demonSeat] }],
       solution,
+      walkthrough: walkthroughSteps.length > 0 ? walkthroughSteps : undefined,
     };
   }
 
@@ -502,34 +545,38 @@ export function PuzzleCreator() {
       return;
     }
 
-    // 솔버가 능력을 모르는 역할이 좌석에 배정되면 그 능력을 없는 셈 치고 세게 된다.
-    // 그러면 "유일해"라는 결론 자체가 거짓이 되므로, 세는 대신 어떤 역할이 걸렸는지 알린다.
-    const unmodeled = [
-      ...new Set([
-        ...pool.filter((r) => ROLES[r].team === "minion"),
-        ...(pool.includes("drunk") ? (["drunk"] as RoleId[]) : []),
-        ...claims.map((c) => c.role),
-        ...shared.solution,
-      ]),
-    ].filter((r) => !SOLVER_ROLES.includes(r));
-    if (unmodeled.length > 0) {
-      setVerdict({ kind: "unsupported", roles: unmodeled });
-      return;
-    }
-
     const demons = shared.solution.filter((r) => ROLES[r].team === "demon");
     if (demons.length !== 1) {
       setVerdict({ kind: "error", message: "정답 배치에 악마가 정확히 1명 있어야 합니다." });
       return;
     }
-    let worlds;
+
+    // 구조 검사는 언제나 돌고, 전수 탐색은 검증이 성립할 때만 돈다.
+    // 좌석 범위·주장 중복·풀에 없는 역할 주장 같은 검사는 실험적 역할과 무관하게 살아 있다.
+    let result;
     try {
-      worlds = solve(toPuzzle(shared, "draft"));
+      result = analyze(toPuzzle(shared, "draft"));
     } catch (e) {
       setVerdict({ kind: "error", message: e instanceof Error ? e.message : "검증에 실패했습니다." });
       return;
     }
 
+    if (result.unmodeled.length > 0) {
+      // 기계가 답이 하나임을 보증하지 못하므로 사람이 쓴 해설이 유일한 근거가 된다 — 필수로 건다.
+      if (walkthroughSteps.length === 0) {
+        setVerdict({
+          kind: "error",
+          message:
+            "검증기가 능력을 모르는 역할이 있어 답이 하나인지 확인할 수 없습니다. 이런 문제는 해설이 유일한 근거이므로, 6번 해설을 채워야 링크가 나옵니다.",
+        });
+        return;
+      }
+      const link = await makeLink(shared);
+      if (link) setVerdict({ kind: "unverified", roles: result.unmodeled, link });
+      return;
+    }
+
+    const worlds = result.worlds;
     if (worlds.length === 0) {
       setVerdict({ kind: "none" });
       return;
@@ -560,16 +607,21 @@ export function PuzzleCreator() {
       return;
     }
 
-    // CompressionStream이 없는 구형 브라우저에서는 링크를 만들 수 없다.
+    const link = await makeLink(shared);
+    if (link) setVerdict({ kind: "unique", link });
+  }
+
+  /** CompressionStream이 없는 구형 브라우저에서는 링크를 만들 수 없다. */
+  async function makeLink(shared: SharedPuzzle): Promise<string | null> {
     try {
-      const fragment = await encodePuzzle(shared);
-      setVerdict({ kind: "unique", link: `${window.location.origin}/play#${fragment}` });
+      return `${window.location.origin}/play#${await encodePuzzle(shared)}`;
     } catch {
       setVerdict({
         kind: "error",
         message:
-          "답은 하나로 확인됐지만 이 브라우저에서는 링크를 만들 수 없습니다. 최신 크롬·사파리·파이어폭스에서 다시 시도해 주세요.",
+          "검사는 끝났지만 이 브라우저에서는 링크를 만들 수 없습니다. 최신 크롬·사파리·파이어폭스에서 다시 시도해 주세요.",
       });
+      return null;
     }
   }
 
@@ -659,21 +711,23 @@ export function PuzzleCreator() {
           </p>
         )}
 
-        <p className="text-xs text-faded">
-          <span className="mr-1.5 inline-block rounded-full border border-dashed border-faded px-2 py-0.5 align-middle text-[11px]">
-            점선
-          </span>
-          은 솔버가 아직 능력을 모르는 역할입니다. 풀에 넣어도 되지만, 그 역할이 좌석에 배정되면
-          유일해 검증과 공유 링크가 나오지 않습니다.
-        </p>
+        {(showExperimental || poolHasExperimental) && (
+          <p className="max-w-prose text-xs leading-relaxed text-faded">
+            <span className="mr-1.5 inline-block rounded-full border border-dashed border-faded px-2 py-0.5 align-middle text-[11px]">
+              점선
+            </span>
+            은 검증기가 능력을 모르는 역할입니다. 골라도 되지만, 좌석에 배정되면 답이 하나인지
+            증명할 수 없습니다. 고르면 칩이{" "}
+            <span className="mx-0.5 inline-block rounded-full border border-dashed border-brass bg-brass/15 px-2 py-0.5 align-middle text-[11px] text-brass">
+              황동색
+            </span>
+            으로 켜지고, 아래 검증란이 그에 맞게 바뀝니다.
+          </p>
+        )}
 
-        <p className="max-w-prose rounded border border-brass/50 bg-panel p-3 text-xs text-brass">
-          <strong>실험적 역할</strong>을 선택하시면 유일해 검증이 되지 않아 미검증 태그로 퀴즈가
-          등록되게 됩니다. 실험적 역할은 공식 알마낙에서 능력이 추후 변경될 수 있습니다.
-          <span className="mt-1 block text-faded">
-            미검증 등록 경로는 준비 중입니다 — 지금은 실험적 역할이 좌석에 배정되면 공유 링크가
-            나오지 않습니다.
-          </span>
+        <p className="max-w-prose text-xs text-faded">
+          공유 링크는 서버에 저장되지 않는 사적인 링크입니다 — 이 사이트 목록에 수록되는 것과는
+          별개이고, 링크를 만드는 것이 수록 신청은 아닙니다.
         </p>
 
         <div className="space-y-3" role="group" aria-label="역할 풀">
@@ -703,7 +757,13 @@ export function PuzzleCreator() {
                         aria-label={modeled ? ROLES[r].ko : `${ROLES[r].ko} (솔버 미구현)`}
                         className={`rounded-full border px-2.5 py-1 text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brass ${
                           modeled ? "" : "border-dashed"
-                        } ${on ? style.chipOn : "border-panel-edge text-faded hover:text-parchment"}`}>
+                        } ${
+                          on
+                            ? modeled
+                              ? style.chipOn
+                              : EXPERIMENTAL_CHIP_ON
+                            : "border-panel-edge text-faded hover:text-parchment"
+                        }`}>
                         {ROLES[r].ko}
                       </button>
                     );
@@ -951,19 +1011,94 @@ export function PuzzleCreator() {
         </div>
       </section>
 
+      {/* ── 해설 ── */}
+      <section className="space-y-3">
+        <h2 className="font-display text-lg font-bold">
+          6. 해설{" "}
+          <span className={unverifiedLane ? "text-brass" : "text-faded"}>
+            ({unverifiedLane ? "필수" : "선택"})
+          </span>
+        </h2>
+        <p className="max-w-prose text-xs text-faded">
+          답에 이르는 추론을 단계별로 적습니다. <strong className="text-parchment">한 줄이 한 단계</strong>이고,
+          푼 사람이나 포기한 사람에게만 보입니다. 최대 {LIMITS.maxWalkthrough}단계·한 줄{" "}
+          {LIMITS.maxText}자.{" "}
+          {unverifiedLane ? (
+            <>
+              지금 대본에는 검증기가 능력을 모르는 역할이 있습니다 —{" "}
+              <strong className="text-brass">해설을 적어야 링크가 나옵니다.</strong>
+            </>
+          ) : (
+            "검증기가 능력을 모르는 역할을 쓰시면 그때는 해설이 유일한 근거가 되어 필수가 됩니다."
+          )}
+        </p>
+        <textarea
+          className={`${field} w-full`}
+          rows={6}
+          value={walkthrough}
+          onChange={(e) => { setWalkthrough(e.target.value); setVerdict({ kind: "idle" }); }}
+          placeholder={"① B의 밤1 정보가 참이면 D는 마을 사람이다.\n② 그러면 E의 주장과 충돌한다 — E가 거짓말이다.\n③ 따라서 악마는 E다."}
+        />
+        <p
+          className={`text-xs tabular-nums ${
+            unverifiedLane && walkthroughSteps.length === 0 ? "text-brass" : "text-faded"
+          }`}
+        >
+          {walkthroughSteps.length}단계
+        </p>
+      </section>
+
       {/* ── 검증 ── */}
       <section className="space-y-3 border-t border-panel-edge pt-6">
+        {/* 레인 표시기 — 버튼을 누르기 전에, 이 대본이 어느 갈래로 가는지 미리 말한다 */}
+        {unverifiedLane && (
+          <div className="max-w-prose space-y-2 rounded-lg border border-dashed border-brass/70 bg-panel p-4">
+            <p className="font-display text-sm font-bold text-brass">
+              이 대본은 유일해를 증명할 수 없습니다
+            </p>
+            <p className="text-xs leading-relaxed text-faded">
+              아래 역할은 검증기가 능력을 모릅니다. 유일해 탐색을 건너뛰므로 답이 둘 이상일 수 있고,
+              푸는 사람에게 <strong className="text-parchment">「솔버 미검증」</strong>으로 표시됩니다.
+              좌석 범위·주장 형식 같은 구조 검사는 그대로 받습니다. 실험적 역할은 공식 알마낙에서
+              능력이 개정될 수 있습니다.
+            </p>
+            <ul className="flex flex-wrap gap-1.5">
+              {laneUnmodeled.map((r) => (
+                <li
+                  key={r}
+                  className="rounded-full border border-dashed border-brass/60 px-2.5 py-0.5 text-xs text-brass"
+                >
+                  {roleLabel(r)}
+                </li>
+              ))}
+            </ul>
+            <p className="text-xs text-faded">
+              {walkthroughSteps.length === 0
+                ? "6번 해설을 적으면 링크가 나옵니다."
+                : `해설 ${walkthroughSteps.length}단계를 적으셨습니다 — 링크를 만들 수 있습니다.`}
+            </p>
+          </div>
+        )}
+
         <button type="button" onClick={verify}
           className="rounded-md bg-blood px-5 py-2.5 font-bold text-parchment transition-colors hover:bg-blood-deep">
-          유일해 검증하고 링크 만들기
+          {unverifiedLane ? "검사하고 링크 만들기" : "유일해 검증하고 링크 만들기"}
         </button>
 
         {verdict.kind === "error" && (
           <p className="rounded border border-blood/60 bg-panel p-3 text-blood">{verdict.message}</p>
         )}
-        {verdict.kind === "unsupported" && (
-          <div className="space-y-2 rounded border border-brass/60 bg-panel p-3">
-            <p className="font-bold text-brass">솔버가 아직 모르는 역할이 있습니다.</p>
+        {verdict.kind === "unverified" && (
+          <div className="space-y-2 rounded border border-brass bg-panel p-3">
+            <p className="font-bold text-brass">
+              답이 하나뿐인지는 확인하지 못했습니다 — 링크는 나갑니다.
+            </p>
+            <p className="max-w-prose text-faded">
+              아래 역할은 검증기가 능력을 모릅니다. 모르는 능력을 없는 셈 치고 세면 “유일해”가 거짓이
+              되므로 전수 탐색을 돌리지 않았습니다. 좌석 범위·주장 형식 같은 구조 검사는 통과했지만,
+              <strong className="text-parchment"> 답이 둘 이상일 수 있습니다.</strong> 그러면 제대로 추론한
+              사람이 오답 판정을 받습니다 — 푸는 사람에게도 그렇게 표시되고, 근거는 적어 두신 해설뿐입니다.
+            </p>
             <ul className="flex flex-wrap gap-1.5">
               {verdict.roles.map((r) => (
                 <li key={r} className="rounded-full border border-brass/50 px-2.5 py-0.5 text-xs text-brass">
@@ -971,10 +1106,22 @@ export function PuzzleCreator() {
                 </li>
               ))}
             </ul>
+            <textarea readOnly value={verdict.link} rows={3}
+              className={`${field} w-full font-mono text-xs`}
+              onFocus={(e) => e.currentTarget.select()} />
+            <div className="flex flex-wrap gap-2">
+              <button type="button"
+                className="rounded border border-brass/60 px-3 py-1.5 text-xs text-brass hover:bg-brass/10"
+                onClick={() => navigator.clipboard?.writeText(verdict.link)}>
+                링크 복사
+              </button>
+              <a href={verdict.link} target="_blank" rel="noopener noreferrer"
+                className="rounded border border-panel-edge px-3 py-1.5 text-xs text-faded hover:text-parchment">
+                새 탭에서 풀어 보기
+              </a>
+            </div>
             <p className="max-w-prose text-faded">
-              이 역할들의 능력이 솔버에 들어가기 전까지는 답이 하나인지 증명할 수 없어서 링크를 내주지
-              않습니다. 능력을 모르는 채로 세면 “유일해”가 거짓이 되기 때문입니다. 지금 입력한 내용은
-              그대로 두고 위 역할만 검증되는 역할로 바꾸면 바로 확인할 수 있습니다.
+              위 역할만 검증되는 역할로 바꾸면 유일해를 증명받을 수 있습니다.
             </p>
           </div>
         )}

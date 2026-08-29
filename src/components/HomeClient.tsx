@@ -18,6 +18,10 @@ export interface PuzzleSummary {
   /** 난이도와 직교하는 축 — 두 필터가 각각 동작한다 */
   source: PuzzleSource;
   author?: string;
+  /** 솔버 전수 탐색으로 유일해가 증명됐는가 (퍼즐 내용에서 파생, 서버에서 계산) */
+  verified: boolean;
+  /** 실제로 진행된 판을 옮긴 문제인가 */
+  realGame?: boolean;
 }
 
 const SOURCE_LABELS: Record<PuzzleSource, string> = {
@@ -123,6 +127,8 @@ export function HomeClient({ puzzles }: { puzzles: PuzzleSummary[] }) {
                       사설{p.author ? ` · ${p.author}` : ""}
                     </span>
                   )}
+                  {p.realGame && <span className="text-brass">실제 판</span>}
+                  {!p.verified && <span className="text-brass">솔버 미검증</span>}
                 </p>
               </Link>
             </li>

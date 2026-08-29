@@ -21,7 +21,11 @@ const TEAM_ORDER: Team[] = ["townsfolk", "outsider", "minion", "demon"];
 
 type Done = null | "solved" | "gaveup";
 
-export function PuzzleClient({ puzzle }: { puzzle: Puzzle }) {
+/**
+ * verified — 솔버 전수 탐색으로 답이 하나뿐임이 증명됐는가.
+ * 퍼즐 내용에서 파생된 값을 호출부(서버 컴포넌트·공유 링크 로더)가 계산해 넘긴다.
+ */
+export function PuzzleClient({ puzzle, verified = true }: { puzzle: Puzzle; verified?: boolean }) {
   const [selectedSeat, setSelectedSeat] = useState<number | null>(null);
   const [stage, setStage] = useState(0); // 처음 등장하는 미해결 질문 인덱스
   const [picks, setPicks] = useState<number[]>([]);
@@ -199,6 +203,8 @@ export function PuzzleClient({ puzzle }: { puzzle: Puzzle }) {
           {puzzle.source === "community" && (
             <span className="font-bold text-team-outsider">사설</span>
           )}
+          {puzzle.realGame && <span className="font-bold text-brass">실제 판</span>}
+          {!verified && <span className="font-bold text-brass">솔버 미검증</span>}
         </p>
         <h1 className="font-display text-3xl font-bold">
           {puzzle.title}
@@ -212,6 +218,35 @@ export function PuzzleClient({ puzzle }: { puzzle: Puzzle }) {
           <p className="max-w-prose text-sm leading-relaxed text-faded">{puzzle.intro}</p>
         )}
       </header>
+
+      {/* ── 미검증 고지 ──
+          "미검증"은 안 봤다는 뜻이 아니라 **답이 하나라는 보장이 없다**는 뜻이다.
+          답이 둘이면 제대로 추론한 사람이 오답 판정을 받으므로 그 사실을 먼저 말한다. */}
+      {!verified && (
+        <section className="space-y-1.5 rounded-lg border border-brass/60 bg-panel p-4">
+          <p className="font-display text-sm font-bold text-brass">
+            답이 하나뿐이라는 보장이 없는 문제입니다
+          </p>
+          {puzzle.realGame ? (
+            <p className="max-w-prose text-xs leading-relaxed text-faded">
+              실제로 진행된 판을 옮긴 문제입니다. 정답은 그날의 실제 그리모어라 확실하지만,{" "}
+              <strong className="text-parchment">
+                논리만으로 그 답 하나에 도달할 수 있는지는 기계로 확인하지 못했습니다
+              </strong>{" "}
+              — 대본에 검증기가 능력을 모르는 실험적 역할이 있어 전수 탐색을 돌리지 못했습니다.
+              다른 배치도 모든 단서와 맞을 수 있고, 그러면 제대로 추론하고도 오답 판정이 나옵니다.
+              아래 해설이 스토리텔러가 의도한 추론 경로입니다.
+            </p>
+          ) : (
+            <p className="max-w-prose text-xs leading-relaxed text-faded">
+              대본에 검증기가 능력을 모르는 실험적 역할이 있어{" "}
+              <strong className="text-parchment">답이 하나뿐인지 확인하지 못했습니다.</strong>{" "}
+              답이 둘 이상일 수 있고, 그러면 제대로 추론하고도 오답 판정이 나옵니다. 근거는 만든
+              사람이 쓴 해설뿐입니다.
+            </p>
+          )}
+        </section>
+      )}
 
       {/* ── 팀 구성 ── */}
       <section className="space-y-2 rounded-lg border border-panel-edge bg-panel p-4">
