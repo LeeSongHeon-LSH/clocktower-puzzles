@@ -36,9 +36,14 @@ const UNCLAIMABLE: RoleId[] = ["drunk", ...(ROLE_IDS as readonly RoleId[]).filte
 /** 그리모어 순서 — 규칙 문서(/rules)와 같은 배열을 쓴다 */
 const TEAM_ORDER: Team[] = ["townsfolk", "outsider", "minion", "demon"];
 
+/**
+ * 대본 후보. 실험적 역할은 따로 담아 기본값으로 접어 둔다 — 솔버가 능력을 모르는 데다
+ * 수가 많아서 기본 판본 역할과 한 줄로 섞으면 고르기가 어려워진다.
+ */
 const POOL_BY_TEAM = TEAM_ORDER.map((team) => ({
   team,
-  roles: (ROLE_IDS as readonly RoleId[]).filter((r) => ROLES[r].team === team),
+  roles: (ROLE_IDS as readonly RoleId[]).filter((r) => ROLES[r].team === team && ROLES[r].edition !== "exp"),
+  experimental: (ROLE_IDS as readonly RoleId[]).filter((r) => ROLES[r].team === team && ROLES[r].edition === "exp"),
 }));
 
 /** 진영색은 팔레트의 team 토큰을 그대로 쓴다 — 마을 광장·규칙 문서와 같은 색이다. */
@@ -365,6 +370,7 @@ export function PuzzleCreator() {
   const [dayActs, setDayActs] = useState<Record<number, DraftDayAction[]>>({});
   const [votes, setVotes] = useState<Record<number, Seat[]>>({});
   const [verdict, setVerdict] = useState<Verdict>({ kind: "idle" });
+  const [showExperimental, setShowExperimental] = useState(false);
 
   const seats = useMemo(() => Array.from({ length: playerCount }, (_, i) => i), [playerCount]);
   const ledger = useMemo(
@@ -632,6 +638,14 @@ export function PuzzleCreator() {
           >
             검증되는 {SOLVER_ROLES.length}종 모두 담기
           </button>
+          <button
+            type="button"
+            onClick={() => setShowExperimental((v) => !v)}
+            aria-pressed={showExperimental}
+            className="rounded border border-panel-edge px-2 py-1 text-faded hover:text-parchment"
+          >
+            실험적 역할 {showExperimental ? "숨기기" : "보기"}
+          </button>
         </div>
         {narrowPool && (
           <p className="text-xs text-brass">
@@ -653,8 +667,22 @@ export function PuzzleCreator() {
           유일해 검증과 공유 링크가 나오지 않습니다.
         </p>
 
+        <p className="max-w-prose rounded border border-brass/50 bg-panel p-3 text-xs text-brass">
+          <strong>실험적 역할</strong>을 선택하시면 유일해 검증이 되지 않아 미검증 태그로 퀴즈가
+          등록되게 됩니다. 실험적 역할은 공식 알마낙에서 능력이 추후 변경될 수 있습니다.
+          <span className="mt-1 block text-faded">
+            미검증 등록 경로는 준비 중입니다 — 지금은 실험적 역할이 좌석에 배정되면 공유 링크가
+            나오지 않습니다.
+          </span>
+        </p>
+
         <div className="space-y-3" role="group" aria-label="역할 풀">
-          {POOL_BY_TEAM.map(({ team, roles }) => {
+          {POOL_BY_TEAM.map(({ team, roles: base, experimental }) => {
+            // 접어 둔 상태에서도 이미 고른 실험적 역할은 남겨 둔다 — 안 보이는데 풀에 있으면 뺄 수가 없다.
+            const roles = [
+              ...base,
+              ...(showExperimental ? experimental : experimental.filter((r) => pool.includes(r))),
+            ];
             const picked = roles.filter((r) => pool.includes(r)).length;
             const style = TEAM_STYLE[team];
             return (

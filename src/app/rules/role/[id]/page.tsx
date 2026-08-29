@@ -61,6 +61,13 @@ export default async function RoleRulePage({ params }: PageProps<"/rules/role/[i
         </p>
       </header>
 
+      {role.edition === "exp" && (
+        <p className="max-w-prose rounded border border-brass/50 bg-panel p-3 text-xs text-brass">
+          실험적 역할입니다. <strong>능력이 추후 변경될 수 있으니 유의 바랍니다.</strong> 아래
+          능력 문구는 공식 번역 판본({ROLE_TRANSLATION_SOURCE.committed}) 기준입니다.
+        </p>
+      )}
+
       <section className="space-y-2">
         <h2 className="font-display text-lg font-bold">능력</h2>
         <blockquote className="max-w-prose rounded-lg border-l-2 border-brass bg-panel px-4 py-3">

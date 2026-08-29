@@ -19,11 +19,42 @@ const TEAM_COLOR: Record<Team, string> = {
   demon: "text-team-demon",
 };
 
-export default function RulesIndexPage() {
-  const byTeam = TEAM_ORDER.map((team) => ({
+/** 판본별로 나눈 팀 목록. 실험적 역할은 개정 가능성 때문에 따로 묶어 안내한다. */
+function byTeam(pick: (id: RoleId) => boolean) {
+  return TEAM_ORDER.map((team) => ({
     team,
-    roles: (ROLE_IDS as readonly RoleId[]).filter((id) => ROLES[id].team === team),
+    roles: (ROLE_IDS as readonly RoleId[]).filter((id) => ROLES[id].team === team && pick(id)),
   }));
+}
+
+function TeamGroup({ team, roles }: { team: Team; roles: RoleId[] }) {
+  return (
+    <div className="space-y-2">
+      <h3 className={`font-display text-base font-bold ${TEAM_COLOR[team]}`}>
+        {TEAM_LABELS[team].ko}
+        <span className="ml-2 text-xs font-normal text-faded">{TEAM_LABELS[team].en}</span>
+      </h3>
+      <ul className="grid gap-2 sm:grid-cols-2">
+        {roles.map((id) => (
+          <li key={id}>
+            <Link
+              href={`/rules/role/${id}`}
+              className="block rounded border border-panel-edge bg-panel px-3 py-2 transition-colors hover:border-brass/60"
+            >
+              {roleLabel(id)}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+export default function RulesIndexPage() {
+  const base = byTeam((id) => ROLES[id].edition !== "exp");
+  const experimental = byTeam((id) => ROLES[id].edition === "exp");
+  const baseCount = base.reduce((n, g) => n + g.roles.length, 0);
+  const expCount = experimental.reduce((n, g) => n + g.roles.length, 0);
 
   return (
     <article className="space-y-10 text-sm leading-relaxed">
@@ -52,35 +83,34 @@ export default function RulesIndexPage() {
 
       <section className="space-y-4">
         <div className="space-y-2">
-          <h2 className="font-display text-xl font-bold">역할</h2>
+          <h2 className="font-display text-xl font-bold">기본 판본 역할</h2>
           <p className="max-w-prose text-faded">
-            3개 기본 판본의 전 역할 {ROLE_IDS.length}종입니다(여행자 제외). 모든 문서에 공식 능력
+            3개 기본 판본의 전 역할 {baseCount}종입니다(여행자 제외). 모든 문서에 공식 능력
             문구와 알마낙 링크가 있고, 퍼즐에 실제로 쓰이는 역할에는 그 능력이 추리에서 무엇을
             확정해 주는지에 대한 해설이 함께 붙습니다.
           </p>
         </div>
 
-        {byTeam.map(({ team, roles }) => (
-          <div key={team} className="space-y-2">
-            <h3 className={`font-display text-base font-bold ${TEAM_COLOR[team]}`}>
-              {TEAM_LABELS[team].ko}
-              <span className="ml-2 text-xs font-normal text-faded">
-                {TEAM_LABELS[team].en}
-              </span>
-            </h3>
-            <ul className="grid gap-2 sm:grid-cols-2">
-              {roles.map((id) => (
-                <li key={id}>
-                  <Link
-                    href={`/rules/role/${id}`}
-                    className="block rounded border border-panel-edge bg-panel px-3 py-2 transition-colors hover:border-brass/60"
-                  >
-                    {roleLabel(id)}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
+        {base.map((group) => (
+          <TeamGroup key={group.team} {...group} />
+        ))}
+      </section>
+
+      <section className="space-y-4">
+        <div className="space-y-2">
+          <h2 className="font-display text-xl font-bold">실험적 역할</h2>
+          <p className="max-w-prose text-faded">
+            기본 판본 밖에서 공식적으로 쓰이는 실험적(Experimental) 역할 {expCount}종입니다.
+          </p>
+          <p className="max-w-prose rounded border border-brass/50 bg-panel p-3 text-brass">
+            실험적 역할은 <strong>능력이 추후 변경될 수 있으니 유의 바랍니다.</strong> 여기 실린
+            능력 문구는 현재 공식 번역 판본({ROLE_TRANSLATION_SOURCE.committed}) 기준이고, 공식
+            알마낙이 개정되면 달라질 수 있습니다.
+          </p>
+        </div>
+
+        {experimental.map((group) => (
+          <TeamGroup key={group.team} {...group} />
         ))}
       </section>
 

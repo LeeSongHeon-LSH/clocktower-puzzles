@@ -1,9 +1,9 @@
 // 솔버 도메인 타입. 퍼즐 스키마(사람용 필드 포함)는 src/lib/puzzles/schema.ts 참조.
 
 export type Team = "townsfolk" | "outsider" | "minion" | "demon";
-export type Edition = "tb" | "bmr" | "sv";
+export type Edition = "tb" | "bmr" | "sv" | "exp";
 
-// 역할 사전 전체 (3개 기본 판본, 여행자 제외). 표기는 src/data/roles.ts.
+// 역할 사전 전체 (3개 기본 판본 + 실험적 역할, 여행자·우화 제외). 표기는 src/data/roles.ts.
 export const ROLE_IDS = [
   // ── 점철되는 혼란 (Trouble Brewing) ──
   "washerwoman",
@@ -80,6 +80,77 @@ export const ROLE_IDS = [
   "vigormortis",
   "nodashii",
   "vortox",
+  // ── 실험적 역할 (Experimental) ──
+  // 마을 주민
+  "acrobat",
+  "alchemist",
+  "alsaahir",
+  "amnesiac",
+  "atheist",
+  "balloonist",
+  "banshee",
+  "bountyhunter",
+  "cannibal",
+  "choirboy",
+  "cultleader",
+  "engineer",
+  "farmer",
+  "fisherman",
+  "general",
+  "highpriestess",
+  "huntsman",
+  "king",
+  "knight",
+  "lycanthrope",
+  "magician",
+  "nightwatchman",
+  "noble",
+  "pixie",
+  "poppygrower",
+  "preacher",
+  "princess",
+  "shugenja",
+  "steward",
+  "villageidiot",
+  // 외지인
+  "damsel",
+  "golem",
+  "hatter",
+  "heretic",
+  "hermit",
+  "ogre",
+  "plaguedoctor",
+  "politician",
+  "puzzlemaster",
+  "snitch",
+  "zealot",
+  // 하수인
+  "boffin",
+  "boomdandy",
+  "fearmonger",
+  "goblin",
+  "harpy",
+  "marionette",
+  "mezepheles",
+  "organgrinder",
+  "psychopath",
+  "summoner",
+  "vizier",
+  "widow",
+  "wizard",
+  "wraith",
+  "xaan",
+  // 악마
+  "alhadikhia",
+  "kazali",
+  "legion",
+  "leviathan",
+  "lilmonsta",
+  "lleech",
+  "lordoftyphon",
+  "ojo",
+  "riot",
+  "yaggababble",
 ] as const;
 
 export type RoleId = (typeof ROLE_IDS)[number];
