@@ -8,6 +8,7 @@ import { seatName } from "@/lib/puzzles/schema";
 import { EDITION_LABELS, ROLES, TEAM_LABELS, roleLabel } from "@/data/roles";
 import type { GameEvent, RoleId, Team } from "@/lib/solver/types";
 import { eventDeadSeat } from "@/lib/solver/types";
+import { composition, OUTSIDER_MODIFIERS } from "@/lib/solver/composition";
 import { renderClaimInfo } from "@/lib/render";
 import { loadProgress, saveProgress, useProgress } from "@/lib/progress";
 import { clearNotes, saveNote, useSeatNotes } from "@/lib/notes";
@@ -49,6 +50,11 @@ export function PuzzleClient({ puzzle }: { puzzle: Puzzle }) {
     for (const c of puzzle.claims) m.set(c.seat, c);
     return m;
   }, [puzzle.claims]);
+
+  // 인원수로 정해지는 기본 팀 구성. 남작·대부 등 구성을 바꾸는 역할은 대본에 있어도
+  // 실제 배정 여부를 모르므로 기본값을 보여주고 변형 가능성만 아래에 덧붙인다.
+  const comp = composition(puzzle.playerCount, false);
+  const modifiers = puzzle.rolePool.filter((r) => OUTSIDER_MODIFIERS[r]);
 
   const demonSeat =
     puzzle.currentDemonSeat ?? puzzle.solution.findIndex((r) => ROLES[r].team === "demon");
@@ -207,6 +213,35 @@ export function PuzzleClient({ puzzle }: { puzzle: Puzzle }) {
         )}
       </header>
 
+      {/* ── 팀 구성 ── */}
+      <section className="space-y-2 rounded-lg border border-panel-edge bg-panel p-4">
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+          <span className="text-xs text-faded">{puzzle.playerCount}인 기본 구성</span>
+          {TEAM_ORDER.map((team) => (
+            <span key={team} className="flex items-baseline gap-1.5">
+              <span
+                className="inline-block h-2.5 w-2.5 shrink-0 self-center rounded-full"
+                style={{ background: `var(--team-${team})` }}
+                aria-hidden
+              />
+              <span className="text-sm text-faded">{TEAM_LABELS[team].ko}</span>
+              <span className="font-display text-lg font-bold">{comp[team]}</span>
+            </span>
+          ))}
+        </div>
+        {modifiers.length > 0 ? (
+          <p className="text-xs leading-relaxed text-faded">
+            단, 대본에 구성을 바꾸는 역할이 있다 — 실제로 배정됐다면 이 숫자가 달라진다:{" "}
+            {modifiers.map((r) => `${roleLabel(r)} ${OUTSIDER_MODIFIERS[r]}`).join(", ")}. 하수인과
+            악마 수는 어느 경우에도 그대로다.
+          </p>
+        ) : (
+          <p className="text-xs text-faded">
+            이 대본에는 구성을 바꾸는 역할이 없다 — 위 숫자가 확정이다.
+          </p>
+        )}
+      </section>
+
       {/* ── 타운스퀘어 ── */}
       <section className="space-y-3">
         <TownSquare
@@ -353,7 +388,7 @@ export function PuzzleClient({ puzzle }: { puzzle: Puzzle }) {
               return (
                 <div key={team} className="border-l-2 border-panel-edge pl-3">
                   <p className="text-xs text-faded">
-                    {TEAM_LABELS[team].ko} {roles.length}
+                    {TEAM_LABELS[team].ko} {roles.length}종
                   </p>
                   <p className="text-parchment/90">{roles.map((r) => ROLES[r].ko).join(" · ")}</p>
                 </div>
