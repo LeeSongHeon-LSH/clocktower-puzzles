@@ -34,14 +34,43 @@
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 }
 
+/* 밤하늘 색은 루트에 둔다. body에 두면 body::before(z-index:-1)가 그 배경 뒤로 밀려
+   배경 일러스트가 보이지 않는다 — 흔한 함정이라 옮겨 놓았다. */
+html {
+  background-color: var(--ink);
+}
+
 body {
-  background: var(--ink);
   color: var(--parchment);
   font-family: var(--font-sans);
   /* 한국어는 어절 단위로 끊는다 — 기본값은 단어 중간에서 잘린다("고르면" → "고/르면").
      대신 끊을 자리가 없는 긴 문자열(공유 링크의 base64 등)이 넘치므로 overflow-wrap이 받는다. */
   word-break: keep-all;
   overflow-wrap: break-word;
+}
+
+/* 배경 일러스트 — 잉크색 장막을 덮어 분위기만 남기고 글은 그대로 읽히게 한다.
+   장막을 걷으면 본문 대비가 무너지므로 불투명도를 낮출 때는 실제로 읽어 보고 정할 것.
+
+   background-attachment: fixed 대신 고정 위치의 가상 요소를 쓴다 — iOS 사파리가
+   그 속성을 무시해서 배경이 스크롤에 딸려 늘어나 보이기 때문이다.
+
+   장막 색은 --ink(#17121f)를 그대로 푼 값이다. color-mix로 토큰과 묶어 봤지만
+   빌드가 만드는 폴백이 불투명 잉크로 납작해져 배경이 통째로 사라진다 — 팔레트를
+   바꾼다면 이 숫자도 같이 고칠 것. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(
+      to bottom,
+      rgb(23 18 31 / 0.94) 0%,
+      rgb(23 18 31 / 0.86) 35%,
+      rgb(23 18 31 / 0.93) 100%
+    ),
+    url("/bg-clocktower.webp") center / cover no-repeat;
 }
 
 /* 제목 계열은 바탕 세리프 — 오래된 소설책의 표지처럼 */

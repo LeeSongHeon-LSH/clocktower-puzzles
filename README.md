@@ -123,12 +123,14 @@ npm run rules:sync   # 대조 후 생성 파일 갱신
 
 <tr><td><strong>아트워크</strong></td>
 <td><strong>공식 아트워크·아이콘·토큰 이미지를 일절 사용하지 않습니다.</strong> 이 저장소에는 공식
-이미지 자산이 포함돼 있지 않으며, 타운스퀘어를 포함한 모든 그래픽은 직접 구현한 SVG입니다.</td></tr>
+이미지 자산이 포함돼 있지 않으며, 타운스퀘어를 포함한 UI 그래픽은 모두 직접 구현한 SVG입니다.
+비트맵은 배너와 사이트 배경 두 장뿐이고, 둘 다 아래 「AI 생성 자산」 항목에 해당합니다.</td></tr>
 
-<tr><td><strong>배경음악</strong></td>
-<td>배경음악 &lt;Dolce Follia&gt;는 이 프로젝트를 위해 <strong>생성형 AI로 만든 창작물</strong>입니다 — 가사는 Claude로,
-음원은 <a href="https://suno.com">Suno</a>로 제작했습니다. 공식 <em>Blood on the Clocktower</em> 음원이나 기존
-상업 음원을 사용하거나 참조하지 않았습니다.</td></tr>
+<tr><td><strong>AI 생성 자산</strong></td>
+<td>사이트 배경 이미지와 배경음악 &lt;Dolce Follia&gt;는 이 프로젝트를 위해 <strong>생성형 AI로 만든
+창작물</strong>입니다 — 이미지는 Nano Banana 2(Google Gemini)로, 가사는 Claude로, 음원은
+<a href="https://suno.com">Suno</a>로 제작했습니다. 공식 <em>Blood on the Clocktower</em>
+아트워크·음원이나 기존 상업 저작물을 사용하거나 참조하지 않았습니다.</td></tr>
 
 <tr><td><strong>규칙 인용</strong></td>
 <td>규칙 문서는 <a href="https://wiki.bloodontheclocktower.com">공식 알마낙</a>의 문장을

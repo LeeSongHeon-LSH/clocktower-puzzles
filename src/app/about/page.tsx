@@ -70,8 +70,9 @@ export default function AboutPage() {
           을 방문하세요.
         </p>
         <p className="max-w-prose text-faded">
-          배경음악 &lt;Dolce Follia&gt;는 이 사이트를 위해 만든 AI 생성 음원입니다 — 가사는 Claude로,
-          음원은{" "}
+          배경 이미지와 배경음악은 이 사이트를 위해 만든 AI 생성물입니다. 이미지는
+          Nano Banana 2(Google Gemini)로, 음악 &lt;Dolce Follia&gt;는 가사를 Claude로 쓰고
+          음원을{" "}
           <a
             href="https://suno.com"
             className="text-brass underline underline-offset-2 hover:text-parchment"
@@ -80,8 +81,8 @@ export default function AboutPage() {
           >
             Suno
           </a>
-          로 만들었으며, 공식 음원이나 기존 상업 음원을 사용하거나 참조하지
-          않았습니다.
+          로 만들었습니다. 어느 쪽도 공식 아트워크·음원이나 기존 상업 저작물을
+          사용하거나 참조하지 않았습니다.
         </p>
       </section>
     </article>

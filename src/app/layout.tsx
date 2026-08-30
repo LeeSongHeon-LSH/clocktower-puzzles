@@ -82,7 +82,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           {/* Suno 무료 티어는 출력물 사용 조건으로 귀속 표기를 요구한다. 음악은 루트
               레이아웃에서 재생되므로 크레딧도 전 페이지에 함께 있어야 한다. 지우지 말 것. */}
           <p className="mt-1">
-            배경음악 &lt;Dolce Follia&gt;는{" "}
+            배경 이미지는 Nano Banana 2로, 배경음악 &lt;Dolce Follia&gt;는{" "}
             <a
               href="https://suno.com"
               className="underline underline-offset-2 hover:text-parchment"
@@ -91,7 +91,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             >
               Suno
             </a>
-            로 만든 AI 생성 음원입니다.
+            로 만든 AI 생성물입니다.
           </p>
         </footer>
       </body>
