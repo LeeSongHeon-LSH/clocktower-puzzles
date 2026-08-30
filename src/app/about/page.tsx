@@ -70,7 +70,7 @@ export default function AboutPage() {
           을 방문하세요.
         </p>
         <p className="max-w-prose text-faded">
-          배경음악 〈Dolce Follia〉는 이 사이트를 위해 만든 AI 생성 음원입니다 — 가사는 Claude로,
+          배경음악 &lt;Dolce Follia&gt;는 이 사이트를 위해 만든 AI 생성 음원입니다 — 가사는 Claude로,
           음원은{" "}
           <a
             href="https://suno.com"

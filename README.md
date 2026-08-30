@@ -126,7 +126,7 @@ npm run rules:sync   # 대조 후 생성 파일 갱신
 이미지 자산이 포함돼 있지 않으며, 타운스퀘어를 포함한 모든 그래픽은 직접 구현한 SVG입니다.</td></tr>
 
 <tr><td><strong>배경음악</strong></td>
-<td>배경음악 〈Dolce Follia〉는 이 프로젝트를 위해 <strong>생성형 AI로 만든 창작물</strong>입니다 — 가사는 Claude로,
+<td>배경음악 &lt;Dolce Follia&gt;는 이 프로젝트를 위해 <strong>생성형 AI로 만든 창작물</strong>입니다 — 가사는 Claude로,
 음원은 <a href="https://suno.com">Suno</a>로 제작했습니다. 공식 <em>Blood on the Clocktower</em> 음원이나 기존
 상업 음원을 사용하거나 참조하지 않았습니다.</td></tr>
 
