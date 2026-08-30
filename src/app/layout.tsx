@@ -3,14 +3,26 @@ import { Geist, Geist_Mono, Gowun_Batang, Noto_Sans_KR } from "next/font/google"
 import Link from "next/link";
 import "./globals.css";
 
+// 한글 폰트는 preload 하지 않는다.
+//
+// 한글 웹폰트는 유니코드 구간별로 잘게 쪼개져 나온다. `preload: true`(기본값)면 Next가
+// **모든 조각에 <link rel="preload">를 건다** — 실측 97개, 1.5MB가 페이지를 열 때마다
+// 그 페이지에 그 글자가 쓰이는지와 무관하게 내려온다. Vercel은 정적 파일 요청도 전부
+// CDN 요청으로 세므로(무료 한도 월 100만) 방문 1회가 110요청이 되고, 그중 88%가 폰트다.
+//
+// 끄면 브라우저가 @font-face의 unicode-range를 보고 실제로 필요한 조각만 받는다.
+// 실측: 방문 1회 109자산 → 15자산. 대가는 첫 그리기에서 잠깐 대체 글꼴이 보일 수 있다는 것.
+// tests/font-loading.test.ts가 이 설정이 조용히 되돌아가는 것을 감시한다.
 const gowunBatang = Gowun_Batang({
   weight: ["400", "700"],
   subsets: ["latin"],
+  preload: false,
   variable: "--font-gowun-batang",
 });
 
 const notoSansKr = Noto_Sans_KR({
   subsets: ["latin"],
+  preload: false,
   variable: "--font-noto-sans-kr",
 });
 
