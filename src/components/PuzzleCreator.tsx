@@ -10,6 +10,8 @@ import { useMemo, useState } from "react";
 import { ROLES, TEAM_LABELS, roleLabel } from "@/data/roles";
 import { LIMITS, encodePuzzle, toPuzzle, type SharedPuzzle } from "@/lib/puzzles/codec";
 import { seatName, type Difficulty } from "@/lib/puzzles/schema";
+import { nextCommunityId } from "@/lib/puzzles/source";
+import { PuzzleSubmit } from "@/components/PuzzleSubmit";
 import { analyze, unmodeledRoles } from "@/lib/solver/solve";
 import {
   ROLE_IDS,
@@ -106,8 +108,8 @@ type Verdict =
   | { kind: "error"; message: string }
   | { kind: "multiple"; count: number; example: string }
   | { kind: "none" }
-  | { kind: "unverified"; roles: RoleId[]; link: string }
-  | { kind: "unique"; link: string };
+  | { kind: "unverified"; roles: RoleId[]; link: string; shared: SharedPuzzle }
+  | { kind: "unique"; link: string; shared: SharedPuzzle };
 
 /** 역할에 맞는 기본 정보값 */
 function blankInfo(role: RoleId, night: number, players: number): DraftInfo | null {
@@ -362,7 +364,11 @@ function DayActionEditor({
   );
 }
 
-export function PuzzleCreator() {
+/**
+ * @param existingIds 이미 수록된 문제 id. 수록 신청용 파일에 겹치지 않는 번호를 붙이는 데 쓴다.
+ *   퍼즐 전체를 클라이언트로 가져오면 정답까지 딸려 오므로(스포일러) id만 받는다.
+ */
+export function PuzzleCreator({ existingIds }: { existingIds: string[] }) {
   const [title, setTitle] = useState("");
   const [author, setAuthor] = useState("");
   const [difficulty, setDifficulty] = useState<Difficulty>("normal");
@@ -383,6 +389,7 @@ export function PuzzleCreator() {
   const [verdict, setVerdict] = useState<Verdict>({ kind: "idle" });
 
   const seats = useMemo(() => Array.from({ length: playerCount }, (_, i) => i), [playerCount]);
+  const communityId = useMemo(() => nextCommunityId(existingIds), [existingIds]);
   const ledger = useMemo(
     () => buildLedger(nights, playerCount, deaths, executions, dayActs),
     [nights, playerCount, deaths, executions, dayActs],
@@ -578,7 +585,7 @@ export function PuzzleCreator() {
         return;
       }
       const link = await makeLink(shared);
-      if (link) setVerdict({ kind: "unverified", roles: result.unmodeled, link });
+      if (link) setVerdict({ kind: "unverified", roles: result.unmodeled, link, shared });
       return;
     }
 
@@ -614,7 +621,7 @@ export function PuzzleCreator() {
     }
 
     const link = await makeLink(shared);
-    if (link) setVerdict({ kind: "unique", link });
+    if (link) setVerdict({ kind: "unique", link, shared });
   }
 
   /** CompressionStream이 없는 구형 브라우저에서는 링크를 만들 수 없다. */
@@ -707,11 +714,6 @@ export function PuzzleCreator() {
             하수인이 한 종뿐입니다 — 대본이 공개되므로 하수인의 정체를 알려주는 셈이 됩니다.
           </p>
         )}
-
-        <p className="max-w-prose text-xs text-faded">
-          공유 링크는 서버에 저장되지 않는 사적인 링크입니다 — 이 사이트 목록에 수록되는 것과는
-          별개이고, 링크를 만드는 것이 수록 신청은 아닙니다.
-        </p>
 
         <div className="space-y-3" role="group" aria-label="역할 풀">
           {POOL_BY_TEAM.map(({ team, roles }) => {
@@ -1146,6 +1148,16 @@ export function PuzzleCreator() {
               </a>
             </div>
           </div>
+        )}
+
+        {/* 링크가 나온 다음에야 수록 신청이 의미를 갖는다 — 검증을 통과한 문제만 받는다 */}
+        {(verdict.kind === "unique" || verdict.kind === "unverified") && (
+          <PuzzleSubmit
+            shared={verdict.shared}
+            link={verdict.link}
+            unverified={verdict.kind === "unverified"}
+            puzzleId={communityId}
+          />
         )}
       </section>
     </div>

@@ -30,7 +30,7 @@ src/
     create/page.tsx       # 사설 문제 에디터 (브라우저 유일해 검증, §9)
     play/page.tsx         # 공유 링크로 받은 사설 문제 풀이 (§9)
     guide/page.tsx        # 문제 업로드 가이드 (경로 A/B 안내)
-  components/             # TownSquare, PuzzleCreator, SharedPuzzleLoader …
+  components/             # TownSquare, PuzzleCreator, PuzzleSubmit, SharedPuzzleLoader …
   lib/
     solver/               # 룰 엔진 (퍼즐 검증용, UI 비노출)
       types.ts            # World(그리모어 배정), 등록 시스템
@@ -50,6 +50,7 @@ src/
   lib/puzzles/
     schema.ts             # Puzzle 타입 (difficulty ⟂ source 두 축)
     codec.ts              # 사설 문제 ↔ 공유 링크 + 신뢰불가 입력 검증 (§9)
+    source.ts             # 수록 신청용 퍼즐 파일 생성 (§9 경로 B)
 scripts/
   fetch-rule-sources.ts   # 공식 위키 API에서 규칙 원문 대조·생성 (§8)
 tests/
@@ -279,8 +280,29 @@ scripts/fetch-rule-sources.ts      두 공식 소스에서 대조·생성
   관문이다.** 실제 그 판을 진행한 텔러·참여자를 아는 사람이 넣는다는 것이 신뢰의 근거이고,
   절차가 아니다. CI는 구조 검사와 해설 존재만 강제한다.
 - 정식 수록 문제에는 해설(walkthrough)이 필요하다. 사설 링크 문제는 검증이 성립하면 없어도
-  되고, 미검증이면 필수다.
+  되고, 미검증이면 필수다. 그래서 에디터의 수록 신청 안내는 **해설이 있어야 열린다** —
+  없는 채로 보내면 `definePuzzle`에서 막히고 헛걸음이 된다.
 - PR은 GitHub이 처리하므로 이쪽도 우리 서버 부하가 없다.
+
+**접수는 두 갈래다** (`components/PuzzleSubmit.tsx`). GitHub이 유일한 접수함인데 —
+서버가 없으니 다른 데 둘 수가 없다 — 그 사실이 비전공자에게는 그냥 벽이라서, 저장소를
+건드리지 않는 길을 먼저 둔다.
+
+| | 방법 1 — 신청서 | 방법 2 — 직접 PR |
+|---|---|---|
+| 필요한 것 | GitHub 계정 | GitHub 계정 |
+| 보내는 것 | 공유 링크 한 줄 (문제 전체가 그 안에 있다) | 퍼즐 파일 + `index.ts` 등록 두 줄 |
+| 여는 화면 | 제목·본문이 채워진 이슈 작성 화면 | fork → 웹 편집기 |
+| 파일로 옮기는 사람 | 받는 쪽 | 신청자 |
+
+- 방법 1이 성립하는 이유는 **공유 링크가 곧 문제 전체**이기 때문이다 (경로 A). 링크만
+  받으면 `puzzleFileSource()`로 파일을 복원할 수 있으므로 신청자가 코드를 만질 이유가 없다.
+- 방법 2의 파일도 사람이 옮겨 적지 않는다. `source.ts`가 `definePuzzle` 인자 그대로를
+  찍어 낸다 — 좌석 번호 오타 하나가 CI 실패로 돌아오는 것이 이 경로의 실제 문턱이었다.
+  `tests/puzzle-source.test.ts`는 생성된 소스를 실제로 평가해 `definePuzzle`과 솔버를
+  통과하는지 본다 (문자열이 그럴듯한지가 아니라).
+- 문제 id(`cm-01`, `cm-02` …)는 이미 수록된 id 목록에서 비어 있는 번호를 고른다. 목록은
+  서버 컴포넌트가 **id만** 뽑아 넘긴다 — 퍼즐 전체를 클라이언트로 보내면 정답이 딸려 간다.
 
 ### 스포일러에 대해
 
