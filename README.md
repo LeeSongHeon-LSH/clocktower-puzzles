@@ -125,6 +125,11 @@ npm run rules:sync   # 대조 후 생성 파일 갱신
 <td><strong>공식 아트워크·아이콘·토큰 이미지를 일절 사용하지 않습니다.</strong> 이 저장소에는 공식
 이미지 자산이 포함돼 있지 않으며, 타운스퀘어를 포함한 모든 그래픽은 직접 구현한 SVG입니다.</td></tr>
 
+<tr><td><strong>배경음악</strong></td>
+<td>배경음악 〈Dolce Follia〉는 이 프로젝트를 위해 <strong>생성형 AI로 만든 창작물</strong>입니다 — 가사는 Claude로,
+음원은 <a href="https://suno.com">Suno</a>로 제작했습니다. 공식 <em>Blood on the Clocktower</em> 음원이나 기존
+상업 음원을 사용하거나 참조하지 않았습니다.</td></tr>
+
 <tr><td><strong>규칙 인용</strong></td>
 <td>규칙 문서는 <a href="https://wiki.bloodontheclocktower.com">공식 알마낙</a>의 문장을
 <strong>대조·검증 목적으로 짧게 인용</strong>하며, 인용마다 출처 문서와 판본을 명시합니다.

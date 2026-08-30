@@ -69,6 +69,20 @@ export default function AboutPage() {
           </a>
           을 방문하세요.
         </p>
+        <p className="max-w-prose text-faded">
+          배경음악 〈Dolce Follia〉는 이 사이트를 위해 만든 AI 생성 음원입니다 — 가사는 Claude로,
+          음원은{" "}
+          <a
+            href="https://suno.com"
+            className="text-brass underline underline-offset-2 hover:text-parchment"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Suno
+          </a>
+          로 만들었으며, 공식 음원이나 기존 상업 음원을 사용하거나 참조하지
+          않았습니다.
+        </p>
       </section>
     </article>
   );

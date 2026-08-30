@@ -39,7 +39,15 @@ export const securityHeaders = [
 
 const nextConfig: NextConfig = {
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    return [
+      { source: "/:path*", headers: securityHeaders },
+      // 음원은 내용이 바뀌면 파일 이름도 바꾸는 규칙이므로(BgmToggle.tsx의 SRC 주석)
+      // 영구 캐시가 안전하다 — 재방문자는 파일을 다시 받지 않는다.
+      {
+        source: "/audio/:path*",
+        headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
+      },
+    ];
   },
 };
 
