@@ -66,9 +66,9 @@ body::before {
   background:
     linear-gradient(
       to bottom,
-      rgb(23 18 31 / 0.9) 0%,
-      rgb(23 18 31 / 0.78) 35%,
-      rgb(23 18 31 / 0.88) 100%
+      rgb(23 18 31 / 0.88) 0%,
+      rgb(23 18 31 / 0.74) 35%,
+      rgb(23 18 31 / 0.86) 100%
     ),
     url("/bg-clocktower.webp") center / cover no-repeat;
 }
