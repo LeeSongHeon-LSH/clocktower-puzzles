@@ -43,6 +43,17 @@ export const metadata: Metadata = {
     "Blood on the Clocktower 상황 추리 퍼즐 — 공개 주장과 밤의 기록으로 악마를 찾아라.",
 };
 
+// 상단 메뉴 알약.
+//
+// 배경 일러스트 위에 글자만 떠 있으면 그림 밝기에 따라 메뉴가 묻힌다. 반투명 면(bg-panel/70)에
+// backdrop-blur를 얹어 버튼 뒤만 뿌옇게 만들면, 배경은 알약 사이로 그대로 보이면서 글자는
+// 항상 같은 바닥 위에 놓인다 — 헤더 전체를 불투명 띠로 덮는 것보다 배경을 덜 가린다.
+//
+// 모양은 HomeClient의 필터 칩과 같은 어휘다(rounded-full + border + px-3 py-1). 바꾼다면
+// BgmToggle의 버튼도 함께 맞출 것 — 한 줄에 나란히 서므로 어긋나면 바로 티가 난다.
+const NAV_PILL =
+  "rounded-full border border-panel-edge bg-panel/70 px-3 py-1 text-faded backdrop-blur-sm transition-colors hover:border-brass/50 hover:bg-panel hover:text-parchment focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brass";
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
@@ -51,21 +62,21 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="min-h-full flex flex-col">
         <header className="border-b border-panel-edge">
-          <nav className="mx-auto flex w-full max-w-3xl items-baseline justify-between px-4 py-4">
+          <nav className="mx-auto flex w-full max-w-3xl flex-wrap items-center justify-between gap-x-4 gap-y-3 px-4 py-4">
             <Link href="/" className="font-display text-xl font-bold tracking-wide">
               시계탑 <span className="text-blood">퍼즐</span>
             </Link>
-            <div className="flex gap-5 text-sm text-faded">
-              <Link href="/" className="hover:text-parchment">
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <Link href="/" className={NAV_PILL}>
                 퍼즐
               </Link>
-              <Link href="/create" className="hover:text-parchment">
+              <Link href="/create" className={NAV_PILL}>
                 업로드
               </Link>
-              <Link href="/rules" className="hover:text-parchment">
+              <Link href="/rules" className={NAV_PILL}>
                 규칙
               </Link>
-              <Link href="/about" className="hover:text-parchment">
+              <Link href="/about" className={NAV_PILL}>
                 소개
               </Link>
               {/* 루트 레이아웃에 두어야 페이지를 옮겨도 재생이 끊기지 않는다 — BgmToggle.tsx 참고. */}

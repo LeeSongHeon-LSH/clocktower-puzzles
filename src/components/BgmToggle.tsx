@@ -50,7 +50,13 @@ export function BgmToggle() {
         type="button"
         aria-pressed={playing}
         onClick={toggle}
-        className={`transition-colors hover:text-parchment ${playing ? "text-brass" : ""}`}
+        // 알약 모양은 layout.tsx의 NAV_PILL과 같은 어휘. 켜진 동안은 황동 테두리와 옅은
+        // 황동 면으로 채워, 글자색만 바뀔 때보다 "지금 나오는 중"이 멀리서도 보이게 한다.
+        className={`rounded-full border px-3 py-1 backdrop-blur-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brass ${
+          playing
+            ? "border-brass bg-brass/20 text-brass"
+            : "border-panel-edge bg-panel/70 text-faded hover:border-brass/50 hover:bg-panel hover:text-parchment"
+        }`}
       >
         ♪ {playing ? "음악 끄기" : "음악 켜기"}
       </button>
