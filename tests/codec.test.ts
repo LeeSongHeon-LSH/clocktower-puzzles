@@ -28,7 +28,7 @@ describe("공유 링크 코덱", () => {
   });
 
   it("왕복한 퍼즐도 솔버에서 여전히 유일해다", async () => {
-    const original = sharedFrom("tb-01");
+    const original = sharedFrom("mx-05");
     const round = await decodePuzzle(await encodePuzzle(original));
     expect(solve(toPuzzle(round, "shared"))).toHaveLength(1);
   });
@@ -65,7 +65,7 @@ describe("공유 링크 코덱", () => {
 });
 
 describe("검증 — 신뢰할 수 없는 입력", () => {
-  const base = () => sharedFrom("tb-01") as unknown as Record<string, unknown>;
+  const base = () => sharedFrom("mx-05") as unknown as Record<string, unknown>;
 
   it("정상 퍼즐은 통과한다", () => {
     expect(() => validateShared(base())).not.toThrow();

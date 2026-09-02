@@ -26,7 +26,7 @@ function evaluate(source: string): Puzzle {
 }
 
 describe("수록 신청 파일 생성", () => {
-  const source = puzzleFileSource(sharedFrom("tb-01"), "cm-01");
+  const source = puzzleFileSource(sharedFrom("mx-05"), "cm-01");
 
   it("definePuzzle의 검사를 통과한다", () => {
     expect(() => definePuzzle(evaluate(source))).not.toThrow();
@@ -60,7 +60,7 @@ describe("수록 신청 파일 생성", () => {
 
   it("이미 쓰인 id는 건너뛴다", () => {
     expect(nextCommunityId([])).toBe("cm-01");
-    expect(nextCommunityId(["tb-01", "cm-01", "cm-02"])).toBe("cm-03");
+    expect(nextCommunityId(["mx-05", "cm-01", "cm-02"])).toBe("cm-03");
   });
 
   it("등록 두 줄이 파일명과 맞물린다", () => {

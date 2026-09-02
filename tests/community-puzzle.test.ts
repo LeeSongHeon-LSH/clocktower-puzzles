@@ -30,18 +30,18 @@ function verdict(shared: SharedPuzzle): "unique" | "unverified" | "multiple" | "
 
 describe("사설 문제 파이프라인", () => {
   it("잘 만든 문제는 유일해 판정을 받는다", () => {
-    expect(verdict(sharedFrom("tb-01"))).toBe("unique");
+    expect(verdict(sharedFrom("mx-05"))).toBe("unique");
   });
 
   it("단서를 빼면 '해가 여럿'으로 막힌다", () => {
-    const p = sharedFrom("tb-01");
+    const p = sharedFrom("mx-05");
     // 모든 밤 정보를 지우면 제약이 사라져 답을 좁힐 수 없다
     const stripped: SharedPuzzle = { ...p, claims: p.claims.map((c) => ({ ...c, info: [] })) };
     expect(verdict(stripped)).toBe("multiple");
   });
 
   it("정답 배치를 어긋나게 하면 유일해로 통과하지 않는다", () => {
-    const p = sharedFrom("tb-01");
+    const p = sharedFrom("mx-05");
     const swapped: RoleId[] = [...p.solution];
     const a = swapped.findIndex((r) => r === "imp");
     const b = swapped.findIndex((r) => r !== "imp");
@@ -58,7 +58,7 @@ describe("사설 문제 파이프라인", () => {
   });
 
   it("사설 문제는 해설·힌트가 없어도 성립한다", async () => {
-    const p = sharedFrom("tb-01");
+    const p = sharedFrom("mx-05");
     const bare: SharedPuzzle = { ...p, hints: [], walkthrough: [], intro: undefined };
     const round = await decodePuzzle(await encodePuzzle(bare));
     expect(round.walkthrough).toEqual([]);
@@ -71,14 +71,14 @@ describe("사설 문제 파이프라인", () => {
   });
 
   it("검증기가 모르는 역할이 섞이면 미검증 판정이 나온다", () => {
-    const p = sharedFrom("tb-01");
+    const p = sharedFrom("mx-05");
     // 풀에 실험적 하수인이 하나 있기만 해도 하수인 자리 후보라 배정될 수 있다 —
     // 능력을 모르는 채 세면 "유일해"가 거짓이 되므로 열거하지 않는다.
     expect(verdict({ ...p, rolePool: [...p.rolePool, "goblin"] })).toBe("unverified");
   });
 
   it("미검증 판정은 링크로 왕복해도 되살아난다 (만든 사람이 끌 수 없다)", async () => {
-    const p = sharedFrom("tb-01");
+    const p = sharedFrom("mx-05");
     const shady: SharedPuzzle = { ...p, rolePool: [...p.rolePool, "goblin"] };
     const round = await decodePuzzle(await encodePuzzle(shady));
     // 링크에는 "검증됨" 플래그가 없다 — 여는 쪽이 내용에서 다시 판정한다
@@ -86,7 +86,7 @@ describe("사설 문제 파이프라인", () => {
   });
 
   it("미검증 문제도 구조 검사는 그대로 받는다", () => {
-    const p = sharedFrom("tb-01");
+    const p = sharedFrom("mx-05");
     const shady = { ...p, rolePool: [...p.rolePool, "goblin" as RoleId] };
     // 좌석 범위·주장 형식 검사는 실험적 역할과 무관하게 살아 있어야 한다
     expect(() =>
