@@ -5,7 +5,7 @@ import { definePuzzle } from "@/lib/puzzles/schema";
 export default definePuzzle({
   id: "tb-07",
   title: "손대지 말았어야 할 이름",
-  edition: "tb",
+  edition: "mixed",
   difficulty: "easy",
   playerCount: 7,
   nights: 2,
@@ -15,12 +15,13 @@ export default definePuzzle({
     "monk", "ravenkeeper", "virgin", "slayer", "soldier", "mayor",
     "butler", "recluse", "saint",
     "scarletwoman",
-    "imp",
+    "imp", "zombuul", "fanggu",
   ],
   intro:
     "7인 게임, 2일차 아침. 어제 낮 B가 A를 지명하자 A가 처녀임이 드러났고, " +
     "B는 그 자리에서 처형됐다. 그리고 밤사이 C가 죽었다. " +
-    "남은 사람들이 각자 정보를 내놓았는데 — 초공감자를 주장하는 사람이 둘이다.",
+    "남은 사람들이 각자 정보를 내놓았는데 — 초공감자를 주장하는 사람이 둘이다. " +
+    "대본의 악마는 임프·좀부울·팡 구 셋 중 하나다.",
   claims: [
     { seat: 0, role: "virgin", info: [] },
     { seat: 1, role: "washerwoman", info: [{ night: 1, data: { type: "washerwoman", targets: [2, 6], shownRole: "chef" } }] },
@@ -45,7 +46,8 @@ export default definePuzzle({
     { type: "death", night: 2, seat: 2 },
   ],
   questions: [
-    { id: "demon", text: "임프는 누구인가?", answerSeats: [3] },
+    { id: "demon", text: "악마는 누구인가?", answerSeats: [3] },
+    { id: "imp", text: "이 판의 악마는 임프다. 그 좌석을 고르라", answerSeats: [3] },
     { id: "scarletwoman", text: "탕녀는 누구인가?", answerSeats: [4] },
   ],
   hints: [
@@ -60,7 +62,8 @@ export default definePuzzle({
     "⑤ 선한 점쟁이 G의 밤2 정보 'E·F 중 악마 없음'에 의해 E는 악마가 아니다. E는 악역이면서 악마가 아니므로 하수인 — 이 대본의 하수인은 탕녀뿐이다.",
     "⑥ 악역은 둘뿐이고 그중 하나가 E(탕녀)다. A·B·F·G가 선하므로 악마는 C 아니면 D다.",
     "⑦ 선한 세탁부 B의 'C 또는 G가 요리사'에서 G는 점쟁이이므로 C가 요리사다 — C는 선하다. 남은 것은 D뿐, D가 임프다.",
-    "⑧ 재구성: 임프 D는 수사관을 사칭하며 선한 A와 F에게 혐의를 씌웠고, 탕녀 E는 초공감자를 사칭했다. 마을은 정보가 아니라 낮의 사고로 진실에 닿았다 — 처녀에게 손을 댄 B가 죽는 순간, 이미 두 사람의 결백이 증명되어 있었다. 선한 요리사 C의 '인접 악역 쌍 1'도 나란히 앉은 D와 E를 가리키고 있었다.",
+    "⑧ 악마의 종류도 이미 정해져 있었다. 좀부울이라면 낮1에 처형 사망이 있었으므로 그 밤 아예 깨어나지 못해 C가 죽을 수 없다. 팡 구라면 외지인이 한 명 늘어 7인 판에 외지인 자리가 생기는데, 아무도 외지인을 주장하지 않았고 정체를 감출 주정뱅이도 대본에 없다. 남는 것은 임프뿐이다.",
+    "⑨ 재구성: 임프 D는 수사관을 사칭하며 선한 A와 F에게 혐의를 씌웠고, 탕녀 E는 초공감자를 사칭했다. 마을은 정보가 아니라 낮의 사고로 진실에 닿았다 — 처녀에게 손을 댄 B가 죽는 순간, 이미 두 사람의 결백이 증명되어 있었다. 선한 요리사 C의 '인접 악역 쌍 1'도 나란히 앉은 D와 E를 가리키고 있었다.",
   ],
   solution: ["virgin", "washerwoman", "chef", "imp", "scarletwoman", "empath", "fortuneteller"],
 });

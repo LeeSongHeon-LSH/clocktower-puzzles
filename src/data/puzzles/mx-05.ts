@@ -15,12 +15,13 @@ export default definePuzzle({
     "empath", "chef", "washerwoman", "investigator", "fortuneteller",
     "butler", "recluse", "saint",
     "scarletwoman", "baron",
-    "imp",
+    "imp", "zombuul", "po", "shabaloth",
   ],
   intro:
     "6인 게임의 첫날 아침. 아무도 죽지 않았고 전원이 정보를 공개했다. " +
     "6인 구성에는 외지인이 정확히 1명 있고, 이 대본에는 주정뱅이도 독살범도 첩자도 없다 — " +
-    "선한 사람이 낸 정보는 예외 없이 참이다. 거짓말을 하고 있는 사람은 악역뿐이다.",
+    "선한 사람이 낸 정보는 예외 없이 참이다. 거짓말을 하고 있는 사람은 악역뿐이다. " +
+    "악마는 넷 중 하나이므로 누구인지와 함께 무엇인지도 답해야 한다.",
   claims: [
     { seat: 0, role: "clockmaker", info: [{ night: 1, data: { type: "clockmaker", steps: 1 } }] },
     { seat: 1, role: "dreamer", info: [{ night: 1, data: { type: "dreamer", target: 3, goodRole: "chef", evilRole: "imp" } }] },
@@ -31,7 +32,8 @@ export default definePuzzle({
   ],
   events: [],
   questions: [
-    { id: "demon", text: "임프는 누구인가?", answerSeats: [3] },
+    { id: "demon", text: "악마는 누구인가?", answerSeats: [3] },
+    { id: "imp", text: "이 판의 악마는 임프다. 그 좌석을 고르라", answerSeats: [3] },
     { id: "scarletwoman", text: "탕녀는 누구인가?", answerSeats: [4] },
   ],
   hints: [
@@ -44,7 +46,7 @@ export default definePuzzle({
     "③ E가 진짜 초공감자라고 하자. '이웃에 악 0명'은 D와 F가 모두 선하다는 뜻이다. 그러면 ②의 D는 요리사여야 하는데, F도 요리사를 주장하고 있고 F는 선하다 — 요리사 토큰이 둘이 되어 모순이다. 따라서 E가 악역이다.",
     "④ 6인 구성의 악역은 둘(하수인 1, 악마 1)이다. E가 그중 하나다.",
     "⑤ 선한 요리사 F의 '인접 악역 쌍 1'이 성립하려면 두 악역이 나란히 앉아야 한다. E(5번째 자리)의 이웃은 D와 F뿐인데 F는 요리사로 선하므로, 나머지 악역은 D다.",
-    "⑥ ②에 의해 D는 요리사이거나 임프인데 ⑤에서 D는 악역이므로 — D가 임프다. 따라서 E는 탕녀다.",
+    "⑥ ②에 의해 D는 요리사이거나 임프인데 ⑤에서 D는 악역이므로 — D가 임프다. 따라서 E는 탕녀다. 대본에는 악마가 넷 있었지만 몽상가가 이름을 댄 순간 나머지 셋은 후보에서 사라진다 — 몽상가는 그냥 악마가 아니라 임프라고 보았다.",
     "⑦ 확인: 시계공 A의 '거리 1'은 악마 D와 가장 가까운 하수인 사이의 간격이 한 자리라는 뜻이고, D(4번째 자리)와 E(5번째 자리)는 실제로 이웃이다. 6인의 외지인 한 자리는 스스로 집사를 밝힌 C가 채운다. 임프 D는 수사관을 사칭해 선한 B와 F를 물고 늘어졌지만, 정작 자신을 지목한 몽상가의 한 문장을 지우지는 못했다.",
   ],
   solution: ["clockmaker", "dreamer", "butler", "imp", "scarletwoman", "chef"],

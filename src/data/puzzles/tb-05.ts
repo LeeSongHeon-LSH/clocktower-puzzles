@@ -5,7 +5,7 @@ import { definePuzzle } from "@/lib/puzzles/schema";
 export default definePuzzle({
   id: "tb-05",
   title: "있어선 안 될 외지인",
-  edition: "tb",
+  edition: "mixed",
   difficulty: "normal",
   playerCount: 7,
   nights: 2,
@@ -14,7 +14,7 @@ export default definePuzzle({
     "washerwoman", "librarian", "investigator", "chef", "empath", "fortuneteller", "undertaker", "monk", "ravenkeeper", "soldier", "mayor",
     "butler", "drunk", "recluse", "saint",
     "poisoner", "spy", "baron", "scarletwoman",
-    "imp",
+    "imp", "zombuul", "vigormortis",
   ],
   intro:
     "7인 게임, 2일차 아침. 어제 낮, '인접한 악역 쌍이 둘이나 보인다'는 요리사 C의 수상한 정보에 " +
@@ -45,7 +45,8 @@ export default definePuzzle({
     { type: "death", night: 2, seat: 1 },
   ],
   questions: [
-    { id: "demon", text: "임프는 누구인가?", answerSeats: [3] },
+    { id: "demon", text: "악마는 누구인가?", answerSeats: [3] },
+    { id: "imp", text: "이 판의 악마는 임프다. 그 좌석을 고르라", answerSeats: [3] },
     { id: "baron", text: "남작은 누구인가?", answerSeats: [5] },
     { id: "drunk", text: "주정뱅이는 누구였나?", answerSeats: [2] },
   ],

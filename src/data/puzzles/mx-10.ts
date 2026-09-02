@@ -15,7 +15,7 @@ export default definePuzzle({
     "chambermaid", "oracle", "clockmaker", "mayor",
     "goon", "butler", "recluse", "saint",
     "baron", "scarletwoman",
-    "imp",
+    "imp", "vortox", "zombuul", "vigormortis",
   ],
   intro:
     "8인 게임, 3일차 아침. 낮1에 F가 처형됐고 밤2에 H가 죽었다. 그리고 밤3에는 아무 일도 없었다. " +
@@ -48,7 +48,8 @@ export default definePuzzle({
     { type: "death", night: 2, seat: 7 },
   ],
   questions: [
-    { id: "demon", text: "임프는 누구인가?", answerSeats: [3] },
+    { id: "demon", text: "악마는 누구인가?", answerSeats: [3] },
+    { id: "imp", text: "이 판의 악마는 임프다. 그 좌석을 고르라", answerSeats: [3] },
     { id: "goon", text: "건달은 누구인가?", answerSeats: [2] },
     { id: "scarletwoman", text: "탕녀는 누구인가?", answerSeats: [4] },
   ],
@@ -64,7 +65,8 @@ export default definePuzzle({
     "⑤ 선한 점쟁이 G의 밤1 'D·E 중 악마 있음'과 밤3 'A·E 중 악마 없음'을 겹치면 E는 악마가 아니다. 따라서 악마는 D다.",
     "⑥ ④에 의해 수사관 쌍의 악역이 D로 정해졌으므로 H가 진짜 수사관이고, 그 정보 '탕녀는 D 또는 E'에서 D는 임프이므로 E가 탕녀다. 요리사 쌍의 악역도 E로 맞아떨어진다.",
     "⑦ 확인: 선한 세탁부 F의 'A 또는 G가 요리사'에서 G는 점쟁이이므로 A가 진짜 요리사이고, 선한 요리사 A의 '인접 악역 쌍 1'은 나란히 앉은 D와 E를 가리킨다.",
-    "⑧ 재구성: 임프 D는 밤2에 자신을 지목한 진짜 수사관 H를 침묵시켰다. 그러나 밤3에 건달 C를 고른 순간 스스로 취해 아무도 죽이지 못했고, 대신 C를 자기 편으로 끌어들였다 — 조용한 밤과 초공감자의 뒤집힌 수치는 같은 사건의 앞뒤였다.",
+    "⑧ 악마의 종류도 죽음의 기록이 정한다. 좀부울이라면 낮1에 처형 사망이 있었으니 밤2에 깨어나지 못해 H가 죽을 수 없다. 보르톡스라면 처형 없는 낮2를 넘기는 순간 게임이 끝났어야 한다. 비고르모르티스라면 외지인이 한 명 줄어 스스로 건달을 밝힌 C의 자리가 사라진다. 남는 것은 임프뿐이다.",
+    "⑨ 재구성: 임프 D는 밤2에 자신을 지목한 진짜 수사관 H를 침묵시켰다. 그러나 밤3에 건달 C를 고른 순간 스스로 취해 아무도 죽이지 못했고, 대신 C를 자기 편으로 끌어들였다 — 조용한 밤과 초공감자의 뒤집힌 수치는 같은 사건의 앞뒤였다.",
   ],
   solution: ["chef", "empath", "goon", "imp", "scarletwoman", "washerwoman", "fortuneteller", "investigator"],
 });
