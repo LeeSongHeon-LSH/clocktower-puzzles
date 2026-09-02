@@ -137,6 +137,11 @@ function validatePuzzle(pz: SolverPuzzle): Claim[] {
       if (change.night < 2 || change.night > pz.nights) {
         throw new Error(`좌석 ${c.seat}: 변신한 밤이 범위 밖입니다 (밤 ${change.night})`);
       }
+      if (!pz.rolePool.includes(change.from)) {
+        // 변신 전 역할은 셋업에 배정되는 역할이므로 대본(rolePool) 안에 있어야 한다
+        // (명제의 역할 참조를 대본 안으로 제한한 19차 선례와 같다)
+        throw new Error(`좌석 ${c.seat}: 변신 전 역할이 대본에 없습니다 (${change.from})`);
+      }
       if (!SWAPPABLE_ROLES.includes(change.from) || !PHILOSOPHER_GAINABLE.includes(c.role) || change.from === c.role) {
         throw new Error(`좌석 ${c.seat}: 변신 이력에 쓸 수 없는 역할입니다 (${change.from} → ${c.role})`);
       }

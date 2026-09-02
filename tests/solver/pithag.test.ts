@@ -198,6 +198,11 @@ describe("Pit-Hag: 건전성 거부", () => {
     night1.claims[1] = { ...night1.claims[1], roleChange: { night: 1, from: "empath" } };
     expect(() => solve(night1)).toThrow(/변신한 밤이 범위 밖/);
 
+    const notInPool = puzzle();
+    // 시계공은 교환 가능 역할이지만 이 대본에 없다 — 셋업에 배정될 수 없다
+    notInPool.claims[1] = { ...notInPool.claims[1], roleChange: { night: 2, from: "clockmaker" } };
+    expect(() => solve(notInPool)).toThrow(/변신 전 역할이 대본에 없습니다/);
+
     const badFrom = puzzle();
     badFrom.claims[1] = { ...badFrom.claims[1], roleChange: { night: 2, from: "soldier" } };
     expect(() => solve(badFrom)).toThrow(/변신 이력에 쓸 수 없는 역할/);
