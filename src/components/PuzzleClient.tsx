@@ -9,7 +9,7 @@ import { EDITION_LABELS, ROLES, TEAM_LABELS, roleLabel } from "@/data/roles";
 import type { GameEvent, RoleId, Team } from "@/lib/solver/types";
 import { eventDeadSeat } from "@/lib/solver/types";
 import { composition, OUTSIDER_MODIFIERS } from "@/lib/solver/composition";
-import { renderClaimInfo } from "@/lib/render";
+import { renderClaimInfo, renderRoleChange } from "@/lib/render";
 import { loadProgress, saveProgress, useProgress } from "@/lib/progress";
 import { clearNotes, saveNote, useSeatNotes } from "@/lib/notes";
 import { MARKS, TownSquare, type SeatAnnotation, type TownSquareReveal } from "@/components/TownSquare";
@@ -300,6 +300,11 @@ export function PuzzleClient({ puzzle, verified = true }: { puzzle: Puzzle; veri
                 )}
                 <span className="ml-3 text-faded">주장:</span>{" "}
                 <span className="text-brass">{roleLabel(selectedClaim.role)}</span>
+                {selectedClaim.roleChange && (
+                  <span className="ml-2 text-xs text-faded">
+                    ({renderRoleChange(selectedClaim.roleChange)})
+                  </span>
+                )}
               </p>
               {selectedClaim.info.length > 0 ? (
                 <ul className="space-y-1 border-l border-panel-edge pl-3">
@@ -392,6 +397,9 @@ export function PuzzleClient({ puzzle, verified = true }: { puzzle: Puzzle; veri
                 <p>
                   <span className="font-display font-bold">{seatName(c.seat)}</span>
                   <span className="ml-2 text-brass">{roleLabel(c.role)}</span>
+                  {c.roleChange && (
+                    <span className="ml-2 text-xs text-faded">({renderRoleChange(c.roleChange)})</span>
+                  )}
                   {deadSeats.has(c.seat) && (
                     <span className="ml-2 text-xs text-faded">사망</span>
                   )}

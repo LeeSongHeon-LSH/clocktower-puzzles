@@ -221,6 +221,7 @@ export const SOLVER_ROLES: readonly RoleId[] = [
   "eviltwin", // 선한 쌍둥이와 서로를 안다 — 진행 중 게임에 관측 제약 없음 (구성 전용, 밤에 깨지 않음)
   "witch", // 밤마다 저주 — 저주 사망(낮, 지명 시)은 이벤트로 표현 불가, 기상 전용
   "cerenovus", // 밤마다 광기 강제 — 마지막 밤의 선택이 선한 좌석 1개의 주장 전체를 날조로 만들 수 있다 (solve가 열거)
+  "pithag", // 밤마다 1명을 판에 없는 캐릭터로 — 선인의 변신은 주장의 roleChange가 드러낼 때만 (결정적 타임라인), 자기 변신은 등록 ∃
   "savant", // 매일 낮 2개 진술(구조화 명제) — 멀쩡하면 정확히 하나만 참, Vortox 세계에선 둘 다 거짓
   "artist", // 1회, 낮에 예/아니오 질문(구조화 명제) — 멀쩡하면 답이 진실
   "flowergirl", // 밤마다 어제 악마가 투표했는지 배운다 — '아니오'가 기록된 투표자를 제약
@@ -301,8 +302,9 @@ export interface ClaimInfo {
   text?: string;
   data?: InfoData; // 솔버 입력. 정보성 주장엔 필수, 순수 서사엔 생략 가능
   /**
-   * 이 정보를 받을 당시의 역할 (이발사 교환 이력 — 20차). 생략하면 주장 역할.
-   * 풀에 이발사가 있을 때만 허용되고, data.type은 asRole과 일치해야 한다.
+   * 이 정보를 받을 당시의 역할 (이발사 교환 이력 — 20차, 마귀할멈 변신 이력 — 24차).
+   * 생략하면 주장 역할. 풀에 이발사가 있을 때 또는 이 주장에 roleChange가 있을 때만
+   * 허용되고, data.type은 asRole과 일치해야 한다.
    */
   asRole?: RoleId;
 }
@@ -338,6 +340,13 @@ export interface Claim {
   seat: Seat;
   role: RoleId; // 주장하는 역할 (술꾼은 자신이 믿는 마을 사람 역할을 주장)
   info: ClaimInfo[];
+  /**
+   * 마귀할멈 변신 이력 (24차): 밤 night에 from에서 현재 role로 바뀌었다.
+   * 바뀐 사람은 그 밤 새 역할을 통보받으므로 정직한 선인이라면 이력을 밝힌다 —
+   * **이력을 밝히지 않은 선한 좌석은 변신하지 않았다** (자기 배제, 이발사 20차 선례).
+   * 좌석당 최대 1회. from은 SWAPPABLE_ROLES, 현재 role은 PHILOSOPHER_GAINABLE이어야 한다.
+   */
+  roleChange?: { night: number; from: RoleId };
 }
 
 // ── 이벤트 타임라인 ──────────────────────────────────────────────

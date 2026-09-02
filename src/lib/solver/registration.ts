@@ -5,11 +5,40 @@
 
 import { ROLES } from "@/data/roles";
 import type { RoleId, Seat, Team } from "./types";
+import { PHILOSOPHER_GAINABLE } from "./types";
 
 export interface TokenView {
   /** 좌석의 현재 토큰 역할 (데몬 승계 반영: 승계한 하수인의 토큰은 imp) */
   tokenRole(seat: Seat): RoleId;
   rolePool: RoleId[];
+  /**
+   * 마귀할멈이 자기 자신을 바꿨을 수 있는 역할들 (24차 D8). 자기 변신은 주장으로
+   * 드러나지 않으므로 첩자의 오등록과 같은 ∃로 흡수한다 — 마귀할멈 토큰은 이 중
+   * 어떤 역할로도 보일 수 있다. 진영은 바뀌지 않으므로 진영 판정에는 쓰지 않는다.
+   */
+  pithagSelfOptions?: RoleId[];
+}
+
+/**
+ * 마귀할멈의 자기 변신 후보 (24차 D8): 시각 time(밤 n = n, 낮 d = d + 0.5)에
+ * **판에 없는** 획득 가능 역할들. 밤 2부터 변신할 수 있으므로 그 전에는 비어 있다.
+ */
+export function pithagSelfOptionsAt(
+  tokenRole: (seat: Seat) => RoleId,
+  playerCount: number,
+  rolePool: RoleId[],
+  time: number,
+): RoleId[] {
+  if (time < 2) return [];
+  const inPlay = new Set<RoleId>();
+  let hasPithag = false;
+  for (let s = 0; s < playerCount; s++) {
+    const t = tokenRole(s);
+    inPlay.add(t);
+    if (t === "pithag") hasPithag = true;
+  }
+  if (!hasPithag) return [];
+  return rolePool.filter((r) => PHILOSOPHER_GAINABLE.includes(r) && !inPlay.has(r));
 }
 
 function teamOf(role: RoleId): Team {
@@ -27,6 +56,8 @@ export function canShowAsRole(view: TokenView, seat: Seat, shown: RoleId): boole
   if (actual === shown) return true;
   if (actual === "recluse" && isEvilRole(shown) && view.rolePool.includes(shown)) return true;
   if (actual === "spy" && !isEvilRole(shown) && view.rolePool.includes(shown)) return true;
+  // 마귀할멈이 자기를 그 역할로 바꿨을 수 있다 (∃ — 주장으로 드러나지 않는 변신)
+  if (actual === "pithag" && (view.pithagSelfOptions?.includes(shown) ?? false)) return true;
   return false;
 }
 
@@ -39,6 +70,7 @@ export function canShowAsOtherThan(view: TokenView, seat: Seat, excluded: RoleId
   const options: RoleId[] = [actual];
   if (actual === "recluse") options.push(...view.rolePool.filter(isEvilRole));
   if (actual === "spy") options.push(...view.rolePool.filter((r) => !isEvilRole(r)));
+  if (actual === "pithag") options.push(...(view.pithagSelfOptions ?? []));
   return options.some((r) => !excluded.includes(r));
 }
 

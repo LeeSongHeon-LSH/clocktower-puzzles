@@ -3,6 +3,7 @@
 import type { Claim, RoleId, Seat, SolverPuzzle } from "./types";
 import { ONE_SHOT_INFO_ROLES } from "./types";
 import { DemonScenario, Schedule, tokenRoleAt } from "./timeline";
+import { pithagSelfOptionsAt } from "./registration";
 import type { TokenView } from "./registration";
 
 export interface Ctx {
@@ -70,10 +71,24 @@ export function believedRole(ctx: Ctx, seat: Seat, night: number): RoleId {
 }
 
 export function view(ctx: Ctx, night: number): TokenView {
+  const tokenRole = (s: Seat) => tokenRoleAt(ctx.assignment, ctx.sc, s, night);
   return {
-    tokenRole: (s: Seat) => tokenRoleAt(ctx.assignment, ctx.sc, s, night),
+    tokenRole,
     rolePool: ctx.pz.rolePool,
+    pithagSelfOptions: pithagSelfOptionsAt(tokenRole, ctx.pz.playerCount, ctx.pz.rolePool, night),
   };
+}
+
+/**
+ * 이 좌석의 역할이 바뀐 시점 (마귀할멈 변신 24차 / 이발사·조련사 교환 20·21차). 없으면 null.
+ * 바뀐 밤에 즉시형 정보 역할이 되면 그 밤 한 번 정보를 받는다 (철학자 22차 규약).
+ */
+function changedAt(ctx: Ctx, seat: Seat): number | null {
+  const rc = ctx.sc.roleChanges?.find((c) => c.seat === seat);
+  if (rc !== undefined) return rc.since;
+  const sw = ctx.sc.roleSwap;
+  if (sw !== undefined && (seat === sw.a || seat === sw.b)) return sw.since;
+  return null;
 }
 
 export function circularDistance(n: number, a: Seat, b: Seat): number {
@@ -119,7 +134,8 @@ function wakesAs(ctx: Ctx, seat: Seat, night: number, role: RoleId): boolean {
     case "investigator":
     case "chef":
     case "clockmaker":
-      return night === 1;
+      // 즉시형 정보: 첫 밤, 또는 그 역할이 된 밤에 한 번 (변신·교환)
+      return night === 1 || changedAt(ctx, seat) === night;
     case "empath":
     case "fortuneteller":
     case "chambermaid":
@@ -181,6 +197,8 @@ function wakesAs(ctx: Ctx, seat: Seat, night: number, role: RoleId): boolean {
       const used = claim.role === "seamstress" ? claim.info.find((i) => i.data?.type === "seamstress") : undefined;
       return used !== undefined && used.night === night && aliveAfter[seat];
     }
+    case "pithag": // 밤2부터 매밤 한 명을 판에 없는 캐릭터로 바꾼다
+      return night >= 2 && (aliveStart[seat] || vigorKept(ctx, seat, night));
     case "poisoner":
     case "spy":
     case "devilsadvocate": // 밤마다 처형 면역 대상을 고른다 (밤1 포함)

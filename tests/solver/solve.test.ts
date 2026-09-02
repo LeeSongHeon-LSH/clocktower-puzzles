@@ -98,14 +98,14 @@ describe("solve: 솔버가 모르는 역할 거부", () => {
   it("주장 역할이 미구현이면 거부한다", () => {
     const pz: SolverPuzzle = {
       ...base,
-      rolePool: [...base.rolePool, "pithag"],
-      claims: base.claims.map((c, i) => (i === 2 ? { ...c, role: "pithag" as const } : c)),
+      rolePool: [...base.rolePool, "acrobat"],
+      claims: base.claims.map((c, i) => (i === 2 ? { ...c, role: "acrobat" as const } : c)),
     };
     expect(() => solve(pz)).toThrow(/모르는 역할/);
   });
 
   it("풀에 든 하수인이 미구현이면 거부한다", () => {
-    expect(() => solve({ ...base, rolePool: [...base.rolePool, "pithag"] })).toThrow(/모르는 역할/);
+    expect(() => solve({ ...base, rolePool: [...base.rolePool, "goblin"] })).toThrow(/모르는 역할/);
   });
 
   it("배정되지 않는 역할은 풀에 있어도 통과한다 (은둔자 오등록 대상)", () => {

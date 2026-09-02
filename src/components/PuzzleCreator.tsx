@@ -101,6 +101,8 @@ interface DraftInfo {
 interface DraftClaim {
   role: RoleId;
   info: DraftInfo[];
+  /** 마귀할멈 변신 이력 — 밤 night에 from에서 지금 역할로 바뀌었다 */
+  roleChange?: { night: number; from: RoleId };
 }
 
 type Verdict =
@@ -413,7 +415,7 @@ export function PuzzleCreator({ existingIds }: { existingIds: string[] }) {
         nights,
         rolePool: pool,
         events: [],
-        claims: claims.map((c, seat) => ({ seat, role: c.role, info: [] })),
+        claims: claims.map((c, seat) => ({ seat, role: c.role, info: [], roleChange: c.roleChange })),
         solution,
       }),
     [playerCount, nights, pool, claims, solution],
@@ -541,7 +543,7 @@ export function PuzzleCreator({ existingIds }: { existingIds: string[] }) {
       playerCount,
       rolePool: pool,
       nights,
-      claims: claims.map((c, seat) => ({ seat, role: c.role, info: c.info })),
+      claims: claims.map((c, seat) => ({ seat, role: c.role, info: c.info, roleChange: c.roleChange })),
       events,
       questions: [{ id: "demon" as const, text: "지금 이 순간의 악마는 누구인가?", answerSeats: [demonSeat] }],
       solution,
@@ -794,10 +796,46 @@ export function PuzzleCreator({ existingIds }: { existingIds: string[] }) {
                     + 정보 추가
                   </button>
                 )}
+                {pool.includes("pithag") && changeableFrom(pool, claim.role).length > 0 && (
+                  <>
+                    <select className={field} aria-label="변신한 밤 (마귀할멈)"
+                      value={claim.roleChange?.night ?? ""}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setClaims((prev) => prev.map((c, i) => {
+                          if (i !== seat) return c;
+                          if (v === "") return { role: c.role, info: c.info };
+                          const from = c.roleChange?.from ?? changeableFrom(pool, c.role)[0];
+                          return { ...c, roleChange: { night: Number(v), from } };
+                        }));
+                        setVerdict({ kind: "idle" });
+                      }}>
+                      <option value="">변신 없음</option>
+                      {Array.from({ length: Math.max(nights - 1, 0) }, (_, i) => i + 2).map((n) => (
+                        <option key={n} value={n}>밤 {n}에 변신</option>
+                      ))}
+                    </select>
+                    {claim.roleChange && (
+                      <select className={field} aria-label="변신 전 역할 (마귀할멈)"
+                        value={claim.roleChange.from}
+                        onChange={(e) => {
+                          const from = e.target.value as RoleId;
+                          setClaims((prev) => prev.map((c, i) =>
+                            i === seat && c.roleChange ? { ...c, roleChange: { ...c.roleChange, from } } : c));
+                          setVerdict({ kind: "idle" });
+                        }}>
+                        {changeableFrom(pool, claim.role).map((r) => (
+                          <option key={r} value={r}>그전엔 {roleLabel(r)}</option>
+                        ))}
+                      </select>
+                    )}
+                  </>
+                )}
               </div>
 
               {claim.info.map((inf, idx) => (
                 <InfoEditor key={idx} info={inf} seats={seats} nights={nights} pool={pool}
+                  roleChange={claim.roleChange}
                   onChange={(next) => {
                     setClaims((prev) => prev.map((c, i) =>
                       i === seat ? { ...c, info: c.info.map((x, j) => (j === idx ? next : x)) } : c));
@@ -1166,13 +1204,19 @@ export function PuzzleCreator({ existingIds }: { existingIds: string[] }) {
 
 // ── 정보 한 건 편집 ──────────────────────────────────────────────
 
+/** 마귀할멈 변신 이력에서 '변신 전 역할'로 고를 수 있는 역할 (대본 안, 지금 역할 제외) */
+function changeableFrom(pool: RoleId[], current: RoleId): RoleId[] {
+  return SWAPPABLE_ROLES.filter((r) => pool.includes(r) && r !== current);
+}
+
 function InfoEditor({
-  info, seats, nights, pool, onChange, onRemove,
+  info, seats, nights, pool, roleChange, onChange, onRemove,
 }: {
   info: DraftInfo;
   seats: Seat[];
   nights: number;
   pool: RoleId[];
+  roleChange?: { night: number; from: RoleId };
   onChange: (next: DraftInfo) => void;
   onRemove: () => void;
 }) {
@@ -1233,10 +1277,10 @@ function InfoEditor({
           onChange={(e) => onChange({ ...info, night: Number(e.target.value) })}>
           {Array.from({ length: nights }, (_, i) => i + 1).map((n) => <option key={n} value={n}>밤 {n}</option>)}
         </select>
-        {pool.includes("barber") && (
+        {(pool.includes("barber") || roleChange !== undefined) && (
           <select
             className={field}
-            aria-label="당시 역할 (이발사 교환 이력)"
+            aria-label="당시 역할 (이발사 교환·마귀할멈 변신 이력)"
             value={info.asRole ?? ""}
             onChange={(e) => {
               const r = e.target.value as RoleId | "";
@@ -1250,7 +1294,7 @@ function InfoEditor({
             }}
           >
             <option value="">현재 역할로서</option>
-            {SWAPPABLE_ROLES.filter((r) => pool.includes(r)).map((r) => (
+            {(roleChange ? [roleChange.from] : SWAPPABLE_ROLES.filter((r) => pool.includes(r))).map((r) => (
               <option key={r} value={r}>당시 {ROLES[r].ko}로서</option>
             ))}
           </select>

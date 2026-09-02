@@ -47,7 +47,10 @@ function assignableRoles(pz: SolverPuzzle): RoleId[] {
     const t = ROLES[r].team;
     return t === "minion" || t === "demon"; // 데몬 자리는 풀의 데몬들로 탐색한다
   }));
-  for (const c of pz.claims) out.add(c.role);
+  for (const c of pz.claims) {
+    out.add(c.role);
+    if (c.roleChange !== undefined) out.add(c.roleChange.from); // 마귀할멈 변신 전 역할은 셋업에 배정된다
+  }
   if (pz.rolePool.includes("drunk")) out.add("drunk");
   if (pz.rolePool.includes("mutant")) out.add("mutant");
   if (pz.rolePool.includes("lunatic")) out.add("lunatic");
@@ -93,6 +96,27 @@ function validatePuzzle(pz: SolverPuzzle): Claim[] {
       }
     }
   }
+  const hasPithag = pz.rolePool.includes("pithag");
+  if (hasPithag) {
+    // 마귀할멈이 새 하수인·새 데몬을 만드는 세계는 아직 열거하지 않는다 —
+    // 대본에서 그것이 아예 불가능하도록 강제한다 (24차 D1)
+    if (pz.rolePool.filter((r) => ROLES[r].team === "minion").length !== 1) {
+      throw new Error("마귀할멈 퍼즐의 대본에는 하수인이 마귀할멈 하나뿐이어야 합니다 (새 하수인 생성 미지원)");
+    }
+    if (pz.rolePool.filter((r) => ROLES[r].team === "demon").length !== 1) {
+      throw new Error("마귀할멈 퍼즐의 대본에는 악마가 한 종류만 있어야 합니다 (새 악마 생성 미지원)");
+    }
+    if (pz.playerCount >= 10) {
+      throw new Error("마귀할멈 퍼즐은 9인 이하만 지원됩니다 (하수인이 2명인 구성 불가)");
+    }
+    // 주장을 날조하는 역할은 숨은 변신을 은닉한다 (자기 배제가 깨진다).
+    // 팡 구·이발사·뱀 조련사·철학자는 역할 타임라인이 변신과 얽힌다.
+    for (const bad of ["drunk", "mutant", "lunatic", "goon", "fanggu", "barber", "snakecharmer", "philosopher"] as RoleId[]) {
+      if (pz.rolePool.includes(bad)) {
+        throw new Error(`마귀할멈과 ${ROLES[bad].ko}은(는) 아직 한 퍼즐에서 함께 지원되지 않습니다`);
+      }
+    }
+  }
   for (const c of pz.claims) {
     if (c.seat < 0 || c.seat >= pz.playerCount) throw new Error(`잘못된 좌석: ${c.seat}`);
     if (claimBySeat[c.seat]) throw new Error(`좌석 ${c.seat}의 주장이 중복`);
@@ -105,10 +129,29 @@ function validatePuzzle(pz: SolverPuzzle): Claim[] {
       // 하수인 역할 주장은 악역이 낀 교환을 드러내는 유일한 통로인데 그 열거가 아직 없다 — 거부
       throw new Error(`이발사 퍼즐에서 하수인 역할 주장(${c.role})은 지원되지 않습니다`);
     }
+    // 마귀할멈 변신 이력 (24차 D3)
+    const change = c.roleChange;
+    if (change !== undefined) {
+      if (!hasPithag) throw new Error(`좌석 ${c.seat}: 변신 이력은 마귀할멈이 풀에 있을 때만 쓸 수 있습니다`);
+      if (change.night < 2 || change.night > pz.nights) {
+        throw new Error(`좌석 ${c.seat}: 변신한 밤이 범위 밖입니다 (밤 ${change.night})`);
+      }
+      if (!SWAPPABLE_ROLES.includes(change.from) || !PHILOSOPHER_GAINABLE.includes(c.role) || change.from === c.role) {
+        throw new Error(`좌석 ${c.seat}: 변신 이력에 쓸 수 없는 역할입니다 (${change.from} → ${c.role})`);
+      }
+    }
     for (const info of c.info) {
       if (info.night < 1 || info.night > pz.nights) throw new Error(`좌석 ${c.seat}: 정보 밤 범위 밖 (밤 ${info.night})`);
+      if (info.asRole === undefined && change !== undefined && info.night < change.night && info.data !== undefined) {
+        throw new Error(`좌석 ${c.seat}: 변신 전(밤 ${info.night}) 정보에는 당시 역할을 밝혀야 합니다`);
+      }
       if (info.asRole !== undefined) {
-        if (c.role === "philosopher") {
+        if (change !== undefined) {
+          // 변신 전의 정보만 당시 역할로 주장할 수 있다
+          if (info.night >= change.night || info.asRole !== change.from) {
+            throw new Error(`좌석 ${c.seat}: 변신 전 정보만 당시 역할(${change.from})로 주장할 수 있습니다`);
+          }
+        } else if (c.role === "philosopher") {
           // 철학자의 획득 능력 정보 — 사용 기록의 역할·시점과 일치해야 한다
           const rec = c.info.find((i) => i.data?.type === "philosopher");
           if (rec?.data?.type !== "philosopher" || rec.data.role !== info.asRole || info.night < rec.night) {
@@ -260,9 +303,23 @@ function enumerate(pz: SolverPuzzle, claimBySeat: Claim[], sched: Schedule): Wor
               assignment[s] = s === hidden?.seat ? hidden.role : s === mad?.seat ? mad.role : claimBySeat[s].role;
             }
 
-            const goodTokens = goodSeats.map((s) => assignment[s]);
+            // 마귀할멈 변신 (24차 D4): 정직한 선한 좌석의 변신 이력은 **결정적**이다 —
+            // 그 좌석의 셋업 역할은 변신 전 역할이고, 최종 그리모어(assignment)는 주장 역할이다.
+            // 주장 전체가 날조인 좌석(숨은 외부인·광기)의 이력은 허세라 무시한다.
+            const roleChanges: { seat: Seat; since: number; role: RoleId }[] = [];
+            const setupAssignment = [...assignment];
+            for (const s of goodSeats) {
+              if (s === hidden?.seat || s === mad?.seat) continue;
+              const rc = claimBySeat[s].roleChange;
+              if (rc === undefined) continue;
+              roleChanges.push({ seat: s, since: rc.night, role: claimBySeat[s].role });
+              setupAssignment[s] = rc.from;
+            }
+
+            // 실물 토큰 중복·마을 사람 수는 **셋업** 기준이다 (변신이 다중집합을 바꾼다)
+            const goodTokens = goodSeats.map((s) => setupAssignment[s]);
             if (new Set(goodTokens).size !== goodTokens.length) continue; // 실물 토큰 중복 불가
-            const tfCount = goodSeats.filter((s) => ROLES[assignment[s]].team === "townsfolk").length;
+            const tfCount = goodSeats.filter((s) => ROLES[setupAssignment[s]].team === "townsfolk").length;
             if (tfCount !== comp.townsfolk) continue;
 
             // 역할 교환 분기: 이발사(선한 두 좌석의 교차 셋업) / 뱀 조련사(데몬 승계형 교환) / 없음
@@ -277,13 +334,13 @@ function enumerate(pz: SolverPuzzle, claimBySeat: Claim[], sched: Schedule): Wor
             }
 
             for (const br of swapBranches) {
-              let setup = assignment;
+              let setup = setupAssignment;
               let tokenSwap: RoleSwapCase | null = null;
               let snakeNight: number | null = null;
               let snakeOldDemon: { seat: Seat; since: number } | null = null;
               if (br.kind === "barber") {
                 // 이발사 교환 세계의 셋업은 두 좌석의 주장 역할을 서로 바꾼 것이다
-                setup = [...assignment];
+                setup = [...setupAssignment];
                 [setup[br.c.a], setup[br.c.b]] = [setup[br.c.b], setup[br.c.a]];
                 tokenSwap = br.c;
               } else if (br.kind === "snake") {
@@ -292,7 +349,7 @@ function enumerate(pz: SolverPuzzle, claimBySeat: Claim[], sched: Schedule): Wor
                 snakeOldDemon = { seat: demonSeat, since: br.t };
               }
               for (const sweet of sweetheartCases(pz, sched, setup, seats)) {
-                for (const sc of demonScenarios(pz, sched, setup, sweet, tokenSwap, snakeNight)) {
+                for (const sc of demonScenarios(pz, sched, setup, sweet, tokenSwap, snakeNight, roleChanges)) {
                   const ftSeat = setup.indexOf("fortuneteller");
                   const rhChoices: (Seat | null)[] = ftSeat >= 0 ? goodSeats : [null];
                   for (const rh of rhChoices) {

@@ -263,7 +263,16 @@ function validateClaim(v: unknown, players: number, nights: number): Claim {
       asRole: raw.asRole === undefined ? undefined : roleId(raw.asRole, `좌석 ${seat} 밤 ${night} 당시 역할`),
     };
   });
-  return { seat, role, info };
+  // 마귀할멈 변신 이력 (24차)
+  let roleChange: Claim["roleChange"];
+  if (v.roleChange !== undefined && v.roleChange !== null) {
+    if (!isRecord(v.roleChange)) throw new Error(`좌석 ${seat}: 변신 이력 형식이 잘못됐습니다.`);
+    roleChange = {
+      night: int(v.roleChange.night, 2, nights, `좌석 ${seat} 변신한 밤`),
+      from: roleId(v.roleChange.from, `좌석 ${seat} 변신 전 역할`),
+    };
+  }
+  return { seat, role, info, roleChange };
 }
 
 function validateEvent(v: unknown, players: number, nights: number): GameEvent {
