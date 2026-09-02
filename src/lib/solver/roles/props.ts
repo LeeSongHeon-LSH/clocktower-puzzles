@@ -19,6 +19,7 @@ function dayView(ctx: Ctx, day: number): TokenView {
     tokenRole,
     rolePool: ctx.pz.rolePool,
     pithagSelfOptions: pithagSelfOptionsAt(tokenRole, ctx.pz.playerCount, ctx.pz.rolePool, day + 0.5),
+    goonAlign: ctx.sc.goonAlignDay?.[day], // 낮은 그 밤이 끝난 뒤로 진영이 확정된다
   };
 }
 

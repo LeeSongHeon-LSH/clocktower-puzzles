@@ -17,6 +17,11 @@ export interface TokenView {
    * 어떤 역할로도 보일 수 있다. 진영은 바뀌지 않으므로 진영 판정에는 쓰지 않는다.
    */
   pithagSelfOptions?: RoleId[];
+  /**
+   * 건달의 그 시점 진영 (25차). 건달은 자기를 고른 첫 사람의 진영이 되므로 진영이
+   * 밤별 상태다. "either" = 그 밤 도중에 바뀌어 양쪽 다 가능 (관대). 없으면 선.
+   */
+  goonAlign?: "good" | "evil" | "either";
 }
 
 /**
@@ -77,12 +82,15 @@ export function canShowAsOtherThan(view: TokenView, seat: Seat, excluded: RoleId
 /** 이 좌석이 악한 진영으로 등록될 수 '있는가' */
 export function canRegisterEvil(view: TokenView, seat: Seat): boolean {
   const actual = view.tokenRole(seat);
+  // 건달의 진영은 밤별 상태다 (역할이 아니라 진영이 바뀐다)
+  if (actual === "goon") return (view.goonAlign ?? "good") !== "good";
   return isEvilRole(actual) || actual === "recluse";
 }
 
 /** 이 좌석이 악한 진영으로 등록될 수밖에 '없는가' (선 등록 불가) */
 export function mustRegisterEvil(view: TokenView, seat: Seat): boolean {
   const actual = view.tokenRole(seat);
+  if (actual === "goon") return (view.goonAlign ?? "good") === "evil";
   return isEvilRole(actual) && actual !== "spy";
 }
 

@@ -76,6 +76,7 @@ export function view(ctx: Ctx, night: number): TokenView {
     tokenRole,
     rolePool: ctx.pz.rolePool,
     pithagSelfOptions: pithagSelfOptionsAt(tokenRole, ctx.pz.playerCount, ctx.pz.rolePool, night),
+    goonAlign: ctx.sc.goonAlign?.[night],
   };
 }
 
@@ -197,6 +198,8 @@ function wakesAs(ctx: Ctx, seat: Seat, night: number, role: RoleId): boolean {
       const used = claim.role === "seamstress" ? claim.info.find((i) => i.data?.type === "seamstress") : undefined;
       return used !== undefined && used.night === night && aliveAfter[seat];
     }
+    case "goon": // 밤에 깨어나지 않는다 — 남이 자기를 고를 때 수동적으로 발동한다
+      return false;
     case "pithag": // 밤2부터 매밤 한 명을 판에 없는 캐릭터로 바꾼다
       return night >= 2 && (aliveStart[seat] || vigorKept(ctx, seat, night));
     case "poisoner":

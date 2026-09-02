@@ -208,6 +208,7 @@ export const SOLVER_ROLES: readonly RoleId[] = [
   "devilsadvocate", // 밤마다 처형 면역 부여 — 면역 발동은 이벤트로 표현 불가, 기상 전용
   "gossip", // 낮의 발언이 참이면 그 밤 1명 사망 — 발언 내용은 ∃, 밤 추가 사망의 설명 수단
   "lunatic", // 자기가 데몬인 줄 아는 외부인 — 주장 전체가 허세(날조), 데몬처럼 밤마다 깨어난다
+  "goon", // 밤마다 자기를 고른 첫 사람이 취하고 건달은 그 사람의 진영이 된다 — 진영이 밤별 상태다
   "mastermind", // 데몬이 처형돼도 하루 더 진행 — 마지막 낮 처형일 때만 성립 (timeline)
   "po", // 임프 대체 데몬: 밤마다 0~1명 킬 — '아무도 안 함' 다음 밤엔 반드시 3명 (timeline이 선택 상태 추적)
   "shabaloth", // 임프 대체 데몬: 밤마다 2명 선택(시신 포함 가능) — 킬 0~2가 자유, 역류 부활은 표현 불가
@@ -410,9 +411,15 @@ export interface World {
   poisonTargets: (Seat | null)[]; // 밤 n(1-based)의 독살 대상, [0]은 미사용
   redHerring: Seat | null; // 점쟁이 레드 헤링 (점쟁이 있을 때만)
   sweetheartDrunk: Seat | null; // 스위트하트 사망으로 취한 좌석 (미발동·부재 시 null)
+  /**
+   * 건달의 현재 진영 (배정에 건달이 있을 때만). 토큰 회전은 그리모어 상태이므로
+   * 같은 배정이라도 진영이 다르면 다른 해다 — worldKey에 들어간다.
+   */
+  goonEvil?: boolean;
 }
 
 /** 유일해 비교용 직렬화 키 */
 export function worldKey(w: World): string {
-  return w.assignment.join(",") + "|demon:" + w.currentDemonSeat;
+  const base = w.assignment.join(",") + "|demon:" + w.currentDemonSeat;
+  return w.goonEvil === undefined ? base : `${base}|goon:${w.goonEvil}`;
 }
