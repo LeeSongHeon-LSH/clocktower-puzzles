@@ -40,6 +40,17 @@ describe("사서", () => {
     });
     expect(checkContent(ctx, 0, { type: "librarian", targets: null }, 1)).toBe(true);
   });
+  it("오등록이 없는 외지인이 있으면 '외지인 없음'은 거짓", () => {
+    // 집사·성자는 은둔자와 달리 다른 것으로 등록될 수 없다 — 사서는 그를 보았어야 한다
+    for (const outsider of ["butler", "saint", "moonchild"] as RoleId[]) {
+      const ctx = makeCtx({
+        assignment: ["librarian", outsider, "imp", "empath", "chef", "spy"],
+        rolePool: [...POOL, "butler", "saint", "moonchild"],
+        claims: [{ seat: 1, role: outsider, info: [] }],
+      });
+      expect(checkContent(ctx, 0, { type: "librarian", targets: null }, 1), outsider).toBe(false);
+    }
+  });
 });
 
 describe("초공감자", () => {
