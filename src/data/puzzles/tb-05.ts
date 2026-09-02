@@ -4,7 +4,7 @@ import { definePuzzle } from "@/lib/puzzles/schema";
 // 보이는 외지인(은둔자) + 파낸 외지인(주정뱅이) = 남작의 존재 증명.
 export default definePuzzle({
   id: "tb-05",
-  title: "있어선 안 될 외지인",
+  title: "낯익은 얼굴들",
   edition: "mixed",
   difficulty: "normal",
   playerCount: 7,

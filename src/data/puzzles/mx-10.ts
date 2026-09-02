@@ -4,7 +4,7 @@ import { definePuzzle } from "@/lib/puzzles/schema";
 // 악마가 건달을 고르면 악마 자신이 취해 아무도 죽지 않는다.
 export default definePuzzle({
   id: "mx-10",
-  title: "편을 바꾼 이웃",
+  title: "세 밤을 지나",
   edition: "mixed",
   difficulty: "hard",
   playerCount: 8,

@@ -4,7 +4,7 @@ import { definePuzzle } from "@/lib/puzzles/schema";
 // 철학자가 능력을 가져가면 원주인은 그 밤부터 계속 취한다.
 export default definePuzzle({
   id: "mx-08",
-  title: "능력을 빼앗긴 사람",
+  title: "믿을 수 없는 아침",
   edition: "mixed",
   difficulty: "normal",
   playerCount: 7,

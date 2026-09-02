@@ -4,7 +4,7 @@ import { definePuzzle } from "@/lib/puzzles/schema";
 // 푸카는 밤 n에 고른 사람을 중독시키고, 그 다음 밤에 죽인다.
 export default definePuzzle({
   id: "mx-14",
-  title: "죽기 전에 이미 취해 있었다",
+  title: "남은 자들의 아침",
   edition: "mixed",
   difficulty: "hard",
   playerCount: 7,

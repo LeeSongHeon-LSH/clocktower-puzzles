@@ -4,7 +4,7 @@ import { definePuzzle } from "@/lib/puzzles/schema";
 // 그런 일이 일어날 수 있는 대본인가, 아니면 지어낸 이야기인가.
 export default definePuzzle({
   id: "mx-11",
-  title: "역할이 바뀐 사람",
+  title: "탑 아래 여덟 사람",
   edition: "mixed",
   difficulty: "hard",
   playerCount: 8,

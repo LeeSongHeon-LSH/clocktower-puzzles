@@ -4,7 +4,7 @@ import { definePuzzle } from "@/lib/puzzles/schema";
 // 좀부울은 직전 낮에 처형으로 죽은 사람이 있으면 그 밤 아예 깨어나지 않는다.
 export default definePuzzle({
   id: "mx-13",
-  title: "처형한 날의 밤은 조용하다",
+  title: "사흘째 종소리",
   edition: "mixed",
   difficulty: "normal",
   playerCount: 7,

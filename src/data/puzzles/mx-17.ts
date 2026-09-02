@@ -4,7 +4,7 @@ import { definePuzzle } from "@/lib/puzzles/schema";
 // 포는 '아무도 고르지 않은' 밤 다음에만 세 명을 고른다.
 export default definePuzzle({
   id: "mx-17",
-  title: "조용한 밤의 값",
+  title: "여덟 개의 의자",
   edition: "mixed",
   difficulty: "normal",
   playerCount: 8,

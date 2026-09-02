@@ -4,7 +4,7 @@ import { definePuzzle } from "@/lib/puzzles/schema";
 // 한 밤에 두 명을 중독시킬 수 있는 악마는 하나뿐이고, 그 둘은 악마의 양옆이다.
 export default definePuzzle({
   id: "mx-15",
-  title: "양옆이 함께 틀렸다",
+  title: "이틀째 원탁",
   edition: "mixed",
   difficulty: "hard",
   playerCount: 7,

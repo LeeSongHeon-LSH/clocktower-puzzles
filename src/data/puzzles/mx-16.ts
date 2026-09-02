@@ -4,7 +4,7 @@ import { definePuzzle } from "@/lib/puzzles/schema";
 // 보르톡스가 판에 있으면 멀쩡한 마을 주민의 정보도 전부 거짓이 된다.
 export default definePuzzle({
   id: "mx-16",
-  title: "아무도 맞지 않았다",
+  title: "일곱 개의 증언",
   edition: "mixed",
   difficulty: "normal",
   playerCount: 7,

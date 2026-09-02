@@ -4,7 +4,7 @@ import { definePuzzle } from "@/lib/puzzles/schema";
 // 지명당한 자는 진짜 처녀이고 멀쩡했으며, 지명한 자는 마을 주민으로 등록됐다.
 export default definePuzzle({
   id: "tb-07",
-  title: "손대지 말았어야 할 이름",
+  title: "짧은 소란이 지나고",
   edition: "mixed",
   difficulty: "easy",
   playerCount: 7,

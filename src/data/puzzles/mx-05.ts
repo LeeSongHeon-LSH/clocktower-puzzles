@@ -4,7 +4,7 @@ import { definePuzzle } from "@/lib/puzzles/schema";
 // 6인 판의 악마를 짚어낸다. 거짓말을 변명해 줄 술도 독도 이 대본에는 없다.
 export default definePuzzle({
   id: "mx-05",
-  title: "시계는 하나를 가리킨다",
+  title: "여섯 사람의 첫 아침",
   edition: "mixed",
   difficulty: "easy",
   playerCount: 6,

@@ -4,7 +4,7 @@ import { definePuzzle } from "@/lib/puzzles/schema";
 // 탕녀가 이어받은 것이 아니다. 악마가 외지인의 몸으로 옮겨 앉은 것이다.
 export default definePuzzle({
   id: "mx-12",
-  title: "옮겨 앉은 악마",
+  title: "세 번째 새벽",
   edition: "mixed",
   difficulty: "hard",
   playerCount: 7,
