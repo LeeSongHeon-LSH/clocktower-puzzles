@@ -5,7 +5,7 @@
 
 import { ROLES } from "@/data/roles";
 import type { RoleId, Seat, Team } from "./types";
-import { PHILOSOPHER_GAINABLE } from "./types";
+import { PHILOSOPHER_GAINABLE, ROLE_IDS } from "./types";
 
 export interface TokenView {
   /** 좌석의 현재 토큰 역할 (데몬 승계 반영: 승계한 하수인의 토큰은 imp) */
@@ -77,6 +77,18 @@ export function canShowAsOtherThan(view: TokenView, seat: Seat, excluded: RoleId
   if (actual === "spy") options.push(...view.rolePool.filter((r) => !isEvilRole(r)));
   if (actual === "pithag") options.push(...(view.pithagSelfOptions ?? []));
   return options.some((r) => !excluded.includes(r));
+}
+
+/** 모든 외지인 역할 — 사서의 "외지인 없음" 판정에 쓴다 */
+const OUTSIDER_ROLES: readonly RoleId[] = ROLE_IDS.filter((r) => ROLES[r].team === "outsider");
+
+/**
+ * 이 좌석이 **외지인이 아닌 것으로** 등록될 수 있는가.
+ * 은둔자는 악한 역할로, 첩자는 자기 자신(하수인)으로 남을 수 있어 숨을 수 있지만,
+ * 집사·성자·주정뱅이처럼 오등록이 없는 외지인은 숨길 방법이 없다.
+ */
+export function canRegisterNonOutsider(view: TokenView, seat: Seat): boolean {
+  return canShowAsOtherThan(view, seat, [...OUTSIDER_ROLES]);
 }
 
 /** 이 좌석이 악한 진영으로 등록될 수 '있는가' */
