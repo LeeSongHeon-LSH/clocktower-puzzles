@@ -29,6 +29,11 @@ export function renderClaimInfo(inf: { data?: InfoData; text?: string; asRole?: 
   return inf.asRole !== undefined ? `(당시 ${roleLabel(inf.asRole)}로서) ${body}` : body;
 }
 
+/** 마귀할멈 변신 이력의 표시 문장 — "밤 n부터 (그전엔 X)" */
+export function renderRoleChange(rc: { night: number; from: RoleId }): string {
+  return `밤 ${rc.night}부터 — 그전엔 ${roleLabel(rc.from)}`;
+}
+
 export function renderInfo(data: InfoData): string {
   switch (data.type) {
     case "washerwoman":

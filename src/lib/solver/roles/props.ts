@@ -9,14 +9,16 @@
 import { ROLES } from "@/data/roles";
 import { Ctx } from "../ctx";
 import { tokenRoleAt } from "../timeline";
-import { canRegisterDemon, canRegisterEvil, canShowAsOtherThan, canShowAsRole, mustRegisterEvil } from "../registration";
+import { canRegisterDemon, canRegisterEvil, canShowAsOtherThan, canShowAsRole, mustRegisterEvil, pithagSelfOptionsAt } from "../registration";
 import type { InfoData, Prop, RoleId, Seat } from "../types";
 import type { TokenView } from "../registration";
 
 function dayView(ctx: Ctx, day: number): TokenView {
+  const tokenRole = (s: Seat) => tokenRoleAt(ctx.assignment, ctx.sc, s, day + 0.5);
   return {
-    tokenRole: (s: Seat) => tokenRoleAt(ctx.assignment, ctx.sc, s, day + 0.5),
+    tokenRole,
     rolePool: ctx.pz.rolePool,
+    pithagSelfOptions: pithagSelfOptionsAt(tokenRole, ctx.pz.playerCount, ctx.pz.rolePool, day + 0.5),
   };
 }
 

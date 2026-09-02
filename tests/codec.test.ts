@@ -40,6 +40,20 @@ describe("공유 링크 코덱", () => {
     }
   });
 
+  it("마귀할멈 변신 이력도 왕복해서 보존된다", async () => {
+    const original: SharedPuzzle = {
+      ...sharedFrom("tb-05"),
+      claims: sharedFrom("tb-05").claims.map((c, i) =>
+        i === 0
+          ? { ...c, role: "undertaker", roleChange: { night: 2, from: "empath" }, info: [] }
+          : c,
+      ),
+    };
+    const round = await decodePuzzle(await encodePuzzle(original));
+    expect(round.claims[0].roleChange).toEqual({ night: 2, from: "empath" });
+    expect(round.claims, "이력 없는 주장에는 필드가 생기지 않는다").toEqual(original.claims);
+  });
+
   it("망가진 링크는 사람이 읽을 수 있는 오류를 낸다", async () => {
     await expect(decodePuzzle("!!!아무거나!!!")).rejects.toThrow(/링크/);
   });

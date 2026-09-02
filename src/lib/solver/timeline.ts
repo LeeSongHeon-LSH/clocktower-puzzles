@@ -39,7 +39,7 @@
 //   생존자로 센다 (실제로 살아 있다 — 게임이 계속되는 관대한 방향).
 
 import { ROLES } from "@/data/roles";
-import { canShowAsRole } from "./registration";
+import { canShowAsRole, pithagSelfOptionsAt } from "./registration";
 import type { Claim, RoleId, Seat, SolverPuzzle } from "./types";
 
 // ── Schedule: 이벤트만으로 결정되는 생존 상태 ─────────────────────
@@ -222,6 +222,12 @@ export interface DemonScenario {
   extraDrunk?: Set<Seat>[];
   /** 이발사 교환 (있으면 tokenRoleAt이 since부터 a·b의 토큰을 맞바꾼다) */
   roleSwap?: RoleSwapCase;
+  /**
+   * 마귀할멈 변신 (24차): 좌석이 since부터 role의 토큰을 갖는다. solve가 주장의
+   * roleChange에서 결정적으로 만들고(분기 아님), timeline은 그 밤에 변신이 가능했는지만
+   * 검사한다 (마귀할멈 생존·멀쩡함, 새 역할이 그때 판에 없었음).
+   */
+  roleChanges?: { seat: Seat; since: number; role: RoleId }[];
   /** 비고르모르티스 세계: 좌석 → 그 밤부터 죽었지만 능력을 유지한다 (비고르모르티스의 킬) */
   vigorKeptSince?: Map<Seat, number>;
   /**
@@ -386,6 +392,8 @@ export function demonScenarios(
   swap?: RoleSwapCase | null,
   /** 뱀 조련사 교환 밤 — 있으면 swap이 (조련사, 원 데몬) 토큰 교환이고, 그 밤 데몬이 조련사 좌석으로 옮겨간다 */
   snakeSwapNight?: number | null,
+  /** 마귀할멈 변신 (24차) — 주장의 roleChange에서 solve가 결정적으로 만든다 */
+  roleChanges?: { seat: Seat; since: number; role: RoleId }[] | null,
 ): DemonScenario[] {
   const origDemonSeat = assignment.findIndex((r) => ROLES[r].team === "demon");
   if (origDemonSeat < 0) return [];
@@ -436,6 +444,7 @@ export function demonScenarios(
   const mcSeat = assignment.indexOf("moonchild");
   const gossipSeat = assignment.indexOf("gossip");
   const mmSeat = assignment.indexOf("mastermind");
+  const pithagSeat = assignment.indexOf("pithag");
   const minstrelSeat = assignment.indexOf("minstrel");
   const tealadySeat = assignment.indexOf("tealady");
   const foolSeat = assignment.indexOf("fool");
@@ -566,6 +575,9 @@ export function demonScenarios(
       if (seat === swap.a) return assignment[swap.b];
       if (seat === swap.b) return assignment[swap.a];
     }
+    if (roleChanges != null) {
+      for (const rc of roleChanges) if (rc.seat === seat && time >= rc.since) return rc.role;
+    }
     const since = became.get(seat);
     if (since !== undefined && since <= time) return demonRole;
     return assignment[seat];
@@ -605,6 +617,7 @@ export function demonScenarios(
         ? Array.from({ length: pz.nights + 1 }, (_, n) => new Set(st.drunkNights.get(n) ?? []))
         : undefined,
       roleSwap: swap ?? undefined,
+      roleChanges: roleChanges ?? undefined,
       vigorKeptSince: demonRole === "vigormortis" ? new Map(st.vigorKept) : undefined,
       vigorPoisoned: demonRole === "vigormortis"
         ? Array.from({ length: pz.nights + 1 }, (_, n) => {
@@ -780,7 +793,8 @@ export function demonScenarios(
 
     let minstrelMode: Trigger = "none";
     if (minstrelSeat >= 0 && executed !== minstrelSeat && aliveAtDay[minstrelSeat]) {
-      if (token === "recluse" || token === "spy") minstrelMode = "may";
+      // 마귀할멈은 자기를 마을 사람으로 바꿨을 수 있다 — 하수인 처형이 아닐 수 있다 (∃)
+      if (token === "recluse" || token === "spy" || token === "pithag") minstrelMode = "may";
       else if (ROLES[token].team === "minion") minstrelMode = "must";
     }
 
@@ -823,6 +837,22 @@ export function demonScenarios(
       // 교환이 일어나지 않은 밤: 기록된 지목이 당시 데몬이었다면 조련사가 비정상이었어야 한다
       const rec = actionData(charmerSeat, "snakecharmer", night);
       if (rec?.type === "snakecharmer" && rec.target === st.demon && !require_(st, night, charmerSeat)) return;
+    }
+    // 마귀할멈 변신 (24차): 이 밤에 일어났다고 주장된 변신이 실제로 가능했는가.
+    // 변신은 결정적이라 분기가 없다 — 불가능하면 이 세계가 모순이다.
+    if (roleChanges != null && pithagSeat >= 0) {
+      const tonight = roleChanges.filter((rc) => rc.since === night);
+      if (tonight.length > 1) return; // 밤당 한 명만 바꾼다
+      const rc = tonight[0];
+      if (rc !== undefined) {
+        if (st.became.has(pithagSeat)) return; // 데몬으로 승계했다면 변신 능력이 없다
+        if (!sched.aliveAtNightStart(night)[pithagSeat] && !vigorKeeps(st, pithagSeat)) return;
+        if (!forbid_(st, night, pithagSeat)) return; // 멀쩡했어야 변신이 일어난다
+        // 새 역할이 그 시점(변신 적용 전)에 판에 없었어야 한다
+        for (let x = 0; x < assignment.length; x++) {
+          if (x !== rc.seat && tokenAt(st.became, x, night - 0.5) === rc.role) return;
+        }
+      }
     }
     st.demonNights[night] = st.demon;
     // 이동식 취함 원천(선원·여관주인·대신)의 선택을 분기로 열거한 뒤 밤을 진행한다
@@ -1013,7 +1043,12 @@ export function demonScenarios(
     // 도박사의 이 밤 추측 기록
     const gambleData = gamblerSeat >= 0 && aliveStart[gamblerSeat] ? actionData(gamblerSeat, "gambler", night) : undefined;
     const gamble = gambleData && gambleData.type === "gambler" ? gambleData : undefined;
-    const tokenView = { tokenRole: (x: Seat) => tokenAt(st.became, x, night), rolePool: pz.rolePool };
+    const gambleTokenRole = (x: Seat) => tokenAt(st.became, x, night);
+    const tokenView = {
+      tokenRole: gambleTokenRole,
+      rolePool: pz.rolePool,
+      pithagSelfOptions: pithagSelfOptionsAt(gambleTokenRole, assignment.length, pz.rolePool, night),
+    };
     /** 추측이 반드시 맞는가 (오답 사망 불가) / 반드시 틀리는가 (생존이 모순) */
     const gambleMustCorrect = gamble !== undefined && (() => {
       const tok = tokenAt(st.became, gamble.target, night);
@@ -1442,6 +1477,9 @@ export function tokenRoleAt(assignment: RoleId[], sc: DemonScenario, seat: Seat,
   if (sw !== undefined && night >= sw.since) {
     if (seat === sw.a) return assignment[sw.b];
     if (seat === sw.b) return assignment[sw.a];
+  }
+  if (sc.roleChanges !== undefined) {
+    for (const rc of sc.roleChanges) if (rc.seat === seat && night >= rc.since) return rc.role;
   }
   const since = sc.becameDemonAt.get(seat);
   if (since !== undefined && since <= night) {
