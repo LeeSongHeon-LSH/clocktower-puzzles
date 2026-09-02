@@ -15,6 +15,7 @@ import mx08 from "./mx-08";
 import mx13 from "./mx-13";
 import mx16 from "./mx-16";
 import mx17 from "./mx-17";
+import mx18 from "./mx-18";
 import mx10 from "./mx-10";
 import mx11 from "./mx-11";
 import mx12 from "./mx-12";
@@ -25,7 +26,7 @@ export const PUZZLES: Puzzle[] = [
   // 쉬움
   mx05, tb07,
   // 보통
-  tb05, mx08, mx13, mx16, mx17,
+  tb05, mx08, mx13, mx16, mx17, mx18,
   // 어려움
   mx10, mx11, mx12, mx14, mx15,
 ];
