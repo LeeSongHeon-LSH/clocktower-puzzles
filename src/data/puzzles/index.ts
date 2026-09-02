@@ -11,23 +11,23 @@ import type { Puzzle } from "@/lib/puzzles/schema";
 import mx05 from "./mx-05";
 import tb07 from "./tb-07";
 import tb05 from "./tb-05";
-import tb08 from "./tb-08";
-import mx06 from "./mx-06";
-import mx07 from "./mx-07";
 import mx08 from "./mx-08";
-import mx04 from "./mx-04";
-import mx09 from "./mx-09";
+import mx13 from "./mx-13";
+import mx16 from "./mx-16";
+import mx17 from "./mx-17";
 import mx10 from "./mx-10";
 import mx11 from "./mx-11";
 import mx12 from "./mx-12";
+import mx14 from "./mx-14";
+import mx15 from "./mx-15";
 
 export const PUZZLES: Puzzle[] = [
   // 쉬움
   mx05, tb07,
   // 보통
-  tb05, tb08, mx06, mx07, mx08,
+  tb05, mx08, mx13, mx16, mx17,
   // 어려움
-  mx04, mx09, mx10, mx11, mx12,
+  mx10, mx11, mx12, mx14, mx15,
 ];
 
 export function getPuzzle(id: string): Puzzle | undefined {
