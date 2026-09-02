@@ -235,6 +235,11 @@ export interface DemonScenario {
   goonAlign?: ("good" | "evil" | "either")[];
   /** 건달 세계: 낮 n의 진영 (밤 n이 끝난 뒤로 확정 — 취함은 황혼까지, 진영은 그대로 이어진다) */
   goonAlignDay?: ("good" | "evil")[];
+  /**
+   * 건달 세계: 밤 n에 '기록 없는 선한 선택자'가 건달을 골랐다 — 누구인지는 모르지만
+   * 한 명은 확실히 취했다. 수학자가 그 밤 한 명을 더 셀 수 있어야 한다.
+   */
+  goonUnknownDrunk?: boolean[];
   /** 비고르모르티스 세계: 좌석 → 그 밤부터 죽었지만 능력을 유지한다 (비고르모르티스의 킬) */
   vigorKeptSince?: Map<Seat, number>;
   /**
@@ -314,6 +319,11 @@ interface St {
   /** 밤 → (그 밤 진입 시 진영, 분기 적용 후 진영) — goonAlign 방출용 */
   goonAlign: Map<number, { before: boolean; after: boolean }>;
   /**
+   * '기록 없는 선한 선택자'가 건달을 고른 밤. 누가 취했는지 모르지만 한 명은 확실히
+   * 취했으므로, 수학자가 그 밤 한 명을 더 셀 수 있어야 한다 (관대한 방향).
+   */
+  goonUnknownDrunk: Set<number>;
+  /**
    * 이 밤의 첫 선택자 순위 (D2 표). null = 아무도 건달을 고르지 않았다.
    * rank −1 = 건달이 비정상이라 능력이 발동하지 않았다 (누가 골랐든 아무 일도 없다).
    * 건달을 죽이려는 킬은 자기보다 앞선 선택자가 있어야 성립한다 (킬 대상 선택이 곧 '고르기').
@@ -391,6 +401,7 @@ function cloneSt(s: St): St {
     drunkNights: new Map([...s.drunkNights].map(([k, v]) => [k, new Set(v)])),
     goonEvil: s.goonEvil,
     goonAlign: new Map(s.goonAlign),
+    goonUnknownDrunk: new Set(s.goonUnknownDrunk),
     goonFirst: s.goonFirst,
   };
 }
@@ -596,7 +607,8 @@ export function demonScenarios(
     if (sweetTarget === seat && sweetSince <= night) return true; // 이미 취해 있다 — 독살 불요
     if (st.drunkNights.get(night)?.has(seat)) return true; // 이동식 취함 원천에 이미 취해 있다
     if (demonRole === "nodashii" && ndPoisonedAt(st.demonNights[night] ?? st.demon, night).has(seat)) return true;
-    if (demonRole === "pukka" && st.pukkaMaybe.get(night)?.has(seat)) return true;
+    // 푸카도 플레이어를 고르므로 건달을 고르면 스스로 취한다 — 건달은 푸카 독을 받지 않는다
+    if (demonRole === "pukka" && seat !== goonSeat && st.pukkaMaybe.get(night)?.has(seat)) return true;
     if (demonRole === "vigormortis" && (st.vigorPoisonMaybe.get(seat) ?? Infinity) <= night) return true;
     if (!hasPoisoner) return false;
     if (sweetTarget === poisonerSeat && sweetSince <= night) return false; // 취한 독살범의 독은 듣지 않는다
@@ -696,6 +708,8 @@ export function demonScenarios(
       }),
       goonAlignDay: goonSeat < 0 ? undefined : Array.from({ length: pz.nights + 1 }, (_, n) =>
         st.goonAlign.get(n)?.after ? "evil" : "good"),
+      goonUnknownDrunk: goonSeat < 0 ? undefined
+        : Array.from({ length: pz.nights + 1 }, (_, n) => st.goonUnknownDrunk.has(n)),
       vigorKeptSince: demonRole === "vigormortis" ? new Map(st.vigorKept) : undefined,
       vigorPoisoned: demonRole === "vigormortis"
         ? Array.from({ length: pz.nights + 1 }, (_, n) => {
@@ -984,10 +998,11 @@ export function demonScenarios(
       out.push(c);
     };
     /** F 분기 — F는 기록된 정직한 선택자보다 앞서 행동했어야 '첫'이 된다 */
-    const push = (rank: number, drunkSeat: Seat | null, evil: boolean) => {
+    const push = (rank: number, drunkSeat: Seat | null, evil: boolean, unknown = false) => {
       if (rank > rMin) return;
       const c = cloneSt(st);
       if (drunkSeat !== null) markDrunk(c, night, drunkSeat);
+      if (unknown) c.goonUnknownDrunk.add(night); // 누군가 취했지만 누구인지 모른다
       c.goonEvil = evil;
       c.goonFirst = { rank };
       c.goonAlign.set(night, { before: st.goonEvil, after: evil });
@@ -1001,13 +1016,23 @@ export function demonScenarios(
       const c = cloneSt(st);
       if (require_(c, night, goonSeat)) keepAlign(c, -1);
     }
+    // 대신은 플레이어가 아니라 **캐릭터**를 고르므로 건달을 발동시키지 않는다 —
+    // 이 밤 '건달'을 골랐다면 건달은 취해 있고 능력이 작동하지 않는다 (취함 표시는
+    // 뒤따르는 이동식 취함 분기가 한다)
+    if (courtierRec !== null && courtierRec.night === night && courtierRec.role === "goon"
+      && courtierSeat >= 0 && aliveStart[courtierSeat] && !st.became.has(courtierSeat)) {
+      keepAlign(cloneSt(st), -1);
+    }
 
     // 악역이 골랐다 — 그 자신이 취하고 건달은 악이 된다
     if (hasPoisoner && !st.became.has(poisonerSeat) && !st.required.has(night)
       && (aliveStart[poisonerSeat] || vigorKeeps(st, poisonerSeat))) {
       push(GOON_RANK.poisoner ?? 0, poisonerSeat, true);
     }
-    if (night >= 2 && (aliveStart[st.demon] || (demonRole === "zombuul" && st.zombuulFakeDeadAt !== null))) {
+    // 푸카는 밤1부터 깨어나 중독 대상을 고른다 (킬은 밤2부터) — 다른 데몬은 밤2부터 고른다
+    const demonChoosesFrom = demonRole === "pukka" ? 1 : 2;
+    if (night >= demonChoosesFrom
+      && (aliveStart[st.demon] || (demonRole === "zombuul" && st.zombuulFakeDeadAt !== null))) {
       push(20, st.demon, true);
     }
     const minionCandidates: { seat: Seat; rank: number; ok: boolean }[] = [
@@ -1031,7 +1056,7 @@ export function demonScenarios(
       s !== goonSeat && aliveStart[s] && GOON_CHOOSER_ROLES.includes(role)
       && !(claimBySeat[s]?.info ?? []).some(
         (i) => i.night === night && i.data !== undefined && goonChoiceTargets(i.data) !== null));
-    if (unknownChooser) push(0, null, false);
+    if (unknownChooser) push(0, null, false, true);
 
     return out;
   }
@@ -1646,8 +1671,15 @@ export function demonScenarios(
     drunkNights: new Map(),
     goonEvil: false, // 건달은 셋업에 선이다
     goonAlign: new Map(),
+    goonUnknownDrunk: new Set(),
     goonFirst: null,
   };
+
+  // 독살범이 건달을 고르는 순간 스스로 취한다 (공식 How to Run: "becomes drunk immediately")
+  // — 그래서 건달은 독살될 수 없다. 다른 취함 원천(스위트하트·대신 등)은 그대로 통한다.
+  if (goonSeat >= 0) {
+    for (let n = 1; n <= pz.nights; n++) st0.forbidden.set(n, new Set([goonSeat]));
+  }
 
   // 스위트하트 사망 순간의 상태 제약: 취함 발동에는 멀쩡함이, 미발동에는 중독이 필요하다
   if (sweet) {

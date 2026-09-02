@@ -148,7 +148,10 @@ describe("Goon: 숨은 건달", () => {
 
 describe("Goon: 유일해 키", () => {
   it("그리모어가 같아도 건달의 진영이 다르면 다른 해다", () => {
-    const worlds = solve(puzzle({ events: [{ type: "death", night: 2, seat: 3 }] }));
+    // 조용한 밤2의 설명이 둘이다: 데몬이 건달을 골라 취했거나(건달 → 악),
+    // 독살범이 데몬을 중독시켰거나(아무도 건달을 고르지 않음 — 건달은 선 유지).
+    // 그리모어는 같고 건달의 진영만 다르다.
+    const worlds = solve(puzzle());
     const byGrimoire = new Map<string, Set<boolean | undefined>>();
     for (const w of worlds) {
       const key = `${w.assignment.join(",")}|${w.currentDemonSeat}`;
@@ -167,5 +170,95 @@ describe("Goon: 건전성 거부", () => {
   it("마귀할멈과의 조합을 거부한다", () => {
     const pool = POOL.map((r) => (r === "poisoner" ? "pithag" : r)); // 하수인은 마귀할멈 하나
     expect(() => solve(puzzle({ rolePool: pool }))).toThrow(/마귀할멈과/);
+  });
+});
+
+describe("Goon: 검토에서 드러난 구멍", () => {
+  it("푸카는 밤1부터 고르므로 건달이 밤1에 악해질 수 있다", () => {
+    // 푸카는 밤1부터 깨어나 중독 대상을 고른다 (킬만 밤2부터다). 건달이 낮1에 처형돼
+    // 밤2에는 아무도 고를 수 없으므로, 수학자가 밤1에 센 비정상 1명은 '푸카가 건달을
+    // 골라 스스로 취했다'로만 설명된다. 밤2의 사망은 암살자가, 푸카의 밤2 킬 부재는
+    // '밤1 선택이 무효였다'가 설명한다.
+    const worlds = solve({
+      playerCount: 8,
+      nights: 2,
+      events: [
+        { type: "execution", day: 1, seat: 1 },
+        { type: "death", night: 2, seat: 7 },
+      ],
+      rolePool: ["pukka", "assassin", "goon", "mathematician", "chef", "empath", "undertaker", "librarian", "washerwoman", "investigator"],
+      claims: [
+        { seat: 0, role: "mathematician", info: [{ night: 1, data: { type: "mathematician", count: 1 } }] },
+        { seat: 1, role: "goon", info: [] },
+        { seat: 2, role: "chef", info: [] },
+        { seat: 3, role: "empath", info: [] },
+        { seat: 4, role: "undertaker", info: [] },
+        { seat: 5, role: "librarian", info: [] },
+        { seat: 6, role: "washerwoman", info: [] },
+        { seat: 7, role: "investigator", info: [] },
+      ],
+    });
+    // 좌석 0이 진짜 수학자이고 좌석 1이 진짜 건달인 세계가 존재해야 한다
+    const honest = worlds.filter((w) => w.assignment[0] === "mathematician" && w.assignment[1] === "goon");
+    expect(honest.length).toBeGreaterThan(0);
+    expect(honest.every((w) => w.goonEvil === true)).toBe(true);
+  });
+
+  it("기록 없는 선택자도 취하므로 수학자가 한 명을 더 셀 수 있다", () => {
+    // 밤2에 데몬 킬이 있어 데몬은 첫 선택자가 아니고, 독살범도 없다. 수도사가 그 밤
+    // 기록을 남기지 않았으므로 '누군지 모르는 선한 선택자'가 유일한 비정상 원천이다.
+    const worlds = solve({
+      playerCount: 8,
+      nights: 2,
+      events: [{ type: "death", night: 2, seat: 7 }],
+      rolePool: ["imp", "spy", "goon", "mathematician", "monk", "chef", "empath", "undertaker", "librarian", "washerwoman"],
+      claims: [
+        { seat: 0, role: "mathematician", info: [{ night: 2, data: { type: "mathematician", count: 1 } }] },
+        { seat: 1, role: "empath", info: [] },
+        { seat: 2, role: "monk", info: [] },
+        { seat: 3, role: "goon", info: [] },
+        { seat: 4, role: "librarian", info: [] },
+        { seat: 5, role: "washerwoman", info: [] },
+        { seat: 6, role: "chef", info: [] },
+        { seat: 7, role: "undertaker", info: [] },
+      ],
+    });
+    expect(worlds.some((w) =>
+      w.assignment[0] === "mathematician" && w.assignment[2] === "monk" && w.assignment[3] === "goon")).toBe(true);
+  });
+
+  it("독살범은 건달을 중독시키지 못한다 (고르는 순간 스스로 취한다)", () => {
+    const worlds = solve(puzzle());
+    expect(worlds.length).toBeGreaterThan(0);
+    for (const w of worlds) {
+      const g = w.assignment.indexOf("goon");
+      expect(w.poisonTargets.includes(g), `좌석 ${g}이 독살 대상`).toBe(false);
+    }
+  });
+
+  it("대신은 캐릭터를 고르므로 건달을 발동시키지 않는다 — 그 밤 건달만 취한다", () => {
+    // 수도사가 밤2에 건달을 보호했다고 기록했고 그 밤 아무도 죽지 않았다. 킬 부재의
+    // 설명은 '멀쩡한 수도사의 보호'뿐인데, 수도사가 건달을 골라 취했다면 그 설명이
+    // 사라진다 — 대신이 건달을 취하게 해 능력을 끈 세계만 남는다.
+    const worlds = solve({
+      playerCount: 8,
+      nights: 2,
+      events: [],
+      rolePool: ["imp", "spy", "goon", "monk", "courtier", "chef", "empath", "undertaker", "librarian", "washerwoman"],
+      claims: [
+        { seat: 0, role: "chef", info: [] },
+        { seat: 1, role: "goon", info: [] },
+        { seat: 2, role: "monk", info: [{ night: 2, data: { type: "monk", target: 1 } }] },
+        { seat: 3, role: "courtier", info: [{ night: 2, data: { type: "courtier", role: "goon" } }] },
+        { seat: 4, role: "librarian", info: [] },
+        { seat: 5, role: "washerwoman", info: [] },
+        { seat: 6, role: "empath", info: [] },
+        { seat: 7, role: "undertaker", info: [] },
+      ],
+    });
+    const hit = worlds.filter((w) =>
+      w.assignment[1] === "goon" && w.assignment[2] === "monk" && w.assignment[3] === "courtier");
+    expect(hit.length).toBeGreaterThan(0);
+    expect(hit.every((w) => w.goonEvil === false)).toBe(true); // 능력이 꺼졌으니 진영은 그대로
   });
 });

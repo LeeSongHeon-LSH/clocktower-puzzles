@@ -21,5 +21,7 @@ export function mathematician(ctx: Ctx, _seat: Seat, data: Data, night: number):
       || isExtraDrunk(ctx, s, night)) { min++; max++; } // 이동식 취함·건달로 취한 좌석도 비정상이다
     else if (isNdPoisoned(ctx, s, night)) max++;
   }
+  // 건달을 고른 '기록 없는 선택자'는 확실히 취했지만 누구인지 모른다 — 한 명분을 열어 둔다
+  if (ctx.sc.goonUnknownDrunk?.[night]) max++;
   return data.count >= min && data.count <= max;
 }
