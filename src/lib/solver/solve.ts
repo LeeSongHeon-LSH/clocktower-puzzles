@@ -54,6 +54,7 @@ function assignableRoles(pz: SolverPuzzle): RoleId[] {
   if (pz.rolePool.includes("drunk")) out.add("drunk");
   if (pz.rolePool.includes("mutant")) out.add("mutant");
   if (pz.rolePool.includes("lunatic")) out.add("lunatic");
+  if (pz.rolePool.includes("goon")) out.add("goon");
   if (pz.rolePool.includes("cerenovus")) {
     // 광기 좌석의 실제 역할은 풀의 어떤 선한 역할이든 될 수 있다
     for (const r of pz.rolePool) {
@@ -79,7 +80,7 @@ function validatePuzzle(pz: SolverPuzzle): Claim[] {
   const hasBarber = pz.rolePool.includes("barber");
   if (hasBarber) {
     // 주장 날조 수단이 있으면 숨은 교환(주장이 드러내지 않는 교환)이 은닉될 수 있다 — 건전성 위해 거부
-    for (const bad of ["drunk", "mutant", "lunatic", "cerenovus", "fanggu"] as RoleId[]) {
+    for (const bad of ["drunk", "mutant", "lunatic", "cerenovus", "fanggu", "goon"] as RoleId[]) {
       if (pz.rolePool.includes(bad)) {
         throw new Error(`이발사와 ${ROLES[bad].ko}은(는) 아직 한 퍼즐에서 함께 지원되지 않습니다`);
       }
@@ -287,7 +288,7 @@ function enumerate(pz: SolverPuzzle, claimBySeat: Claim[], sched: Schedule): Wor
           if (need < 0 || need > 1) continue;
           // 숨은 외부인: 주정뱅이(자기 역할을 믿음), 광인(외부인임을 알고 사칭),
           // 루나틱(자기가 데몬인 줄 알고 허세) — 마을 사람을 주장하는 선한 좌석 하나가 실제로는 이들일 수 있다
-          const hiddenRoles = (["drunk", "mutant", "lunatic"] as RoleId[]).filter((r) => pz.rolePool.includes(r));
+          const hiddenRoles = (["drunk", "mutant", "lunatic", "goon"] as RoleId[]).filter((r) => pz.rolePool.includes(r));
           if (need === 1 && hiddenRoles.length === 0) continue;
           const hiddenChoices: ({ seat: Seat; role: RoleId } | null)[] = need === 1
             ? goodSeats
@@ -349,7 +350,8 @@ function enumerate(pz: SolverPuzzle, claimBySeat: Claim[], sched: Schedule): Wor
                 snakeOldDemon = { seat: demonSeat, since: br.t };
               }
               for (const sweet of sweetheartCases(pz, sched, setup, seats)) {
-                for (const sc of demonScenarios(pz, sched, setup, sweet, tokenSwap, snakeNight, roleChanges)) {
+                const goonHidden = hidden?.role === "goon";
+                for (const sc of demonScenarios(pz, sched, setup, sweet, tokenSwap, snakeNight, roleChanges, goonHidden)) {
                   const ftSeat = setup.indexOf("fortuneteller");
                   const rhChoices: (Seat | null)[] = ftSeat >= 0 ? goodSeats : [null];
                   for (const rh of rhChoices) {
@@ -494,6 +496,8 @@ function tryWorld(
   const infos: GoodInfo[] = [];
   for (const s of goodSeats) {
     if (assignment[s] === "mutant" || assignment[s] === "lunatic") continue; // 광인·루나틱의 주장은 전부 날조 — 구조도 내용도 검증하지 않는다
+    // 마을 사람을 사칭한 건달(지금 악하다)의 주장도 전부 날조다 — 건달을 밝힌 주장은 그대로 검증한다
+    if (assignment[s] === "goon" && claimBySeat[s].role !== "goon") continue;
     if (s === madSeat) continue; // 세레노부스 광기 — 주장 전체가 강제된 날조
     const becameAt = sc.becameDemonAt.get(s); // 팡 구 점프로 데몬이 된 선한 좌석
     for (const info of claimBySeat[s].info) {
@@ -525,6 +529,11 @@ function tryWorld(
       if (!wakes(ctx, snakeOldDemon.seat, info.night)) return null;
     }
   }
+
+  // 건달의 현재 진영 (배정에 있을 때만) — 토큰 회전은 그리모어 상태라 유일해 키에 들어간다
+  const goonEvil = assignment.includes("goon")
+    ? sc.goonAlignDay?.[pz.nights] === "evil"
+    : undefined;
 
   const soberInfos = infos.filter((i) => !isDrunk(ctx, i.seat));
   const poisonerSeat = assignment.indexOf("poisoner");
@@ -565,6 +574,7 @@ function tryWorld(
         if (isSweetDrunk(ctx, i.seat, i.night)) continue;
         if (isExtraDrunk(ctx, i.seat, i.night)) continue; // 이동식 취함 — 무제약
         if (required.get(i.night) === vortoxSeat) continue; // 그 밤 Vortox가 중독 — 무제약
+        if (isExtraDrunk(ctx, vortoxSeat, i.night)) continue; // 취한 Vortox — 거짓 강제가 풀린다
         if (checkContentFalse(ctx, i.seat, i.data, i.night)) continue;
         if (!failing.has(i.night)) failing.set(i.night, new Set());
         failing.get(i.night)!.add(i.seat);
@@ -579,6 +589,7 @@ function tryWorld(
         const pick = cands.find((t) =>
           poisonerSeat >= 0 &&
           !isSweetDrunk(ctx, poisonerSeat, night) &&
+          !isExtraDrunk(ctx, poisonerSeat, night) &&
           sched.aliveAtNightStart(night)[poisonerSeat] &&
           sched.aliveAtNightStart(night)[t] &&
           !sc.poisonForbidden.get(night)?.has(t));
@@ -591,13 +602,14 @@ function tryWorld(
     for (const [night, target] of required) {
       if (poisonerSeat < 0) return null;
       if (isSweetDrunk(ctx, poisonerSeat, night)) return null; // 취한 독살범의 독은 듣지 않는다
+      if (isExtraDrunk(ctx, poisonerSeat, night)) return null; // 이동식 취함·건달로 취한 독살범도 마찬가지
       if (!poisonerAble(night)) return null;
       if (!canBePoisonTarget(night, target)) return null;
       if (sc.poisonForbidden.get(night)?.has(target)) return null;
     }
     const poisonTargets: (Seat | null)[] = new Array(pz.nights + 1).fill(null);
     for (const [night, target] of required) poisonTargets[night] = target;
-    return { assignment: [...finalAssignment], currentDemonSeat: sc.currentDemonSeat, poisonTargets, redHerring, sweetheartDrunk: sweetDrunk?.target ?? null };
+    return { assignment: [...finalAssignment], currentDemonSeat: sc.currentDemonSeat, poisonTargets, redHerring, sweetheartDrunk: sweetDrunk?.target ?? null, goonEvil };
   }
 
   // 열거 경로 (수학자 포함 퍼즐): 밤별 독살 대상을 전수 열거
@@ -610,11 +622,13 @@ function tryWorld(
     const req = sc.poisonRequired.get(night);
     const forbidden = sc.poisonForbidden.get(night);
     if (req !== undefined) {
-      if (!poisonerAble(night) || !canBePoisonTarget(night, req) || forbidden?.has(req)) {
+      if (!poisonerAble(night) || !canBePoisonTarget(night, req) || forbidden?.has(req)
+        || isExtraDrunk(ctx, poisonerSeat, night)) {
         return null;
       }
       optionsPerNight[night] = [req];
-    } else if (poisonerAble(night) && !isSweetDrunk(ctx, poisonerSeat, night)) {
+    } else if (poisonerAble(night) && !isSweetDrunk(ctx, poisonerSeat, night)
+      && !isExtraDrunk(ctx, poisonerSeat, night)) {
       const alive = sched.aliveAtNightStart(night);
       const opts = alive
         .map((a, s) => (a && !forbidden?.has(s) ? s : null))
@@ -645,10 +659,11 @@ function tryWorld(
         if (isVigorPoisoned(pctx, i.seat, i.night)) continue; // 죽은 하수인의 이웃 독 가능
         if (vortoxSeat >= 0) {
           if (vector[i.night] === vortoxSeat) continue; // Vortox가 중독된 밤 — 무제약 (관대한 근사)
+          if (isExtraDrunk(pctx, vortoxSeat, i.night)) continue; // 취한 Vortox — 거짓 강제가 풀린다
           if (!checkContentFalse(pctx, i.seat, i.data, i.night)) return null;
         } else if (!checkContent(pctx, i.seat, i.data, i.night)) return null;
       }
-      return { assignment: [...finalAssignment], currentDemonSeat: sc.currentDemonSeat, poisonTargets: [...vector], redHerring, sweetheartDrunk: sweetDrunk?.target ?? null };
+      return { assignment: [...finalAssignment], currentDemonSeat: sc.currentDemonSeat, poisonTargets: [...vector], redHerring, sweetheartDrunk: sweetDrunk?.target ?? null, goonEvil };
     }
     for (const opt of optionsPerNight[night]) {
       vector[night] = opt;

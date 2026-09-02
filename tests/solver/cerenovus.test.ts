@@ -82,7 +82,7 @@ describe("Cerenovus: 강제된 광기", () => {
   });
 
   it("풀에 세레노부스가 있으면 미모델 선한 역할이 배정 가능해져 거부된다 (건전성)", () => {
-    expect(() => solve(puzzle([...POOL, "goon"]))).toThrow(/모르는 역할/);
+    expect(() => solve(puzzle([...POOL, "acrobat"]))).toThrow(/모르는 역할/);
   });
 
   it("죽은 세레노부스는 광기를 강제하지 못한다 — 처형으로 확정된 경우", () => {
