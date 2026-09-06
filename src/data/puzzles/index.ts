@@ -10,6 +10,7 @@ import type { Puzzle } from "@/lib/puzzles/schema";
 
 import mx05 from "./mx-05";
 import tb07 from "./tb-07";
+import mx19 from "./mx-19";
 import tb05 from "./tb-05";
 import mx08 from "./mx-08";
 import mx13 from "./mx-13";
@@ -24,7 +25,7 @@ import mx15 from "./mx-15";
 
 export const PUZZLES: Puzzle[] = [
   // 쉬움
-  mx05, tb07,
+  mx05, tb07, mx19,
   // 보통
   tb05, mx08, mx13, mx16, mx17, mx18,
   // 어려움
