@@ -14,15 +14,31 @@ export type PuzzleEdition = "tb" | "bmr" | "sv" | "mixed";
  */
 export type PuzzleSource = "official" | "community";
 
-export interface PuzzleQuestion {
-  /**
-   * 관례: "demon"(현재 데몬 좌석) 또는 역할 id("drunk", "poisoner" 등 — 그 역할의 좌석).
-   * 테스트가 이 관례로 정답을 솔버 결과와 자동 교차검증한다.
-   */
-  id: "demon" | RoleId;
+/**
+ * 좌석을 고르는 질문.
+ *
+ * 관례: "demon"(현재 데몬 좌석), "minion"(하수인 좌석 전부), 또는 역할 id
+ * ("drunk", "goon" 등 — 그 역할의 좌석). 테스트가 이 관례로 정답을 솔버 결과와
+ * 자동 교차검증한다.
+ */
+export interface SeatQuestion {
+  id: "demon" | "minion" | RoleId;
   text: string;
   answerSeats: Seat[];
 }
+
+/**
+ * 악마의 **종류**를 고르는 질문 — 답이 좌석이 아니라 역할이다.
+ * 선택지는 대본에 든 악마들이고, 정답은 solution의 악마 역할이다
+ * (스타 패스·점프로 몸이 바뀌어도 악마의 종류는 그대로다).
+ */
+export interface DemonTypeQuestion {
+  id: "demonType";
+  text: string;
+  answerRole: RoleId;
+}
+
+export type PuzzleQuestion = SeatQuestion | DemonTypeQuestion;
 
 export interface Puzzle extends SolverPuzzle {
   id: string;

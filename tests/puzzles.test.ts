@@ -22,12 +22,32 @@ describe.each(PUZZLES.map((p) => [p.id, p] as const))("퍼즐 %s", (_id, p) => {
 
   it("질문 정답이 solution에서 도출된다", () => {
     for (const q of p.questions) {
+      if (q.id === "demonType") {
+        // 스타 패스·점프로 몸이 바뀌어도 악마의 종류는 처음 배정된 그것이다
+        expect({ q: q.id, role: q.answerRole }).toEqual({
+          q: q.id,
+          role: p.solution.find((r) => ROLES[r].team === "demon"),
+        });
+        expect(p.rolePool).toContain(q.answerRole);
+        continue;
+      }
       const expected =
         q.id === "demon"
           ? [demonSeat]
-          : p.solution.flatMap((r, s) => (r === q.id ? [s] : []));
+          : q.id === "minion"
+            ? p.solution.flatMap((r, s) => (ROLES[r].team === "minion" ? [s] : []))
+            : p.solution.flatMap((r, s) => (r === q.id ? [s] : []));
       expect({ q: q.id, seats: [...q.answerSeats].sort() }).toEqual({ q: q.id, seats: expected.sort() });
     }
+  });
+
+  it("악마의 위치·종류·하수인의 위치를 묻는다", () => {
+    // 대본에 악마가 한 종류뿐이면 종류를 묻는 것은 질문이 아니다 — 그때만 뺀다.
+    const oneDemon = p.rolePool.filter((r) => ROLES[r].team === "demon").length === 1;
+    const ids = p.questions.map((q) => q.id);
+    expect(ids.slice(0, oneDemon ? 2 : 3)).toEqual(
+      oneDemon ? ["demon", "minion"] : ["demon", "demonType", "minion"],
+    );
   });
 
   it("스키마가 건전하다", () => {

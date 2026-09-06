@@ -41,8 +41,8 @@ export default definePuzzle({
   ],
   questions: [
     { id: "demon", text: "악마는 누구인가?", answerSeats: [2] },
-    { id: "vortox", text: "이 판의 악마는 보르톡스다. 그 좌석을 고르라", answerSeats: [2] },
-    { id: "scarletwoman", text: "탕녀는 누구인가?", answerSeats: [3] },
+    { id: "demonType", text: "그 악마는 어떤 악마인가?", answerRole: "vortox" },
+    { id: "minion", text: "하수인은 누구인가?", answerSeats: [3] },
   ],
   hints: [
     "모든 정보가 참이라고 가정하고 끝까지 밀어 보라. 같은 역할을 주장한 두 쌍이 어디선가 서로를 부순다.",

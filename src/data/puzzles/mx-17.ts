@@ -49,8 +49,8 @@ export default definePuzzle({
   ],
   questions: [
     { id: "demon", text: "악마는 누구인가?", answerSeats: [2] },
-    { id: "po", text: "이 판의 악마는 포다. 그 좌석을 고르라", answerSeats: [2] },
-    { id: "scarletwoman", text: "탕녀는 누구인가?", answerSeats: [3] },
+    { id: "demonType", text: "그 악마는 어떤 악마인가?", answerRole: "po" },
+    { id: "minion", text: "하수인은 누구인가?", answerSeats: [3] },
   ],
   hints: [
     "한 밤에 셋을 죽일 수 있는 조합을 대본에서 찾아보라. 암살자도 대부도 할머니도 없다면 남는 것은 악마 자신뿐이다.",

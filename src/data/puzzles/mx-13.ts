@@ -47,8 +47,8 @@ export default definePuzzle({
   ],
   questions: [
     { id: "demon", text: "악마는 누구인가?", answerSeats: [2] },
-    { id: "zombuul", text: "이 판의 악마는 좀부울이다. 그 좌석을 고르라", answerSeats: [2] },
-    { id: "scarletwoman", text: "탕녀는 누구인가?", answerSeats: [3] },
+    { id: "demonType", text: "그 악마는 어떤 악마인가?", answerRole: "zombuul" },
+    { id: "minion", text: "하수인은 누구인가?", answerSeats: [3] },
   ],
   hints: [
     "밤2가 조용했던 이유부터 따지라. 이 대본에서 악마의 손을 막을 수 있는 역할은 하나도 없다 — 그렇다면 막힌 것이 아니라 애초에 깨어나지 않은 것이다.",

@@ -44,8 +44,9 @@ export default definePuzzle({
   currentDemonSeat: 3,
   questions: [
     { id: "demon", text: "지금 이 순간의 악마는 누구인가?", answerSeats: [3] },
-    { id: "fanggu", text: "처음에 팡 구였던 사람은 누구인가?", answerSeats: [2] },
-    { id: "scarletwoman", text: "탕녀는 누구인가?", answerSeats: [4] },
+    { id: "demonType", text: "그 악마는 어떤 악마인가?", answerRole: "fanggu" },
+    { id: "minion", text: "하수인은 누구인가?", answerSeats: [4] },
+    { id: "fanggu", text: "처음에 그 악마였던 사람은 누구인가?", answerSeats: [2] },
   ],
   hints: [
     "중복 주장이 두 쌍이다. 그 사실만으로 세 사람의 결백이 먼저 증명된다 — 그들의 정보부터 쓰라.",

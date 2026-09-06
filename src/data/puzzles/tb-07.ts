@@ -47,8 +47,8 @@ export default definePuzzle({
   ],
   questions: [
     { id: "demon", text: "악마는 누구인가?", answerSeats: [3] },
-    { id: "imp", text: "이 판의 악마는 임프다. 그 좌석을 고르라", answerSeats: [3] },
-    { id: "scarletwoman", text: "탕녀는 누구인가?", answerSeats: [4] },
+    { id: "demonType", text: "그 악마는 어떤 악마인가?", answerRole: "imp" },
+    { id: "minion", text: "하수인은 누구인가?", answerSeats: [4] },
   ],
   hints: [
     "밤 정보보다 낮에 일어난 일이 먼저다. 처녀의 능력이 실제로 발동했다는 것은 지명한 사람에 대해 무엇을 증명하는가?",

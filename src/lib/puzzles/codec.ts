@@ -329,7 +329,22 @@ export function validateShared(v: unknown): SharedPuzzle {
   if (v.questions.length > LIMITS.maxQuestions) throw new Error(`질문이 너무 많습니다 (최대 ${LIMITS.maxQuestions}개).`);
   const questions: PuzzleQuestion[] = v.questions.map((raw, i) => {
     if (!isRecord(raw)) throw new Error(`질문 ${i + 1} 형식이 잘못됐습니다.`);
-    const qid = raw.id === "demon" ? ("demon" as const) : roleId(raw.id, `질문 ${i + 1}`);
+    const text = str(raw.text, LIMITS.maxText, `질문 ${i + 1}`)!;
+
+    // 악마의 종류를 묻는 질문 — 답이 좌석이 아니라 역할이다.
+    // 대본에 없는 악마가 정답이면 풀이 화면에서 고를 수가 없다.
+    if (raw.id === "demonType") {
+      const answerRole = roleId(raw.answerRole, `질문 ${i + 1} 정답 역할`);
+      if (ROLES[answerRole].team !== "demon" || !rolePool.includes(answerRole)) {
+        throw new Error(`질문 ${i + 1}: 정답 역할이 대본의 악마가 아닙니다.`);
+      }
+      return { id: "demonType" as const, text, answerRole };
+    }
+
+    const qid =
+      raw.id === "demon" || raw.id === "minion"
+        ? (raw.id as "demon" | "minion")
+        : roleId(raw.id, `질문 ${i + 1}`);
     if (!Array.isArray(raw.answerSeats) || raw.answerSeats.length === 0) {
       throw new Error(`질문 ${i + 1}: 정답 좌석이 없습니다.`);
     }
@@ -342,11 +357,7 @@ export function validateShared(v: unknown): SharedPuzzle {
     if (new Set(answerSeats).size !== answerSeats.length) {
       throw new Error(`질문 ${i + 1}: 정답 좌석에 중복이 있습니다.`);
     }
-    return {
-      id: qid,
-      text: str(raw.text, LIMITS.maxText, `질문 ${i + 1}`)!,
-      answerSeats,
-    };
+    return { id: qid, text, answerSeats };
   });
 
   if (!Array.isArray(v.solution) || v.solution.length !== playerCount) {

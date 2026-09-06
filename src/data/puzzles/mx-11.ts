@@ -49,8 +49,8 @@ export default definePuzzle({
     { type: "death", night: 2, seat: 4 },
   ],
   questions: [
-    { id: "demon", text: "임프는 누구인가?", answerSeats: [3] },
-    { id: "pithag", text: "마귀할멈은 누구인가?", answerSeats: [2] },
+    { id: "demon", text: "악마는 누구인가?", answerSeats: [3] },
+    { id: "minion", text: "하수인은 누구인가?", answerSeats: [2] },
   ],
   hints: [
     "수사관을 주장하는 사람이 둘이다. 한쪽이 진짜라고 가정하고 그 사람의 정보를 그대로 믿어 보라 — 지목당한 두 사람이 이미 다른 역할로 밝혀져 있지는 않은가?",

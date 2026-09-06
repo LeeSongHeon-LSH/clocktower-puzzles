@@ -44,8 +44,8 @@ export default definePuzzle({
   ],
   questions: [
     { id: "demon", text: "악마는 누구인가?", answerSeats: [2] },
-    { id: "imp", text: "이 판의 악마는 임프다. 그 좌석을 고르라", answerSeats: [2] },
-    { id: "scarletwoman", text: "탕녀는 누구인가?", answerSeats: [3] },
+    { id: "demonType", text: "그 악마는 어떤 악마인가?", answerRole: "imp" },
+    { id: "minion", text: "하수인은 누구인가?", answerSeats: [3] },
   ],
   hints: [
     "8인 판에 외지인은 몇 명인가. 그리고 이 대본에 자기 정체를 모르거나 감출 수 있는 외지인이 있는가?",

@@ -81,9 +81,11 @@ export default definePuzzle({
     { day: 1, type: "execution", seat: 3 },
     { night: 2, type: "death", seat: 4 },
   ],
-  questions: [                // 단계형 서브 질문
-    { id: "demon", text: "데몬은 누구인가?", answerSeats: [5] },
-    { id: "drunk", text: "술꾼은 누구인가?", answerSeats: [2] },
+  questions: [                // 악마 위치 → 악마 종류 → 하수인 위치 (+ 보너스)
+    { id: "demon", text: "악마는 누구인가?", answerSeats: [5] },
+    { id: "demonType", text: "그 악마는 어떤 악마인가?", answerRole: "imp" },
+    { id: "minion", text: "하수인은 누구인가?", answerSeats: [3] },
+    { id: "drunk", text: "주정뱅이는 누구였나?", answerSeats: [2] },
   ],
   hints: ["…", "…"],          // 최대 2개
   walkthrough: ["① …", "② …"], // 단계별 해설

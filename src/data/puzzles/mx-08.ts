@@ -45,8 +45,8 @@ export default definePuzzle({
   events: [{ type: "death", night: 2, seat: 5 }],
   questions: [
     { id: "demon", text: "악마는 누구인가?", answerSeats: [2] },
-    { id: "imp", text: "이 판의 악마는 임프다. 그 좌석을 고르라", answerSeats: [2] },
-    { id: "empath", text: "진짜 초공감자는 누구인가?", answerSeats: [1] },
+    { id: "demonType", text: "그 악마는 어떤 악마인가?", answerRole: "imp" },
+    { id: "minion", text: "하수인은 누구인가?", answerSeats: [3] },
   ],
   hints: [
     "B의 '이웃에 악 2명'은 이웃이 둘뿐이므로 A와 C가 **모두** 악하다는 주장이다. 그 가정을 끝까지 밀어 보면 세탁부 토큰이 두 개가 된다.",

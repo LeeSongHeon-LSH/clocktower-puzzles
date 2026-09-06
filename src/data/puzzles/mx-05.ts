@@ -33,8 +33,8 @@ export default definePuzzle({
   events: [],
   questions: [
     { id: "demon", text: "악마는 누구인가?", answerSeats: [3] },
-    { id: "imp", text: "이 판의 악마는 임프다. 그 좌석을 고르라", answerSeats: [3] },
-    { id: "scarletwoman", text: "탕녀는 누구인가?", answerSeats: [4] },
+    { id: "demonType", text: "그 악마는 어떤 악마인가?", answerRole: "imp" },
+    { id: "minion", text: "하수인은 누구인가?", answerSeats: [4] },
   ],
   hints: [
     "몽상가 B의 정보는 '넷 중 하나'가 아니라 '둘 중 하나'다. D는 요리사이거나 임프이고, 그 사이에 다른 선택지는 없다.",

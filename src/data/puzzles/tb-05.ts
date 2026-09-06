@@ -46,8 +46,8 @@ export default definePuzzle({
   ],
   questions: [
     { id: "demon", text: "악마는 누구인가?", answerSeats: [3] },
-    { id: "imp", text: "이 판의 악마는 임프다. 그 좌석을 고르라", answerSeats: [3] },
-    { id: "baron", text: "남작은 누구인가?", answerSeats: [5] },
+    { id: "demonType", text: "그 악마는 어떤 악마인가?", answerRole: "imp" },
+    { id: "minion", text: "하수인은 누구인가?", answerSeats: [5] },
     { id: "drunk", text: "주정뱅이는 누구였나?", answerSeats: [2] },
   ],
   hints: [

@@ -29,6 +29,7 @@ export function PuzzleClient({ puzzle, verified = true }: { puzzle: Puzzle; veri
   const [selectedSeat, setSelectedSeat] = useState<number | null>(null);
   const [stage, setStage] = useState(0); // 처음 등장하는 미해결 질문 인덱스
   const [picks, setPicks] = useState<number[]>([]);
+  const [rolePick, setRolePick] = useState<RoleId | null>(null);
   const [wrong, setWrong] = useState(false);
   const [attempts, setAttempts] = useState(0);
   const [hintsOpen, setHintsOpen] = useState(0);
@@ -62,6 +63,9 @@ export function PuzzleClient({ puzzle, verified = true }: { puzzle: Puzzle; veri
 
   const demonSeat =
     puzzle.currentDemonSeat ?? puzzle.solution.findIndex((r) => ROLES[r].team === "demon");
+
+  /** 악마의 종류를 묻는 질문의 선택지 — 대본 표시와 같은 순서를 쓴다 */
+  const demonChoices = puzzle.rolePool.filter((r) => ROLES[r].team === "demon");
 
   /**
    * 토큰에 얹는 글. 주장 역할은 한글만 쓴다 — 토큰이 좁아 병기가 안 들어간다
@@ -97,13 +101,17 @@ export function PuzzleClient({ puzzle, verified = true }: { puzzle: Puzzle; veri
 
   const checkAnswer = () => {
     const q = puzzle.questions[stage];
-    const a = [...picks].sort((x, y) => x - y).join(",");
-    const b = [...q.answerSeats].sort((x, y) => x - y).join(",");
+    const correct =
+      q.id === "demonType"
+        ? rolePick === q.answerRole
+        : [...picks].sort((x, y) => x - y).join(",") ===
+          [...q.answerSeats].sort((x, y) => x - y).join(",");
     const n = attempts + 1;
     setAttempts(n);
-    if (a === b) {
+    if (correct) {
       setWrong(false);
       setPicks([]);
+      setRolePick(null);
       if (stage + 1 >= puzzle.questions.length) finish("solved", n);
       else setStage(stage + 1);
     } else {
@@ -113,7 +121,9 @@ export function PuzzleClient({ puzzle, verified = true }: { puzzle: Puzzle; veri
 
   const togglePick = (seat: number) => {
     setWrong(false);
-    const max = puzzle.questions[stage].answerSeats.length;
+    const q = puzzle.questions[stage];
+    if (q.id === "demonType") return;
+    const max = q.answerSeats.length;
     setPicks((prev) => {
       if (prev.includes(seat)) return prev.filter((s) => s !== seat);
       if (max === 1) return [seat];
@@ -507,35 +517,63 @@ export function PuzzleClient({ puzzle, verified = true }: { puzzle: Puzzle; veri
               {answered ? (
                 <p className="mt-2 text-sm text-brass">
                   {done === "gaveup" && qi >= stage ? "정답: " : "✓ "}
-                  {q.answerSeats.map(seatName).join(", ")}
+                  {q.id === "demonType"
+                    ? roleLabel(q.answerRole)
+                    : q.answerSeats.map(seatName).join(", ")}
                 </p>
               ) : (
                 <div className="mt-3 space-y-3">
-                  <div className="flex flex-wrap gap-2">
-                    {Array.from({ length: puzzle.playerCount }, (_, s) => (
-                      <button
-                        key={s}
-                        onClick={() => togglePick(s)}
-                        className={`h-10 w-10 rounded-full border font-display text-base font-bold transition-colors ${
-                          picks.includes(s)
-                            ? "border-blood bg-blood/20 text-parchment"
-                            : "border-panel-edge text-faded hover:border-parchment/50 hover:text-parchment"
-                        }`}
-                        aria-pressed={picks.includes(s)}
-                      >
-                        {seatName(s)}
-                      </button>
-                    ))}
-                  </div>
+                  {q.id === "demonType" ? (
+                    <div className="flex flex-wrap gap-2">
+                      {demonChoices.map((r) => (
+                        <button
+                          key={r}
+                          onClick={() => {
+                            setWrong(false);
+                            setRolePick(r);
+                          }}
+                          className={`rounded-md border px-3 py-2 text-sm font-bold transition-colors ${
+                            rolePick === r
+                              ? "border-blood bg-blood/20 text-parchment"
+                              : "border-panel-edge text-faded hover:border-parchment/50 hover:text-parchment"
+                          }`}
+                          aria-pressed={rolePick === r}
+                        >
+                          {roleLabel(r)}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {Array.from({ length: puzzle.playerCount }, (_, s) => (
+                        <button
+                          key={s}
+                          onClick={() => togglePick(s)}
+                          className={`h-10 w-10 rounded-full border font-display text-base font-bold transition-colors ${
+                            picks.includes(s)
+                              ? "border-blood bg-blood/20 text-parchment"
+                              : "border-panel-edge text-faded hover:border-parchment/50 hover:text-parchment"
+                          }`}
+                          aria-pressed={picks.includes(s)}
+                        >
+                          {seatName(s)}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   <div className="flex items-center gap-3">
                     <button
                       onClick={checkAnswer}
-                      disabled={picks.length !== q.answerSeats.length}
+                      disabled={
+                        q.id === "demonType"
+                          ? rolePick === null
+                          : picks.length !== q.answerSeats.length
+                      }
                       className="rounded-md bg-blood px-4 py-2 text-sm font-bold text-parchment transition-colors hover:bg-blood-deep disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       확인
                     </button>
-                    {q.answerSeats.length > 1 && (
+                    {q.id !== "demonType" && q.answerSeats.length > 1 && (
                       <span className="text-xs text-faded">{q.answerSeats.length}명을 골라라</span>
                     )}
                     {wrong && (

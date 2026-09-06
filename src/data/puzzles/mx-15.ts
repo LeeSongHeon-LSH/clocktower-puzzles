@@ -38,8 +38,8 @@ export default definePuzzle({
   events: [{ type: "death", night: 2, seat: 6 }],
   questions: [
     { id: "demon", text: "악마는 누구인가?", answerSeats: [1] },
-    { id: "nodashii", text: "이 판의 악마는 노 다시다. 그 좌석을 고르라", answerSeats: [1] },
-    { id: "scarletwoman", text: "탕녀는 누구인가?", answerSeats: [5] },
+    { id: "demonType", text: "그 악마는 어떤 악마인가?", answerRole: "nodashii" },
+    { id: "minion", text: "하수인은 누구인가?", answerSeats: [5] },
   ],
   hints: [
     "같은 역할 주장이 두 쌍이면 악역 자리는 이미 다 찬 것이다. 어느 좌석이 확실히 선한지부터 적어 두라.",
