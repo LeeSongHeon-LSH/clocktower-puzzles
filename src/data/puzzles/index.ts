@@ -23,14 +23,19 @@ import mx11 from "./mx-11";
 import mx12 from "./mx-12";
 import mx14 from "./mx-14";
 import mx15 from "./mx-15";
+import mx21 from "./mx-21";
+import mx22 from "./mx-22";
+import mx23 from "./mx-23";
+import mx24 from "./mx-24";
+import mx25 from "./mx-25";
 
 export const PUZZLES: Puzzle[] = [
   // 쉬움
   mx05, tb07, mx19,
   // 보통
-  tb05, mx08, mx13, mx16, mx17, mx18, mx20,
+  tb05, mx08, mx13, mx16, mx17, mx18, mx20, mx21, mx22,
   // 어려움
-  mx10, mx11, mx12, mx14, mx15,
+  mx10, mx11, mx12, mx14, mx15, mx23, mx24, mx25,
 ];
 
 export function getPuzzle(id: string): Puzzle | undefined {
