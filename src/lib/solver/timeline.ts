@@ -21,7 +21,7 @@
 // - Po의 3킬 밤(직전 선택이 '아무도 안 함')은 죽은 좌석 선택이 허용되므로 실제 사망
 //   0~3건이 전부 설명 없이 성립한다 (관대한 방향). 구마사제 봉쇄 밤은 선택 자체가 없던
 //   밤이라 '아무도 안 함'으로 치지 않는다 — 다음 밤 3킬이 열리지 않는다.
-// - 샤바로스는 밤마다 2명을 고르는데 시신도 고를 수 있어 실제 사망 0~2건이 전부 설명
+// - 샤발로스는 밤마다 2명을 고르는데 시신도 고를 수 있어 실제 사망 0~2건이 전부 설명
 //   없이 성립한다 (관대한 방향). 역류(부활)는 이벤트로 표현 불가 — "might"라 비발동 ∃가
 //   항상 성립하고, 역류가 발동한 게임은 입력될 수 없다.
 // - 푸카: 밤 n의 킬 = 밤 n-1의 중독 선택 (밤1부터 선택, 밤2부터 킬). 킬에는 선택 밤과
@@ -31,16 +31,38 @@
 //   있는 좌석은 관대 집합으로 계산한다 (nodashiiPoisoned 선례 — require 만족·forbid
 //   불파괴). 누수의 독 지속은 그 두 밤까지로 한정하고, 봉쇄·무산이 다음 밤 선택 부재로
 //   이어지는 연쇄는 강제하지 않는다 (전부 세계를 늘리는 관대한 방향).
-// - 좀부울: 직전 낮에 처형 사망이 있으면 깨어나지 않는다 (그 밤 킬 불가·킬 부재 공짜).
+// - 좀버얼: 직전 낮에 처형 사망이 있으면 깨어나지 않는다 (그 밤 킬 불가·킬 부재 공짜).
 //   첫 죽음은 가짜 — 이벤트는 그대로 두되(등록상 사망) 비밀리에 생존해 계속 킬하고,
 //   탕녀 승계도 발동하지 않는다. 죽는 순간 중독됐다면 정말로 죽는다 (그쪽만 승계 분기).
-//   같은 좌석의 두 번째 사망은 스키마상 입력 불가라 표현 가능한 퍼즐에서 좀부울의 진짜
-//   죽음은 (중독 분기 외엔) 없다. 생존 2인 이하 종료 판정에서 가짜 죽음 좀부울은
+//   같은 좌석의 두 번째 사망은 스키마상 입력 불가라 표현 가능한 퍼즐에서 좀버얼의 진짜
+//   죽음은 (중독 분기 외엔) 없다. 생존 2인 이하 종료 판정에서 가짜 죽음 좀버얼은
 //   생존자로 센다 (실제로 살아 있다 — 게임이 계속되는 관대한 방향).
 
 import { ROLES } from "@/data/roles";
-import { canShowAsRole, pithagSelfOptionsAt } from "./registration";
+import { canShowAsRole, isGoodTeam, pithagSelfOptionsAt } from "./registration";
+import { aliveNeighbors } from "./seats";
 import type { Claim, InfoData, RoleId, Seat, SolverPuzzle } from "./types";
+
+/**
+ * 악마의 킬 부재(아무도 죽지 않은 밤)를 설명할 수 있는 역할 — doNightRest의 "킬 부재" 분기와
+ * 같은 목록이다. 분기를 더하면 여기도 더한다 (에디터가 저자 안내에 그대로 쓴다).
+ * 독살범(독살), 군인·수도사·찻집 여인·어릿광대·선원·여관주인(보호·회피), 구마사제(봉쇄),
+ * 음유시인(전원 취함 밤), 대신(악마 취함), 건달(악마가 골라 취함), 좀버얼(처형 다음 밤 휴식),
+ * 포(조용한 밤 선택), 샤발로스(시신 선택), 푸카(선택·실행 두 밤에 걸친 실패).
+ */
+export const KILL_FAIL_EXPLAINERS: readonly RoleId[] = [
+  "poisoner", "soldier", "monk", "exorcist", "tealady", "fool", "minstrel", "sailor", "innkeeper", "courtier",
+  "goon", "zombuul", "po", "shabaloth", "pukka",
+];
+
+/**
+ * 한 밤에 둘 이상 죽는 것을 설명할 수 있는 역할 — 킬 귀속 `collect`의 후보 + 다중 킬 악마.
+ * 암살자·대부(추가 킬), 할머니(손주 연쇄), 도박사(오답 사망), 땜장이(임의 사망),
+ * 달의 자손(저주), 소문꾼(참인 발언), 포·샤발로스(다중 킬 악마).
+ */
+export const MULTI_DEATH_EXPLAINERS: readonly RoleId[] = [
+  "assassin", "godfather", "grandmother", "gambler", "tinker", "moonchild", "gossip", "po", "shabaloth",
+];
 
 // ── Schedule: 이벤트만으로 결정되는 생존 상태 ─────────────────────
 
@@ -54,7 +76,7 @@ export class Schedule {
   readonly nights: number;
   private readonly deathsAtNight = new Map<number, Seat[]>();
   private readonly execOnDay = new Map<number, Seat>();
-  private readonly virginDay = new Set<number>(); // execOnDay 중 처녀 발동으로 인한 낮
+  private readonly virginDay = new Set<number>(); // execOnDay 중 성결자 발동으로 인한 낮
   private readonly actionsOnDay = new Map<number, DayAction[]>();
   private readonly slainByDay = new Map<number, Seat[]>(); // 총격 사망 (처형 아님)
   /** aliveStart[n] = 밤 n 시작 시점 생존 배열, aliveAfter[n] = 밤 n 킬 이후 */
@@ -110,7 +132,7 @@ export class Schedule {
         }
       }
       this.aliveAfter[night] = [...alive];
-      // 낮의 죽음: 이벤트 배열 순서대로 (총격·처녀 발동), 마지막에 일반 처형
+      // 낮의 죽음: 이벤트 배열 순서대로 (총격·성결자 발동), 마지막에 일반 처형
       for (const act of this.actionsOnDay.get(night) ?? []) {
         const involved = act.type === "slayerShot" ? [act.seat, act.target] : [act.nominator, act.nominee];
         for (const s of involved) {
@@ -145,7 +167,7 @@ export class Schedule {
   executedOnDay(day: number): Seat | null {
     return this.execOnDay.get(day) ?? null;
   }
-  /** 낮 day의 처형이 처녀 발동으로 인한 것인가 */
+  /** 낮 day의 처형이 성결자 발동으로 인한 것인가 */
   isVirginExecution(day: number): boolean {
     return this.virginDay.has(day);
   }
@@ -197,7 +219,7 @@ export interface DemonScenario {
   /** 음유시인 발동으로 전원이 취해 있던 밤들 — 그 밤의 정보·킬·독살은 모두 무효 */
   minstrelNights?: Set<number>;
   /**
-   * 좀부울의 가짜 죽음 시점 (밤 n = n, 낮 d 처형 = d + 0.5). 좀부울 세계에서 가짜 죽음이
+   * 좀버얼의 가짜 죽음 시점 (밤 n = n, 낮 d 처형 = d + 0.5). 좀버얼 세계에서 가짜 죽음이
    * 일어났을 때만 존재 — 그 좌석은 등록상 죽었지만 실제로 살아 있어 계속 깨어나고 킬한다.
    */
   zombuulFakeDeadAt?: number | null;
@@ -276,6 +298,10 @@ export interface SweetheartCase {
 
 type Trigger = "must" | "may" | "none";
 
+/**
+ * 분기 상태. 새 필드를 더할 때 손볼 곳은 셋 — 이 타입, 초깃값 `st0`, 결과로 옮기는 `finish()`.
+ * 복사는 `cloneSt`가 값의 모양으로 처리하므로 건드릴 필요가 없다.
+ */
 interface St {
   demon: Seat;
   became: Map<Seat, number>;
@@ -291,7 +317,7 @@ interface St {
   foolDodgeUsed: boolean;
   /** Po 전용: 직전 밤의 선택이 '아무도 안 함'이었는가 (참이면 이번 밤엔 반드시 3명을 고른다) */
   poChoseNone: boolean;
-  /** 좀부울 전용: 가짜 죽음 시점 (밤 n = n, 낮 d = d + 0.5). null = 아직 안 죽음 */
+  /** 좀버얼 전용: 가짜 죽음 시점 (밤 n = n, 낮 d = d + 0.5). null = 아직 안 죽음 */
   zombuulFakeDeadAt: number | null;
   /** 푸카 전용: 밤별 '푸카 독을 받았을 수 있는' 좌석 (관대 집합 — pukkaPoisoned로 방출) */
   pukkaMaybe: Map<number, Set<Seat>>;
@@ -305,9 +331,9 @@ interface St {
   vigorKept: Map<Seat, number>;
   /** 비고르모르티스 전용: 좌석 → 이웃 독을 받고 있었을 수 있는 시작 밤 (관대 집합) */
   vigorPoisonMaybe: Map<Seat, number>;
-  /** 사냥꾼(실제)이 능력을 소진했는가 — 공개 총격 1회 (명중·불발 무관) */
+  /** 처단자(실제)이 능력을 소진했는가 — 공개 총격 1회 (명중·불발 무관) */
   slayerUsed: boolean;
-  /** 처녀(실제)가 첫 지명을 받아 능력이 소진됐는가 (중독 상태였어도 소진) */
+  /** 성결자(실제)가 첫 지명을 받아 능력이 소진됐는가 (중독 상태였어도 소진) */
   virginSpent: boolean;
   /**
    * 이동식 취함 원천(선원·여관주인·대신)의 **확정** 취함: 밤 n → 그 밤(과 다음 낮) 취한 좌석들.
@@ -374,36 +400,22 @@ function goonChoiceTargets(data: InfoData): Seat[] | null {
   }
 }
 
+/**
+ * St 한 단계 깊이 복사. 필드를 나열하지 않고 값의 모양으로 복사 규칙을 정한다 —
+ * Map(값이 Set이면 Set도 복사)·Set·배열은 새로 만들고, 그 외는 그대로 둔다.
+ * 규약: Map 안의 객체 값(goonAlign)과 배열 안의 배열(impKills)은 **대입만 하고 변형하지 않는다**.
+ * 필드를 더할 때 여기를 고칠 필요가 없다 (예전엔 27개 필드를 손으로 나열해 빠뜨리면 형제 분기가
+ * 상태를 공유했다).
+ */
+function cloneValue(v: unknown): unknown {
+  if (v instanceof Map) return new Map([...v].map(([k, x]) => [k, x instanceof Set ? new Set(x) : x]));
+  if (v instanceof Set) return new Set(v);
+  if (Array.isArray(v)) return [...v];
+  return v;
+}
+
 function cloneSt(s: St): St {
-  return {
-    demon: s.demon,
-    became: new Map(s.became),
-    demonNights: [...s.demonNights],
-    required: new Map(s.required),
-    forbidden: new Map([...s.forbidden].map(([k, v]) => [k, new Set(v)])),
-    assassinUsed: s.assassinUsed,
-    assassinNight: s.assassinNight,
-    godfatherNights: [...s.godfatherNights],
-    exorcistBlocked: [...s.exorcistBlocked],
-    impKills: [...s.impKills],
-    minstrelNights: [...s.minstrelNights],
-    foolDodgeUsed: s.foolDodgeUsed,
-    poChoseNone: s.poChoseNone,
-    zombuulFakeDeadAt: s.zombuulFakeDeadAt,
-    pukkaMaybe: new Map([...s.pukkaMaybe].map(([k, v]) => [k, new Set(v)])),
-    grandchild: s.grandchild,
-    fangGuJumpUsed: s.fangGuJumpUsed,
-    fangGuJumpTarget: s.fangGuJumpTarget,
-    vigorKept: new Map(s.vigorKept),
-    vigorPoisonMaybe: new Map(s.vigorPoisonMaybe),
-    slayerUsed: s.slayerUsed,
-    virginSpent: s.virginSpent,
-    drunkNights: new Map([...s.drunkNights].map(([k, v]) => [k, new Set(v)])),
-    goonEvil: s.goonEvil,
-    goonAlign: new Map(s.goonAlign),
-    goonUnknownDrunk: new Set(s.goonUnknownDrunk),
-    goonFirst: s.goonFirst,
-  };
+  return Object.fromEntries(Object.entries(s).map(([k, v]) => [k, cloneValue(v)])) as unknown as St;
 }
 
 function markDrunk(st: St, night: number, seat: Seat) {
@@ -429,28 +441,6 @@ function subsetsUpTo(arr: Seat[], k: number): Seat[][] {
     }
   }
   return out;
-}
-
-function isGoodTeam(role: RoleId): boolean {
-  const t = ROLES[role].team;
-  return t === "townsfolk" || t === "outsider";
-}
-
-/** 자신을 제외한 가장 가까운 생존 이웃 [왼쪽, 오른쪽]. ctx.aliveNeighbors와 같은 정의 (순환 의존 회피용 사본). */
-function neighborsOf(alive: boolean[], seat: Seat): [Seat, Seat] | null {
-  const n = alive.length;
-  let left: Seat | null = null;
-  let right: Seat | null = null;
-  for (let step = 1; step < n; step++) {
-    const l = (seat - step + n) % n;
-    if (alive[l]) { left = l; break; }
-  }
-  for (let step = 1; step < n; step++) {
-    const r = (seat + step) % n;
-    if (alive[r]) { right = r; break; }
-  }
-  if (left === null || right === null) return null;
-  return [left, right];
 }
 
 /**
@@ -553,41 +543,19 @@ export function demonScenarios(
   const results: DemonScenario[] = [];
 
   /**
-   * 노 다시가 demonSeat에 앉은 밤 night에 그 독을 받고 있었을 수 있는 좌석들.
-   * 각 방향에서 죽은 좌석과 마을 사람 아닌 좌석을 건너뛰며 첫 마을 사람까지 —
+   * origin(노 다시 좌석 / 비고르모르티스에게 죽은 하수인 좌석)에서 밤 night에 이웃 독을 받고 있었을
+   * 수 있는 좌석들. 각 방향에서 죽은 좌석과 마을 사람 아닌 좌석을 건너뛰며 첫 마을 사람까지 —
    * 도중의 첩자는 주민으로 오등록돼 독을 흡수했을 수도 있다(∃, 계속 진행).
-   * 밤 시작/킬 이후 두 생존 상태의 합집합 (밤중 사망으로 독이 옮겨 갔을 수 있다).
+   * 밤 시작/킬 이후 두 생존 상태의 합집합 (밤중 사망으로 독이 옮겨 갔을 수 있다). 관대한 방향.
    */
-  function ndPoisonedAt(demonSeat: Seat, night: number): Set<Seat> {
+  function neighborPoisonSet(origin: Seat, night: number): Set<Seat> {
     const out = new Set<Seat>();
     const n = assignment.length;
     for (const alive of [sched.aliveAtNightStart(night), sched.aliveAfterNight(night)]) {
       for (const dir of [1, -1]) {
         for (let step = 1; step < n; step++) {
-          const s = (demonSeat + dir * step + n) % n;
-          if (s === demonSeat) break;
-          if (!alive[s]) continue;
-          if (ROLES[assignment[s]].team === "townsfolk") { out.add(s); break; }
-          if (assignment[s] === "spy") out.add(s);
-        }
-      }
-    }
-    return out;
-  }
-
-  /**
-   * 비고르모르티스가 죽인 하수인의 이웃 독 후보: 하수인 좌석에서 양방향으로 죽은 좌석과
-   * 마을 사람 아닌 좌석을 건너뛰며 첫 마을 사람까지 (도중의 첩자는 흡수 가능 ∃).
-   * 죽는 밤의 두 생존 상태(시작/킬 이후) 합집합 — ndPoisonedAt과 같은 관대한 방향.
-   */
-  function vigorNeighborsAt(minionSeat: Seat, night: number): Set<Seat> {
-    const out = new Set<Seat>();
-    const n = assignment.length;
-    for (const alive of [sched.aliveAtNightStart(night), sched.aliveAfterNight(night)]) {
-      for (const dir of [1, -1]) {
-        for (let step = 1; step < n; step++) {
-          const s = (minionSeat + dir * step + n) % n;
-          if (s === minionSeat) break;
+          const s = (origin + dir * step + n) % n;
+          if (s === origin) break;
           if (!alive[s]) continue;
           if (ROLES[assignment[s]].team === "townsfolk") { out.add(s); break; }
           if (assignment[s] === "spy") out.add(s);
@@ -606,7 +574,7 @@ export function demonScenarios(
   function require_(st: St, night: number, seat: Seat): boolean {
     if (sweetTarget === seat && sweetSince <= night) return true; // 이미 취해 있다 — 독살 불요
     if (st.drunkNights.get(night)?.has(seat)) return true; // 이동식 취함 원천에 이미 취해 있다
-    if (demonRole === "nodashii" && ndPoisonedAt(st.demonNights[night] ?? st.demon, night).has(seat)) return true;
+    if (demonRole === "nodashii" && neighborPoisonSet(st.demonNights[night] ?? st.demon, night).has(seat)) return true;
     // 푸카도 플레이어를 고르므로 건달을 고르면 스스로 취한다 — 건달은 푸카 독을 받지 않는다
     if (demonRole === "pukka" && seat !== goonSeat && st.pukkaMaybe.get(night)?.has(seat)) return true;
     if (demonRole === "vigormortis" && (st.vigorPoisonMaybe.get(seat) ?? Infinity) <= night) return true;
@@ -649,17 +617,9 @@ export function demonScenarios(
     return true;
   }
 
+  /** 분기 진행 중의 토큰 조회 — 내보낸 tokenRoleAt과 같은 규칙(교환 → 변신 → 승계) */
   function tokenAt(became: Map<Seat, number>, seat: Seat, time: number): RoleId {
-    if (swap != null && time >= swap.since) {
-      if (seat === swap.a) return assignment[swap.b];
-      if (seat === swap.b) return assignment[swap.a];
-    }
-    if (roleChanges != null) {
-      for (const rc of roleChanges) if (rc.seat === seat && time >= rc.since) return rc.role;
-    }
-    const since = became.get(seat);
-    if (since !== undefined && since <= time) return demonRole;
-    return assignment[seat];
+    return tokenRoleWith(assignment, seat, time, swap ?? undefined, roleChanges ?? undefined, became, demonRole);
   }
 
   /**
@@ -669,7 +629,7 @@ export function demonScenarios(
    */
   function tlForced(alive: boolean[], dead: Seat, became: Map<Seat, number>, goonEvil: boolean): boolean {
     if (tealadySeat < 0 || !alive[tealadySeat] || dead === tealadySeat) return false;
-    const nb = neighborsOf(alive, tealadySeat);
+    const nb = aliveNeighbors(alive, tealadySeat);
     if (!nb || !nb.includes(dead)) return false;
     // 지금 악한 건달 이웃은 보호를 확실하게 만들지 못한다 (진영이 밤별 상태다)
     return nb.every((x) => isGoodTeam(assignment[x]) && assignment[x] !== "recluse" && !became.has(x)
@@ -693,7 +653,7 @@ export function demonScenarios(
       zombuulFakeDeadAt: st.zombuulFakeDeadAt,
       nodashiiPoisoned: demonRole === "nodashii"
         ? Array.from({ length: pz.nights + 1 }, (_, n) =>
-            n === 0 ? new Set<Seat>() : ndPoisonedAt(st.demonNights[n] ?? st.demon, n))
+            n === 0 ? new Set<Seat>() : neighborPoisonSet(st.demonNights[n] ?? st.demon, n))
         : undefined,
       pukkaPoisoned: demonRole === "pukka" ? pukkaSets(st) : undefined,
       extraDrunk: st.drunkNights.size > 0
@@ -722,13 +682,13 @@ export function demonScenarios(
   }
 
   function doDay(st: St, day: number) {
-    // 낮 공개 행동(총격·지명·처녀 발동)의 제약을 먼저 반영한다 — 분기가 생길 수 있다
+    // 낮 공개 행동(총격·지명·성결자 발동)의 제약을 먼저 반영한다 — 분기가 생길 수 있다
     for (const s of applyDayActions(st, day)) doDayRest(s, day);
   }
 
   /**
    * 낮 day의 공개 행동을 일어난 순서대로 적용한 St 분기들. 빈 배열 = 이 세계는 모순.
-   * 총격 명중이 실제 데몬을 잡으면 좀부울 가짜 죽음/탕녀 승계로 분기한다
+   * 총격 명중이 실제 데몬을 잡으면 좀버얼 가짜 죽음/탕녀 승계로 분기한다
    * (마스터마인드는 '처형'만 연장하므로 총격 사망에는 발동하지 않는다).
    */
   function applyDayActions(st: St, day: number): St[] {
@@ -742,14 +702,14 @@ export function demonScenarios(
         if (act.type === "slayerShot") {
           const shooterIsSlayer = slayerSeat >= 0 && act.seat === slayerSeat;
           if (act.died) {
-            // 명중: 실제 사냥꾼의 첫 총격 + 멀쩡함 + 대상이 데몬으로 등록
+            // 명중: 실제 처단자의 첫 총격 + 멀쩡함 + 대상이 데몬으로 등록
             if (!shooterIsSlayer || s.slayerUsed) continue;
             const tok = tokenAt(s.became, act.target, day);
             if (ROLES[tok].team !== "demon" && tok !== "recluse") continue;
             if (!forbid_(s, day, slayerSeat)) continue;
             s.slayerUsed = true;
             if (act.target === s.demon) {
-              // 실제 데몬이 낮에 총으로 죽었다 — 좀부울 가짜 죽음 / 탕녀 승계만 게임을 지속시킨다
+              // 실제 데몬이 낮에 총으로 죽었다 — 좀버얼 가짜 죽음 / 탕녀 승계만 게임을 지속시킨다
               if (demonRole === "zombuul" && s.zombuulFakeDeadAt === null) {
                 const c = cloneSt(s);
                 if (forbid_(c, day, act.target)) {
@@ -772,26 +732,26 @@ export function demonScenarios(
               next.push(s); // 은둔자가 데몬으로 등록돼 죽었다 (∃)
             }
           } else {
-            // 불발: 실제 사냥꾼이었다면 공개 사용으로 능력이 소진된다
+            // 불발: 실제 처단자였다면 공개 사용으로 능력이 소진된다
             if (shooterIsSlayer && !s.slayerUsed) {
               s.slayerUsed = true;
               const tok = tokenAt(s.became, act.target, day);
-              // 멀쩡한 사냥꾼이 반드시 데몬으로 등록되는 대상을 쐈다면 죽었어야 한다 → 사냥꾼 중독 강제
+              // 멀쩡한 처단자가 반드시 데몬으로 등록되는 대상을 쐈다면 죽었어야 한다 → 처단자 중독 강제
               if (ROLES[tok].team === "demon" && !require_(s, day, slayerSeat)) continue;
             }
-            next.push(s); // 허세 총격(비사냥꾼)·소진 후 재총격은 자유
+            next.push(s); // 허세 총격(비처단자)·소진 후 재총격은 자유
           }
         } else if (act.type === "nomination") {
           if (virginSeat >= 0 && act.nominee === virginSeat && !s.virginSpent) {
             s.virginSpent = true; // 첫 지명 — 발동 여부와 무관하게 소진 (중독 상태였어도)
             const ntok = tokenAt(s.became, act.nominator, day);
-            // 반드시 마을 사람으로 등록되는 지명자였다면 발동했어야 한다 → 처녀의 중독 강제
+            // 반드시 마을 사람으로 등록되는 지명자였다면 발동했어야 한다 → 성결자의 중독 강제
             // (첩자 지명자는 하수인으로 등록됐을 수 있다 ∃ — 자유)
             if (ROLES[ntok].team === "townsfolk" && !require_(s, day, virginSeat)) continue;
           }
           next.push(s);
         } else {
-          // virginTrigger: 지명 대상이 멀쩡한 실제 처녀(첫 지명), 지명자가 마을 사람으로 등록
+          // virginTrigger: 지명 대상이 멀쩡한 실제 성결자(첫 지명), 지명자가 마을 사람으로 등록
           if (virginSeat < 0 || act.nominee !== virginSeat) continue;
           if (s.virginSpent) continue;
           s.virginSpent = true;
@@ -826,8 +786,8 @@ export function demonScenarios(
     let branches: { st: St; demonless: boolean }[];
     if (executed === st.demon) {
       branches = [];
-      // (0) 좀부울의 첫 죽음은 가짜다 — 등록상 죽지만 비밀리에 생존, 승계 없음.
-      //     멀쩡했어야 가짜 죽음이 성립한다 (중독된 좀부울은 정말로 죽는다 — 아래 진짜 죽음 경로).
+      // (0) 좀버얼의 첫 죽음은 가짜다 — 등록상 죽지만 비밀리에 생존, 승계 없음.
+      //     멀쩡했어야 가짜 죽음이 성립한다 (중독된 좀버얼은 정말로 죽는다 — 아래 진짜 죽음 경로).
       if (demonRole === "zombuul" && st.zombuulFakeDeadAt === null) {
         const c = cloneSt(st);
         if (forbid_(c, day, executed)) {
@@ -835,7 +795,7 @@ export function demonScenarios(
           branches.push({ st: c, demonless: false });
         }
       }
-      /** 진짜 죽음의 전제 — 좀부울이라면 그 시점의 중독이 강제된다 */
+      /** 진짜 죽음의 전제 — 좀버얼이라면 그 시점의 중독이 강제된다 */
       const realDeath: Mut = (c) => demonRole !== "zombuul" || require_(c, day, executed);
       // (a) 탕녀 승계 — 게임이 계속된다
       const swOk = swSeat >= 0 && swSeat !== executed && aliveAtDay[swSeat] && !st.became.has(swSeat) && aliveBefore >= 5;
@@ -873,7 +833,7 @@ export function demonScenarios(
     if (tlForced(aliveAtDay, executed, s.became, s.goonEvil) && !require_(s, day, tealadySeat)) continue;
     // 회피를 쓰지 않은 어릿광대는 처형으로 죽지 않는다 → 그 밤의 중독 강제
     if (executed === foolSeat && !s.foolDodgeUsed && !require_(s, day, foolSeat)) continue;
-    // 가짜 죽음 좀부울은 등록상 죽었지만 실제로 살아 있다 — 종료 판정에서 생존자로 센다
+    // 가짜 죽음 좀버얼은 등록상 죽었지만 실제로 살아 있다 — 종료 판정에서 생존자로 센다
     if (aliveBefore - 1 + (s.zombuulFakeDeadAt !== null ? 1 : 0) <= 2) continue;
 
     // 트리거 계산: 처형으로 죽은 좌석의 토큰 등록 (+ 총격으로 죽은 은둔자 ∃)
@@ -1180,7 +1140,7 @@ export function demonScenarios(
       doDay(st, 1);
       return;
     }
-    // 가짜 죽음 좀부울은 등록상 죽었어도 실제로 살아 있어 계속 진행한다
+    // 가짜 죽음 좀버얼은 등록상 죽었어도 실제로 살아 있어 계속 진행한다
     const demonReallyAlive = sched.aliveAtNightStart(night)[st.demon]
       || (demonRole === "zombuul" && st.zombuulFakeDeadAt !== null);
     if (!demonless && !demonReallyAlive) return;
@@ -1223,7 +1183,7 @@ export function demonScenarios(
     const sailorAlive = sailorSeat >= 0 && aliveStart[sailorSeat];
 
     // 교수의 부활 시도 (1회, 기록 밤): 부활이 일어난 게임은 이 스키마에 입력될 수 없다
-    // (죽음 이벤트는 번복되지 않는다 — 샤바로스 역류 선례). 대상이 반드시 마을 사람으로
+    // (죽음 이벤트는 번복되지 않는다 — 샤발로스 역류 선례). 대상이 반드시 마을 사람으로
     // 등록되는 시신이면 부활이 일어났어야 하므로, 교수가 그 밤 비정상이었어야 한다.
     // (첩자 시신은 하수인으로, 주정뱅이 시신은 외부인으로 등록될 수 있어 ∃ 자유)
     if (profRec !== null && profRec.night === night && aliveStart[profSeat]) {
@@ -1259,15 +1219,15 @@ export function demonScenarios(
 
     // 찻집 여인이 이웃 보호로 킬 실패를 설명할 수 있는가 (이웃 둘 다 선 등록 가능)
     const tlCanProtect = tealadySeat >= 0 && aliveStart[tealadySeat] && (() => {
-      const nb = neighborsOf(aliveStart, tealadySeat);
+      const nb = aliveNeighbors(aliveStart, tealadySeat);
       return nb !== null && nb.every((x) => assignment[x] === "spy"
         || (isGoodTeam(assignment[x]) && !(assignment[x] === "goon" && st.goonEvil)));
     })();
 
-    // 좀부울: 직전 낮에 처형 사망이 있으면 깨어나지 않는다 — 그 밤 킬 불가, 킬 부재는 공짜
+    // 좀버얼: 직전 낮에 처형 사망이 있으면 깨어나지 않는다 — 그 밤 킬 불가, 킬 부재는 공짜
     const zombuulRested = demonRole === "zombuul" && sched.executedOnDay(night - 1) !== null;
     // 데몬 킬 집합: 보통은 0~1건, Po의 3킬 밤(직전 선택이 '아무도 안 함')에는 최대 3건,
-    // 샤바로스는 매밤 2명 선택(시신 포함 가능)이라 최대 2건.
+    // 샤발로스는 매밤 2명 선택(시신 포함 가능)이라 최대 2건.
     const poTriple = demonRole === "po" && st.poChoseNone;
     // 데몬이 건달을 골라 그 밤 취했다 — 킬이 실패한다 (25차 D4)
     const goonDrunkDemon = st.goonFirst?.rank === 20;
@@ -1436,7 +1396,7 @@ export function demonScenarios(
                 const tok = tokenAt(s.became, k, night);
                 if (ROLES[tok].team === "minion") s.vigorKept.set(k, night);
                 if (ROLES[tok].team === "minion" || tok === "recluse") {
-                  for (const nb of vigorNeighborsAt(k, night)) {
+                  for (const nb of neighborPoisonSet(k, night)) {
                     if (!s.vigorPoisonMaybe.has(nb)) s.vigorPoisonMaybe.set(nb, night);
                   }
                 }
@@ -1484,7 +1444,7 @@ export function demonScenarios(
               return true;
             });
           } else if (zombuulRested) {
-            // 어제 낮에 처형 사망이 있었다 — 좀부울은 애초에 깨어나지 않는 밤 (킬 부재가
+            // 어제 낮에 처형 사망이 있었다 — 좀버얼은 애초에 깨어나지 않는 밤 (킬 부재가
             // 규칙이고, '선택했으나 실패' 계열 분기도 성립하지 않는다)
             impVariants.push(() => true);
           } else {
@@ -1610,8 +1570,8 @@ export function demonScenarios(
           } else if (demonKills.includes(demon) || plan.demonByOther) {
             // 밤에 데몬이 살해당함 → 탕녀만이 게임을 지속시킨다 (생존 5인 이상)
             nexts = [];
-            // 좀부울의 첫 죽음은 가짜 — 승계 없이 계속된다 (멀쩡했어야 한다.
-            // 중독된 좀부울은 정말로 죽어 아래 탕녀 승계 경로로 간다)
+            // 좀버얼의 첫 죽음은 가짜 — 승계 없이 계속된다 (멀쩡했어야 한다.
+            // 중독된 좀버얼은 정말로 죽어 아래 탕녀 승계 경로로 간다)
             if (demonRole === "zombuul" && s2.zombuulFakeDeadAt === null) {
               const c = cloneSt(s2);
               if (forbid_(c, night, demon)) {
@@ -1621,7 +1581,7 @@ export function demonScenarios(
             }
             if (swSeat >= 0 && !s2.became.has(swSeat) && aliveAfter[swSeat] && countTrue(aliveStart) >= 5) {
               const c = cloneSt(s2);
-              // 좀부울의 진짜 죽음(승계 발동)에는 그 시점 중독이 강제된다
+              // 좀버얼의 진짜 죽음(승계 발동)에는 그 시점 중독이 강제된다
               if (demonRole === "zombuul" && !require_(c, night, demon)) { /* 가짜 죽음만 가능 */ }
               else if (forbid_(c, night, swSeat)) {
                 c.demon = swSeat;
@@ -1635,7 +1595,7 @@ export function demonScenarios(
           }
 
           for (const nx of nexts) {
-            // 게임이 이미 끝났어야 한다 — 가짜 죽음 좀부울은 실제로 살아 있어 생존자로 센다
+            // 게임이 이미 끝났어야 한다 — 가짜 죽음 좀버얼은 실제로 살아 있어 생존자로 센다
             const fakeAlive = nx.zombuulFakeDeadAt !== null ? 1 : 0;
             if (deaths.length > 0 && countTrue(aliveAfter) + fakeAlive <= 2) continue;
             doDay(nx, night);
@@ -1710,19 +1670,34 @@ export function demonScenarios(
   return results;
 }
 
-/** 밤 night 시점의 토큰 역할 (데몬 승계 + 역할 교환 반영 — 교환이 우선한다: 뱀 조련사 교환에서 옛 데몬의 became(0)이 새 토큰을 가리면 안 된다) */
-export function tokenRoleAt(assignment: RoleId[], sc: DemonScenario, seat: Seat, night: number): RoleId {
-  const sw = sc.roleSwap;
-  if (sw !== undefined && night >= sw.since) {
-    if (seat === sw.a) return assignment[sw.b];
-    if (seat === sw.b) return assignment[sw.a];
+/**
+ * 시각 time의 토큰 역할 — 교환 → 변신 → 승계 순서로 본다. 교환이 우선한다: 뱀 조련사 교환에서
+ * 옛 데몬의 became(0)이 새 토큰을 가리면 안 된다. demonScenarios 내부(tokenAt)와 외부(tokenRoleAt)가
+ * 같은 함수를 쓴다.
+ */
+function tokenRoleWith(
+  assignment: RoleId[],
+  seat: Seat,
+  time: number,
+  swap: RoleSwapCase | undefined,
+  roleChanges: { seat: Seat; since: number; role: RoleId }[] | undefined,
+  became: Map<Seat, number>,
+  demonRole: RoleId,
+): RoleId {
+  if (swap !== undefined && time >= swap.since) {
+    if (seat === swap.a) return assignment[swap.b];
+    if (seat === swap.b) return assignment[swap.a];
   }
-  if (sc.roleChanges !== undefined) {
-    for (const rc of sc.roleChanges) if (rc.seat === seat && night >= rc.since) return rc.role;
+  if (roleChanges !== undefined) {
+    for (const rc of roleChanges) if (rc.seat === seat && time >= rc.since) return rc.role;
   }
-  const since = sc.becameDemonAt.get(seat);
-  if (since !== undefined && since <= night) {
-    return assignment.find((r) => ROLES[r].team === "demon") ?? "imp";
-  }
+  const since = became.get(seat);
+  if (since !== undefined && since <= time) return demonRole;
   return assignment[seat];
+}
+
+/** 밤 night 시점의 토큰 역할 (데몬 승계 + 역할 교환·변신 반영) */
+export function tokenRoleAt(assignment: RoleId[], sc: DemonScenario, seat: Seat, night: number): RoleId {
+  const demonRole = assignment.find((r) => ROLES[r].team === "demon") ?? "imp";
+  return tokenRoleWith(assignment, seat, night, sc.roleSwap, sc.roleChanges, sc.becameDemonAt, demonRole);
 }

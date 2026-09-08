@@ -13,13 +13,12 @@
 
 import { useState } from "react";
 import { type SharedPuzzle } from "@/lib/puzzles/codec";
+import { DIFFICULTY_LABELS } from "@/lib/puzzles/schema";
 import { indexSnippet, puzzleFileSource } from "@/lib/puzzles/source";
 
 const REPO = "https://github.com/LeeSongHeon-LSH/clocktower-puzzles";
 /** GitHub이 414로 되돌려보내는 지점 언저리. 넘으면 미리 채우지 않고 복사로 돌린다. */
 const URL_BUDGET = 7000;
-
-const DIFFICULTY_LABEL: Record<string, string> = { easy: "쉬움", normal: "보통", hard: "어려움" };
 
 function CopyButton({ text, children }: { text: string; children: string }) {
   const [done, setDone] = useState(false);
@@ -105,7 +104,7 @@ export function PuzzleSubmit({
     "",
     `- 제목: ${shared.title}`,
     `- 만든 사람: ${shared.author ?? "(밝히지 않음)"}`,
-    `- 난이도: ${DIFFICULTY_LABEL[shared.difficulty] ?? shared.difficulty}`,
+    `- 난이도: ${DIFFICULTY_LABELS[shared.difficulty]}`,
     `- 규모: ${shared.playerCount}명 · 밤 ${shared.nights}`,
     `- 유일해 검증: ${unverified ? "건너뜀 — 검증기가 능력을 모르는 역할이 들어 있습니다" : "통과 (브라우저 솔버 전수 탐색)"}`,
     `- 해설: ${steps}단계`,

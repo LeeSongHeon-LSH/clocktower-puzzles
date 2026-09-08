@@ -9,8 +9,8 @@
 // decode 입력은 **신뢰할 수 없는 외부 입력**이다. 반드시 validate를 거친다.
 
 import { ROLES } from "@/data/roles";
-import { ROLE_IDS, type Claim, type ClaimInfo, type GameEvent, type InfoData, type Prop, type RoleId, type Seat } from "@/lib/solver/types";
-import type { Difficulty, Puzzle, PuzzleEdition, PuzzleQuestion } from "./schema";
+import { INFO_TYPES, ROLE_IDS, type Claim, type ClaimInfo, type GameEvent, type InfoData, type Prop, type RoleId, type Seat } from "@/lib/solver/types";
+import { DIFFICULTY_ORDER, type Puzzle, type PuzzleEdition, type PuzzleQuestion } from "./schema";
 
 /** 링크 형식 버전. 형식이 바뀌면 올리고, 옛 링크는 안내 문구를 띄운다. */
 export const SHARE_VERSION = 1;
@@ -29,25 +29,17 @@ export const LIMITS = {
   maxInfoPerClaim: 5,
 } as const;
 
-/** 공유 링크에 실리는 퍼즐. 공식 퍼즐과 달리 해설·힌트는 선택이다. */
-export interface SharedPuzzle {
-  title: string;
-  /** 작성자 별명 (선택) */
-  author?: string;
-  edition: PuzzleEdition;
-  difficulty: Difficulty;
-  playerCount: number;
-  rolePool: RoleId[];
-  nights: number;
-  claims: Claim[];
-  events: GameEvent[];
-  questions: PuzzleQuestion[];
-  solution: RoleId[];
-  currentDemonSeat?: Seat;
-  intro?: string;
+/**
+ * 공유 링크에 실리는 퍼즐 — `Puzzle`에서 **파생**한다 (id·source는 여는 쪽이 붙이고, 해설·힌트는 선택).
+ * 스키마에 필드를 더하면 여기도 자동으로 따라오고, `validateShared`가 그 필드를 읽지 않으면
+ * 반환 타입 검사가 잡는다 (2026-09-08 리뷰: `realGame`이 세 곳에 손으로 복제된 채 빠져 있었다).
+ */
+export type SharedPuzzle = Omit<Puzzle, "id" | "source" | "hints" | "walkthrough"> & {
   hints?: string[];
   walkthrough?: string[];
-}
+};
+
+const EDITIONS: readonly PuzzleEdition[] = ["tb", "bmr", "sv", "mixed"];
 
 // ── 인코딩 ───────────────────────────────────────────────────────
 
@@ -126,6 +118,14 @@ function int(v: unknown, min: number, max: number, field: string): number {
   return v;
 }
 
+/** 허용된 값 중 하나여야 한다 — 다른 필드처럼 조용히 기본값으로 바꾸지 않고 거부한다 */
+function oneOf<T extends string>(v: unknown, allowed: readonly T[], field: string): T {
+  if (typeof v !== "string" || !(allowed as readonly string[]).includes(v)) {
+    throw new Error(`${field} 값이 잘못됐습니다.`);
+  }
+  return v as T;
+}
+
 function roleId(v: unknown, field: string): RoleId {
   if (typeof v !== "string" || !(ROLE_IDS as readonly string[]).includes(v)) {
     throw new Error(`${field}: 알 수 없는 역할입니다.`);
@@ -162,9 +162,11 @@ function validateProp(v: unknown, players: number, where: string): Prop {
 
 function validateInfoData(v: unknown, players: number, where: string): InfoData {
   if (!isRecord(v)) throw new Error(`${where}: 정보 형식이 잘못됐습니다.`);
-  const t = v.type;
+  if (!(INFO_TYPES as readonly unknown[]).includes(v.type)) throw new Error(`${where}: 알 수 없는 정보 종류입니다.`);
+  const t = v.type as InfoData["type"];
   const count = (max: number) => int(v.count, 0, max, `${where} 숫자`);
 
+  // default 없음 — InfoData에 변형을 더하면 컴파일러가 여기서 누락을 잡는다
   switch (t) {
     case "washerwoman":
     case "investigator":
@@ -240,8 +242,6 @@ function validateInfoData(v: unknown, players: number, where: string): InfoData 
       return { type: "gambler", target: int(v.target, 0, players - 1, `${where} 좌석`), role: roleId(v.role, where) };
     case "sage":
       return { type: "sage", targets: seatPair(v.targets, players, where) };
-    default:
-      throw new Error(`${where}: 알 수 없는 정보 종류입니다.`);
   }
 }
 
@@ -372,12 +372,8 @@ export function validateShared(v: unknown): SharedPuzzle {
   return {
     title: str(v.title, LIMITS.maxTitle, "제목")!,
     author: str(v.author, LIMITS.maxAuthor, "별명", false),
-    edition: (["tb", "bmr", "sv", "mixed"] as const).includes(v.edition as PuzzleEdition)
-      ? (v.edition as PuzzleEdition)
-      : "mixed",
-    difficulty: (["easy", "normal", "hard"] as const).includes(v.difficulty as Difficulty)
-      ? (v.difficulty as Difficulty)
-      : "normal",
+    edition: oneOf(v.edition, EDITIONS, "판본"),
+    difficulty: oneOf(v.difficulty, DIFFICULTY_ORDER, "난이도"),
     playerCount,
     rolePool,
     nights,
@@ -387,6 +383,7 @@ export function validateShared(v: unknown): SharedPuzzle {
     solution,
     currentDemonSeat:
       v.currentDemonSeat === undefined ? undefined : int(v.currentDemonSeat, 0, playerCount - 1, "현재 악마 좌석"),
+    realGame: v.realGame === true ? true : undefined,
     intro: str(v.intro, LIMITS.maxText, "도입 서술", false),
     hints: strList(v.hints, LIMITS.maxHints, "힌트"),
     walkthrough: strList(v.walkthrough, LIMITS.maxWalkthrough, "해설"),

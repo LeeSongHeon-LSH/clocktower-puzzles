@@ -176,9 +176,10 @@ describe("Goon: 건전성 거부", () => {
 describe("Goon: 검토에서 드러난 구멍", () => {
   it("푸카는 밤1부터 고르므로 건달이 밤1에 악해질 수 있다", () => {
     // 푸카는 밤1부터 깨어나 중독 대상을 고른다 (킬만 밤2부터다). 건달이 낮1에 처형돼
-    // 밤2에는 아무도 고를 수 없으므로, 수학자가 밤1에 센 비정상 1명은 '푸카가 건달을
-    // 골라 스스로 취했다'로만 설명된다. 밤2의 사망은 암살자가, 푸카의 밤2 킬 부재는
-    // '밤1 선택이 무효였다'가 설명한다.
+    // 밤2에는 아무도 고를 수 없으므로, 수학자가 밤1에 센 비정상 1명은 두 가지로 설명된다:
+    // (a) 푸카가 건달을 골라 스스로 취했다 → 건달은 악 (밤2 사망은 암살자, 킬 부재는 선택 무효),
+    // (b) 푸카가 좌석 7을 중독시켰고 밤2에 그가 죽었다 → 건달은 선 (수학자가 푸카 독 피해자를 센다).
+    // 예전에는 (b)가 빠져 있었다 — 수학자가 푸카의 관대 독 집합을 세지 않았기 때문이다.
     const worlds = solve({
       playerCount: 8,
       nights: 2,
@@ -201,7 +202,8 @@ describe("Goon: 검토에서 드러난 구멍", () => {
     // 좌석 0이 진짜 수학자이고 좌석 1이 진짜 건달인 세계가 존재해야 한다
     const honest = worlds.filter((w) => w.assignment[0] === "mathematician" && w.assignment[1] === "goon");
     expect(honest.length).toBeGreaterThan(0);
-    expect(honest.every((w) => w.goonEvil === true)).toBe(true);
+    expect(honest.some((w) => w.goonEvil === true)).toBe(true); // (a) 푸카가 건달을 골랐다
+    expect(honest.some((w) => w.goonEvil === false)).toBe(true); // (b) 푸카가 좌석 7을 중독시켰다
   });
 
   it("기록 없는 선택자도 취하므로 수학자가 한 명을 더 셀 수 있다", () => {

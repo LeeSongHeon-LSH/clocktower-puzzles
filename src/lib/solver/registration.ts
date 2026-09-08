@@ -55,6 +55,25 @@ export function isEvilRole(role: RoleId): boolean {
   return t === "minion" || t === "demon";
 }
 
+export function isGoodTeam(role: RoleId): boolean {
+  const t = teamOf(role);
+  return t === "townsfolk" || t === "outsider";
+}
+
+/**
+ * 대상들 중 악으로 등록될 수 있는 수의 [min, max] 범위 (초공감자·예언자·거짓 판정 공용).
+ * 반드시 악인 좌석은 min·max 모두에, 악으로도 선으로도 등록될 수 있는 좌석은 max에만 든다.
+ */
+export function evilRange(view: TokenView, targets: Seat[]): [number, number] {
+  let min = 0;
+  let max = 0;
+  for (const t of targets) {
+    if (mustRegisterEvil(view, t)) { min++; max++; }
+    else if (canRegisterEvil(view, t)) max++;
+  }
+  return [min, max];
+}
+
 /** 이 좌석이 역할 R로 등록될 수 있는가 (shown-role 계열 정보용) */
 export function canShowAsRole(view: TokenView, seat: Seat, shown: RoleId): boolean {
   const actual = view.tokenRole(seat);

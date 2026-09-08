@@ -4,7 +4,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import type { Difficulty, PuzzleEdition, PuzzleSource } from "@/lib/puzzles/schema";
+import { DIFFICULTY_LABELS, DIFFICULTY_ORDER, type Difficulty, type PuzzleEdition, type PuzzleSource } from "@/lib/puzzles/schema";
 import { EDITION_LABELS } from "@/data/roles";
 import { useProgress } from "@/lib/progress";
 
@@ -28,14 +28,6 @@ const SOURCE_LABELS: Record<PuzzleSource, string> = {
   official: "수록",
   community: "사설",
 };
-
-const DIFFICULTY_LABELS: Record<Difficulty, string> = {
-  easy: "쉬움",
-  normal: "보통",
-  hard: "어려움",
-};
-
-const DIFFICULTY_ORDER: Difficulty[] = ["easy", "normal", "hard"];
 
 export function HomeClient({ puzzles }: { puzzles: PuzzleSummary[] }) {
   const [filter, setFilter] = useState<Difficulty | "all">("all");

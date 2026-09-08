@@ -10,9 +10,10 @@ import { composition } from "./composition";
 import { checkContent } from "./roles";
 import { checkContentFalse } from "./roles/false-info";
 import { Ctx, isDrunk, isExtraDrunk, isNdPoisoned, isPukkaPoisoned, isSweetDrunk, isVigorPoisoned, wakes } from "./ctx";
+import { isEvilRole, isGoodTeam } from "./registration";
 import { DemonScenario, demonScenarios, RoleSwapCase, Schedule, SweetheartCase, tokenRoleAt } from "./timeline";
 import type { Claim, InfoData, RoleId, Seat, SolverPuzzle, World } from "./types";
-import { PHILOSOPHER_GAINABLE, SOLVER_ROLES, SWAPPABLE_ROLES, worldKey } from "./types";
+import { PHILOSOPHER_GAINABLE, SOLVER_ROLES, SWAPPABLE_ROLES, UNCLAIMABLE_ROLES, worldKey } from "./types";
 
 function combinations<T>(arr: T[], k: number): T[][] {
   if (k === 0) return [[]];
@@ -43,10 +44,7 @@ function permutations<T>(arr: T[], k: number): T[][] {
  * "유일해"라는 결론 자체가 거짓이 된다 — unmodeledRoles가 그 판정을 한다.
  */
 function assignableRoles(pz: SolverPuzzle): RoleId[] {
-  const out = new Set<RoleId>(pz.rolePool.filter((r) => {
-    const t = ROLES[r].team;
-    return t === "minion" || t === "demon"; // 데몬 자리는 풀의 데몬들로 탐색한다
-  }));
+  const out = new Set<RoleId>(pz.rolePool.filter(isEvilRole)); // 데몬 자리는 풀의 데몬들로 탐색한다
   for (const c of pz.claims) {
     out.add(c.role);
     if (c.roleChange !== undefined) out.add(c.roleChange.from); // 마귀할멈 변신 전 역할은 셋업에 배정된다
@@ -57,10 +55,7 @@ function assignableRoles(pz: SolverPuzzle): RoleId[] {
   if (pz.rolePool.includes("goon")) out.add("goon");
   if (pz.rolePool.includes("cerenovus")) {
     // 광기 좌석의 실제 역할은 풀의 어떤 선한 역할이든 될 수 있다
-    for (const r of pz.rolePool) {
-      const t = ROLES[r].team;
-      if (t === "townsfolk" || t === "outsider") out.add(r);
-    }
+    for (const r of pz.rolePool) if (isGoodTeam(r)) out.add(r);
   }
   return [...out];
 }
@@ -122,8 +117,8 @@ function validatePuzzle(pz: SolverPuzzle): Claim[] {
     if (c.seat < 0 || c.seat >= pz.playerCount) throw new Error(`잘못된 좌석: ${c.seat}`);
     if (claimBySeat[c.seat]) throw new Error(`좌석 ${c.seat}의 주장이 중복`);
     if (!pz.rolePool.includes(c.role)) throw new Error(`풀에 없는 역할 주장: ${c.role}`);
-    if (c.role === "drunk" || c.role === "mutant" || c.role === "lunatic" || ROLES[c.role].team === "demon") {
-      // 숨은 외부인(주정뱅이·광인·루나틱)은 자기 정체를 모르거나 감춘다 — 공개 주장하지 않는다
+    if (UNCLAIMABLE_ROLES.includes(c.role) || ROLES[c.role].team === "demon") {
+      // 숨은 외부인(주정뱅이·변종·미치광이)은 자기 정체를 모르거나 감춘다 — 공개 주장하지 않는다
       throw new Error(`주장할 수 없는 역할: ${c.role}`);
     }
     if (hasBarber && ROLES[c.role].team === "minion") {
@@ -273,10 +268,7 @@ function enumerate(pz: SolverPuzzle, claimBySeat: Claim[], sched: Schedule): Wor
           // 날조로 만들 수 있다 — 그 좌석의 실제 역할은 풀의 어떤 선한 역할이든 될 수 있다.
           const madChoices: ({ seat: Seat; role: RoleId } | null)[] = [null];
           if (minionRoles.includes("cerenovus")) {
-            const goodPoolRoles = pz.rolePool.filter((r) => {
-              const t = ROLES[r].team;
-              return t === "townsfolk" || t === "outsider";
-            });
+            const goodPoolRoles = pz.rolePool.filter(isGoodTeam);
             for (const g of goodSeats) {
               for (const r of goodPoolRoles) {
                 if (r !== claimBySeat[g].role) madChoices.push({ seat: g, role: r });
@@ -544,7 +536,7 @@ function tryWorld(
   const poisonerSeat = assignment.indexOf("poisoner");
   const vortoxSeat = assignment.indexOf("vortox");
   const needsExactPoison = soberInfos.some((i) => i.data.type === "mathematician");
-  // 독살 대상은 등록상 생존자여야 한다 — 단 가짜 죽음 좀부울은 실제로 살아 있어 대상이 될 수 있다
+  // 독살 대상은 등록상 생존자여야 한다 — 단 가짜 죽음 좀버얼은 실제로 살아 있어 대상이 될 수 있다
   const canBePoisonTarget = (night: number, target: Seat): boolean =>
     sched.aliveAtNightStart(night)[target] ||
     (sc.zombuulFakeDeadAt != null && target === sc.currentDemonSeat && sc.zombuulFakeDeadAt < night);
@@ -638,7 +630,7 @@ function tryWorld(
       const opts = alive
         .map((a, s) => (a && !forbidden?.has(s) ? s : null))
         .filter((s): s is Seat => s !== null);
-      // 가짜 죽음 좀부울(등록상 사망, 실제 생존)도 독살 대상이 될 수 있다
+      // 가짜 죽음 좀버얼(등록상 사망, 실제 생존)도 독살 대상이 될 수 있다
       if (!alive[sc.currentDemonSeat] && canBePoisonTarget(night, sc.currentDemonSeat) && !forbidden?.has(sc.currentDemonSeat)) {
         opts.push(sc.currentDemonSeat);
       }

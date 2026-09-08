@@ -14,7 +14,7 @@ import { ROLES } from "@/data/roles";
 import { PUZZLES } from "@/data/puzzles";
 import { encodePuzzle, decodePuzzle, toPuzzle, type SharedPuzzle } from "@/lib/puzzles/codec";
 import { analyze } from "@/lib/solver/solve";
-import { ROLE_IDS, SOLVER_ROLES, type Claim, type RoleId, type Seat, type SolverPuzzle } from "@/lib/solver/types";
+import { ROLE_IDS, SOLVER_ROLES, UNCLAIMABLE_ROLES, type Claim, type RoleId, type Seat, type SolverPuzzle } from "@/lib/solver/types";
 
 const out: Record<string, unknown> = { ranAt: new Date().toISOString() };
 const ms = (t0: number) => Math.round((performance.now() - t0) * 10) / 10;
@@ -55,9 +55,8 @@ for (const p of PUZZLES) {
   for (const c of p.claims) exercised.add(c.role);
 }
 
-/** 좌석에 앉힐 수 없는 역할 (자기 정체를 모르거나 감춘다 — 주장으로 쓸 수 없다) */
-const UNCLAIMABLE: RoleId[] = ["drunk", "mutant", "lunatic"];
-const isClaimable = (r: RoleId) => !UNCLAIMABLE.includes(r) && ROLES[r].team !== "demon";
+/** 좌석에 앉힐 수 없는 역할 — 솔버의 구조 검사와 같은 목록 (types.ts UNCLAIMABLE_ROLES) */
+const isClaimable = (r: RoleId) => !UNCLAIMABLE_ROLES.includes(r) && ROLES[r].team !== "demon";
 
 /** 정보 없는 단순 주장만으로 이루어진 최소 시나리오 — 구조가 성립하는지만 본다 */
 function minimalScenario(subject: RoleId): SolverPuzzle | null {

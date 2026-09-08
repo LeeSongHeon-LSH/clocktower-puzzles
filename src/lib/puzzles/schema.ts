@@ -6,6 +6,10 @@ import type { RoleId, Seat, SolverPuzzle } from "@/lib/solver/types";
 export type Difficulty = "easy" | "normal" | "hard";
 export type PuzzleEdition = "tb" | "bmr" | "sv" | "mixed";
 
+/** 난이도 표시 순서와 한글 라벨 — 홈 필터·풀이 화면·에디터·수록 신청서가 전부 이 한 벌을 쓴다 */
+export const DIFFICULTY_ORDER: readonly Difficulty[] = ["easy", "normal", "hard"];
+export const DIFFICULTY_LABELS: Record<Difficulty, string> = { easy: "쉬움", normal: "보통", hard: "어려움" };
+
 /**
  * 출처. 난이도와는 **직교하는 축**이다 — 사설 문제도 쉬울 수 있고 어려울 수 있으므로
  * 난이도 값에 "사설"을 섞지 않는다.
@@ -69,6 +73,36 @@ export interface Puzzle extends SolverPuzzle {
   solution: RoleId[];
   /** 데몬 승계(스타 패스 등)가 있었던 퍼즐은 현재 데몬 좌석 명시. 기본: solution의 임프 좌석 */
   currentDemonSeat?: Seat;
+}
+
+/** 지금 이 순간의 악마 좌석 — 승계가 있었으면 명시된 좌석, 아니면 solution의 악마 좌석 */
+export function currentDemonOf(p: { solution: readonly RoleId[]; currentDemonSeat?: Seat }): Seat {
+  return p.currentDemonSeat ?? p.solution.findIndex((r) => ROLES[r].team === "demon");
+}
+
+/**
+ * 모든 문제가 묻는 표준 질문 셋 (REQUIREMENTS §2.2, 2026-09-06 결정): ① 악마의 위치 → ② 악마의 종류
+ * → ③ 하수인의 위치. 정답은 전부 그리모어에서 파생된다. 대본에 악마가 한 종류뿐이면 ②를 뺀다.
+ * 에디터(buildShared)·수록 신청 파일·puzzles.test.ts의 질문 검사가 같은 함수를 쓴다.
+ */
+export function standardQuestions(p: {
+  solution: readonly RoleId[];
+  rolePool: readonly RoleId[];
+  currentDemonSeat?: Seat;
+}): PuzzleQuestion[] {
+  const demonRole = p.solution.find((r) => ROLES[r].team === "demon");
+  const out: PuzzleQuestion[] = [
+    { id: "demon", text: "지금 이 순간의 악마는 누구인가?", answerSeats: [currentDemonOf(p)] },
+  ];
+  if (demonRole !== undefined && p.rolePool.filter((r) => ROLES[r].team === "demon").length > 1) {
+    out.push({ id: "demonType", text: "그 악마는 어떤 악마인가?", answerRole: demonRole });
+  }
+  out.push({
+    id: "minion",
+    text: "하수인은 누구인가?",
+    answerSeats: p.solution.flatMap((r, s) => (ROLES[r].team === "minion" ? [s] : [])),
+  });
+  return out;
 }
 
 export function definePuzzle(p: Puzzle): Puzzle {

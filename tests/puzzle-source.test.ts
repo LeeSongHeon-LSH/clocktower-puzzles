@@ -5,8 +5,9 @@
 
 import { describe, expect, it } from "vitest";
 import { PUZZLES } from "@/data/puzzles";
+import { ROLES } from "@/data/roles";
 import type { SharedPuzzle } from "@/lib/puzzles/codec";
-import { definePuzzle, type Puzzle } from "@/lib/puzzles/schema";
+import { definePuzzle, standardQuestions, type Puzzle } from "@/lib/puzzles/schema";
 import { deriveEdition, indexSnippet, nextCommunityId, puzzleFileSource } from "@/lib/puzzles/source";
 import { analyze } from "@/lib/solver/solve";
 
@@ -39,10 +40,22 @@ describe("수록 신청 파일 생성", () => {
     expect(worlds[0].assignment).toEqual(p.solution);
   });
 
-  it("질문 정답이 solution에서 도출된다 (puzzles.test.ts의 검사와 같은 규칙)", () => {
-    const p = evaluate(source);
-    const demonSeat = p.solution.indexOf("imp");
-    expect(p.questions[0]).toMatchObject({ id: "demon", answerSeats: [demonSeat] });
+  it("질문이 표준 셋(악마 위치·종류·하수인 위치)이다 — puzzles.test.ts가 수록 퍼즐에 요구하는 그 모양", () => {
+    // 에디터가 만든 SharedPuzzle은 questions를 standardQuestions로 채운다. 그 파일을 index.ts에
+    // 등록하면 puzzles.test.ts의 "악마의 위치·종류·하수인의 위치를 묻는다"를 그대로 통과해야 한다.
+    const shared: SharedPuzzle = { ...sharedFrom("mx-05"), questions: standardQuestions(sharedFrom("mx-05")) };
+    const p = evaluate(puzzleFileSource(shared, "cm-01"));
+    expect(p.questions.map((q) => q.id)).toEqual(
+      p.rolePool.filter((r) => ROLES[r].team === "demon").length === 1
+        ? ["demon", "minion"]
+        : ["demon", "demonType", "minion"],
+    );
+    expect(p.questions[0]).toMatchObject({ id: "demon", answerSeats: [p.solution.findIndex((r) => ROLES[r].team === "demon")] });
+  });
+
+  it("실제 판 표시가 파일에 남는다", () => {
+    const p = evaluate(puzzleFileSource({ ...sharedFrom("mx-05"), realGame: true }, "cm-02"));
+    expect(p.realGame).toBe(true);
   });
 
   it("사설 문제로 표시되고 id·별명이 들어간다", () => {

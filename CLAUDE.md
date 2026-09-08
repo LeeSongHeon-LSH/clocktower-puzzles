@@ -19,8 +19,10 @@ Blood on the Clocktower 상황 추리 퍼즐 웹앱. 설계 합의 내용은 `do
   모르는 역할이 든 퍼즐 하나뿐이고, 그때도 **건너뛰는 건 유일해 탐색뿐**이다 — 구조 검사와
   해설 필수는 그대로다 (`REQUIREMENTS.md` §2.5.1). 검증 가능 여부는 퍼즐 내용에서 파생되는
   값이지 저자가 적는 필드가 아니다.
-- 역할명 UI 표기는 항상 `한국어(영어)` 형식, 사전은 `src/data/roles.ts` 한 곳에서만.
-- 솔버(`src/lib/solver/`)는 UI에 노출 금지 (스포일러).
+- 역할명 UI 표기는 항상 `한국어(영어)` 형식, 사전은 `src/data/roles.ts` 한 곳에서만. 산문(퍼즐
+  서술·해설·규칙 본문)도 사전 표기를 따른다 — `tests/role-names.test.ts`가 옛 표기를 잡는다.
+- 솔버(`src/lib/solver/`)는 UI에 노출 금지 (스포일러). 예외는 순수 표·상수(`composition.ts`,
+  `types.ts`)와 에디터·공유 링크 로더의 `analyze` 호출 둘뿐이다 (`ARCHITECTURE.md` §4.2).
 - 공식 BotC 아트/아이콘 사용 금지 (비공식 팬 프로젝트).
 
 Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.

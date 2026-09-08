@@ -52,7 +52,7 @@ describe("Zombuul: 킬 조건 — 직전 낮의 처형 사망", () => {
 
 describe("Zombuul: 가짜 죽음", () => {
   it("처형돼도 탕녀 없이 게임이 계속된다 — 등록상 죽고 비밀리에 생존", () => {
-    // 밤2 킬 → 낮2 좀부울 처형(가짜 죽음) → 밤3은 처형 다음이라 조용해도 공짜
+    // 밤2 킬 → 낮2 좀버얼 처형(가짜 죽음) → 밤3은 처형 다음이라 조용해도 공짜
     const pz = makePuzzle({
       assignmentLength: 7, rolePool: ["zombuul", "spy"], nights: 3,
       events: [
@@ -100,13 +100,13 @@ describe("Zombuul: 가짜 죽음", () => {
   });
 
   it("중독된 채 처형되면 정말로 죽는다 — 그때만 탕녀 승계", () => {
-    // 밤2 조용(좀부울 중독으로 설명) → 그 독이 낮2까지 지속 → 처형 = 진짜 죽음 → 탕녀 승계
+    // 밤2 조용(좀버얼 중독으로 설명) → 그 독이 낮2까지 지속 → 처형 = 진짜 죽음 → 탕녀 승계
     const withSw: RoleId[] = ["zombuul", "scarletwoman", "poisoner", "chef", "librarian", "washerwoman", "fortuneteller"];
     const events = [{ type: "execution", day: 2, seat: 0 } as const];
     const pz = makePuzzle({ assignmentLength: 7, rolePool: ["zombuul", "scarletwoman", "poisoner"], nights: 3, events: [...events] });
     const scs = demonScenarios(pz, new Schedule(pz), withSw);
     expect(scs.length).toBeGreaterThan(0);
-    // 조용한 밤2의 유일한 설명이 좀부울 중독이라 가짜 죽음(멀쩡함 필요)은 성립하지 않는다
+    // 조용한 밤2의 유일한 설명이 좀버얼 중독이라 가짜 죽음(멀쩡함 필요)은 성립하지 않는다
     expect(scs.every((s) => s.currentDemonSeat === 1)).toBe(true);
     expect(scs.every((s) => s.poisonRequired.get(2) === 0)).toBe(true);
     // 탕녀가 없으면 진짜 죽음으로 게임이 끝났어야 한다
@@ -140,7 +140,7 @@ describe("Zombuul: 기상", () => {
 });
 
 describe("Zombuul: solve 통합", () => {
-  it("처형 다음의 조용한 밤이 임프 세계를 지우고 좀부울 세계만 남긴다", () => {
+  it("처형 다음의 조용한 밤이 임프 세계를 지우고 좀버얼 세계만 남긴다", () => {
     const pz = makePuzzle({
       assignmentLength: 7,
       rolePool: ["imp", "zombuul", "spy", "empath", "chef", "librarian", "washerwoman", "fortuneteller", "undertaker", "oracle"],

@@ -3,7 +3,7 @@
 
 import { roleLabel } from "@/data/roles";
 import { seatName } from "@/lib/puzzles/schema";
-import type { InfoData, Prop, RoleId, Seat } from "@/lib/solver/types";
+import type { GameEvent, InfoData, Prop, RoleId, Seat } from "@/lib/solver/types";
 
 function pair(a: Seat, b: Seat): string {
   return `${seatName(a)}·${seatName(b)}`;
@@ -102,4 +102,81 @@ export function renderInfo(data: InfoData): string {
     case "sage":
       return `죽는 순간 배웠다: ${seatName(data.targets[0])}·${seatName(data.targets[1])} 중 하나가 나를 죽인 악마다`;
   }
+}
+
+// ── 타임라인 문장 ─────────────────────────────────────────────────
+// 풀이 화면(PuzzleClient)과 에디터 미리보기(PuzzleCreator)가 같은 문장을 쓴다.
+// 역할명이 들어가는 문장(처단자 총격·성결자 발동)은 사전을 거친다.
+
+/** 낮 공개 행동 한 건 (day 필드는 없어도 된다 — 에디터 초안도 같은 모양이다) */
+export type DayActionLike =
+  | { type: "slayerShot"; seat: Seat; target: Seat; died: boolean }
+  | { type: "nomination"; nominator: Seat; nominee: Seat }
+  | { type: "virginTrigger"; nominator: Seat; nominee: Seat };
+
+export function renderDayAction(act: DayActionLike): string {
+  const slayer = roleLabel("slayer");
+  if (act.type === "slayerShot") {
+    return act.died
+      ? `${seatName(act.seat)}가 ${slayer}를 자처하며 ${seatName(act.target)}를 쐈다 — ${seatName(act.target)}가 죽었다!`
+      : `${seatName(act.seat)}가 ${slayer}를 자처하며 ${seatName(act.target)}를 쐈지만, 아무 일도 일어나지 않았다.`;
+  }
+  if (act.type === "nomination") {
+    return `${seatName(act.nominator)}가 ${seatName(act.nominee)}를 지명했지만, 아무 일도 일어나지 않았다.`;
+  }
+  return `${seatName(act.nominator)}가 ${seatName(act.nominee)}를 지명한 순간, ${roleLabel("virgin")} 발동으로 ${seatName(act.nominator)}가 그 자리에서 처형됐다!`;
+}
+
+/** 밤 n의 문장. 첫 밤은 사망이 없다 */
+export function renderNightLine(night: number, dead: readonly Seat[]): string {
+  if (night === 1) return "첫 밤 — 마을이 잠들고 정보 역할들이 깨어났다. 악마는 아직 죽이지 않는다.";
+  return dead.length === 0 ? "아무도 죽지 않았다." : `${dead.map(seatName).join(", ")}가 죽은 채 발견됐다.`;
+}
+
+/** 지나간 낮의 처형 문장. 성결자 발동으로 처형이 이미 일어난 낮은 행동 문장이 대신하므로 없다 */
+export function renderExecutionLine(executed: Seat | null, virginDay: boolean): string | null {
+  if (virginDay) return null;
+  return executed === null ? "처형이 없었다." : `마을은 ${seatName(executed)}를 처형했다.`;
+}
+
+/** 그날 투표에 손을 든 사람 (부분 기록) */
+export function renderVoteLine(voters: readonly Seat[]): string | null {
+  return voters.length === 0 ? null : `이날 투표에 손을 든 사람: ${voters.map(seatName).join(", ")}.`;
+}
+
+/** 현재 낮 — 처형 전, 풀이자의 차례 */
+export const NOW_LINE = "지금 — 처형 전. 당신의 추리 차례다.";
+
+export interface TimelineItem {
+  label: string;
+  text: string;
+  kind: "night" | "day" | "now";
+}
+
+/** 사건 원장 전체를 밤1 → 낮1 → … → 지금 순서의 문장으로 */
+export function renderTimeline(events: readonly GameEvent[], nights: number): TimelineItem[] {
+  const dayLines = (d: number): string[] => {
+    const lines: string[] = [];
+    const vote = renderVoteLine(events.flatMap((e) => (e.type === "vote" && e.day === d ? [e.seat] : [])));
+    if (vote) lines.push(vote);
+    for (const e of events) {
+      if ((e.type === "slayerShot" || e.type === "nomination" || e.type === "virginTrigger") && e.day === d) {
+        lines.push(renderDayAction(e));
+      }
+    }
+    return lines;
+  };
+  const items: TimelineItem[] = [{ label: "밤 1", text: renderNightLine(1, []), kind: "night" }];
+  for (let d = 1; d < nights; d++) {
+    const exec = events.find((e): e is Extract<GameEvent, { type: "execution" }> => e.type === "execution" && e.day === d);
+    const virginDay = events.some((e) => e.type === "virginTrigger" && e.day === d);
+    const lines = dayLines(d);
+    const execLine = renderExecutionLine(exec?.seat ?? null, virginDay);
+    if (execLine) lines.push(execLine);
+    items.push({ label: `낮 ${d}`, text: lines.join(" "), kind: "day" });
+    const dead = events.flatMap((e) => (e.type === "death" && e.night === d + 1 ? [e.seat] : []));
+    items.push({ label: `밤 ${d + 1}`, text: renderNightLine(d + 1, dead), kind: "night" });
+  }
+  items.push({ label: `낮 ${nights}`, text: [...dayLines(nights), NOW_LINE].join(" "), kind: "now" });
+  return items;
 }

@@ -4,17 +4,15 @@
 
 import { useMemo, useState } from "react";
 import type { Puzzle } from "@/lib/puzzles/schema";
-import { seatName } from "@/lib/puzzles/schema";
+import { currentDemonOf, DIFFICULTY_LABELS, seatName } from "@/lib/puzzles/schema";
 import { EDITION_LABELS, ROLES, TEAM_LABELS, roleLabel } from "@/data/roles";
-import type { GameEvent, RoleId, Team } from "@/lib/solver/types";
+import type { RoleId, Team } from "@/lib/solver/types";
 import { eventDeadSeat } from "@/lib/solver/types";
 import { composition, OUTSIDER_MODIFIERS } from "@/lib/solver/composition";
-import { renderClaimInfo, renderRoleChange } from "@/lib/render";
+import { renderClaimInfo, renderRoleChange, renderTimeline } from "@/lib/render";
 import { loadProgress, saveProgress, useProgress } from "@/lib/progress";
 import { clearNotes, saveNote, useSeatNotes } from "@/lib/notes";
 import { MARKS, TownSquare, type SeatAnnotation, type TownSquareReveal } from "@/components/TownSquare";
-
-const DIFFICULTY_LABELS = { easy: "쉬움", normal: "보통", hard: "어려움" } as const;
 
 /** 대본 표시 순서 — 그리모어와 같은 순서다 */
 const TEAM_ORDER: Team[] = ["townsfolk", "outsider", "minion", "demon"];
@@ -61,8 +59,7 @@ export function PuzzleClient({ puzzle, verified = true }: { puzzle: Puzzle; veri
   const comp = composition(puzzle.playerCount, false);
   const modifiers = puzzle.rolePool.filter((r) => OUTSIDER_MODIFIERS[r]);
 
-  const demonSeat =
-    puzzle.currentDemonSeat ?? puzzle.solution.findIndex((r) => ROLES[r].team === "demon");
+  const demonSeat = currentDemonOf(puzzle);
 
   /** 악마의 종류를 묻는 질문의 선택지 — 대본 표시와 같은 순서를 쓴다 */
   const demonChoices = puzzle.rolePool.filter((r) => ROLES[r].team === "demon");
@@ -77,7 +74,8 @@ export function PuzzleClient({ puzzle, verified = true }: { puzzle: Puzzle; veri
         const claim = claimBySeat.get(seat);
         return {
           claim: claim ? ROLES[claim.role].ko : undefined,
-          guess: notes[seat]?.guess ? ROLES[notes[seat].guess].ko : undefined,
+          // 저장된 추측이 사전에서 빠진 옛 id일 수 있다 — 렌더 중 예외 대신 표시를 생략한다
+          guess: notes[seat]?.guess ? ROLES[notes[seat].guess]?.ko : undefined,
           mark: notes[seat]?.mark,
         };
       }),
@@ -131,61 +129,8 @@ export function PuzzleClient({ puzzle, verified = true }: { puzzle: Puzzle; veri
     });
   };
 
-  // ── 타임라인: 밤1 → 낮1 → 밤2 → … → 현재 ───────────────────
-  const timeline = useMemo(() => {
-    /** 낮 d의 공개 행동 문장들 (이벤트 배열 순서 = 일어난 순서, 투표는 한 문장으로 묶는다) */
-    const dayLines = (d: number): string[] => {
-      const voters = puzzle.events.filter(
-        (e): e is Extract<GameEvent, { type: "vote" }> => e.type === "vote" && e.day === d,
-      );
-      const voteLine = voters.length > 0
-        ? [`이날 투표에 손을 든 사람: ${voters.map((e) => seatName(e.seat)).join(", ")}.`]
-        : [];
-      return [...voteLine, ...puzzle.events.flatMap((e) => {
-        if (e.type === "slayerShot" && e.day === d) {
-          return e.died
-            ? [`${seatName(e.seat)}가 사냥꾼을 자처하며 ${seatName(e.target)}를 쐈다 — ${seatName(e.target)}가 죽었다!`]
-            : [`${seatName(e.seat)}가 사냥꾼을 자처하며 ${seatName(e.target)}를 쐈지만, 아무 일도 일어나지 않았다.`];
-        }
-        if (e.type === "nomination" && e.day === d) {
-          return [`${seatName(e.nominator)}가 ${seatName(e.nominee)}를 지명했지만, 아무 일도 일어나지 않았다.`];
-        }
-        if (e.type === "virginTrigger" && e.day === d) {
-          return [`${seatName(e.nominator)}가 ${seatName(e.nominee)}를 지명한 순간, ${seatName(e.nominator)}가 그 자리에서 처형됐다!`];
-        }
-        return [];
-      })];
-    };
-
-    const items: { label: string; text: string; kind: "night" | "day" | "now" }[] = [
-      { label: "밤 1", text: "마을이 잠들고, 정보 역할들이 깨어났다.", kind: "night" },
-    ];
-    for (let d = 1; d < puzzle.nights; d++) {
-      const exec = puzzle.events.find(
-        (e): e is Extract<GameEvent, { type: "execution" }> => e.type === "execution" && e.day === d,
-      );
-      const lines = dayLines(d);
-      if (exec) lines.push(`마을은 ${seatName(exec.seat)}를 처형했다.`);
-      else if (!puzzle.events.some((e) => e.type === "virginTrigger" && e.day === d)) lines.push("처형이 없었다.");
-      items.push({ label: `낮 ${d}`, text: lines.join(" "), kind: "day" });
-      const dead = puzzle.events.filter(
-        (e): e is Extract<GameEvent, { type: "death" }> => e.type === "death" && e.night === d + 1,
-      );
-      items.push({
-        label: `밤 ${d + 1}`,
-        text: dead.length
-          ? `${dead.map((e) => seatName(e.seat)).join(", ")}가 죽은 채 발견됐다.`
-          : "아무도 죽지 않았다.",
-        kind: "night",
-      });
-    }
-    items.push({
-      label: `낮 ${puzzle.nights}`,
-      text: [...dayLines(puzzle.nights), "지금 — 당신의 추리 차례다."].join(" "),
-      kind: "now",
-    });
-    return items;
-  }, [puzzle]);
+  // ── 타임라인: 밤1 → 낮1 → 밤2 → … → 현재 (문장은 에디터 미리보기와 같은 렌더러) ──
+  const timeline = useMemo(() => renderTimeline(puzzle.events, puzzle.nights), [puzzle]);
 
   const selectedClaim = selectedSeat != null ? claimBySeat.get(selectedSeat) : undefined;
   const note = selectedClaim ? notes[selectedClaim.seat] : undefined;

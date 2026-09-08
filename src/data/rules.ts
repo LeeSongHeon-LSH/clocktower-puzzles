@@ -53,7 +53,7 @@ export const RULE_SECTIONS: RuleSection[] = [
     statements: [
       {
         headline: "능력이 없는 것으로 취급된다",
-        body: "취한 학살자는 아무도 죽이지 못하고, 중독된 악마는 살인에 실패하며, 취한 처녀는 처형을 일으키지 못한다.",
+        body: "취한 처단자는 아무도 죽이지 못하고, 중독된 악마는 살인에 실패하며, 취한 성결자는 처형을 일으키지 못한다.",
         sources: ["no-ability"],
       },
       {

@@ -9,14 +9,17 @@
 import { useMemo, useState } from "react";
 import { ROLES, TEAM_LABELS, roleLabel } from "@/data/roles";
 import { LIMITS, encodePuzzle, toPuzzle, type SharedPuzzle } from "@/lib/puzzles/codec";
-import { seatName, type Difficulty } from "@/lib/puzzles/schema";
+import { DIFFICULTY_LABELS, DIFFICULTY_ORDER, seatName, standardQuestions, type Difficulty } from "@/lib/puzzles/schema";
 import { nextCommunityId } from "@/lib/puzzles/source";
 import { PuzzleSubmit } from "@/components/PuzzleSubmit";
 import { analyze, unmodeledRoles } from "@/lib/solver/solve";
+import { KILL_FAIL_EXPLAINERS, MULTI_DEATH_EXPLAINERS } from "@/lib/solver/timeline";
 import {
+  INFO_TYPES,
   ROLE_IDS,
   SOLVER_ROLES,
   SWAPPABLE_ROLES,
+  UNCLAIMABLE_ROLES,
   type GameEvent,
   type InfoData,
   type Prop,
@@ -24,16 +27,13 @@ import {
   type Seat,
   type Team,
 } from "@/lib/solver/types";
-import { renderInfo } from "@/lib/render";
+import { NOW_LINE, renderDayAction, renderExecutionLine, renderInfo, renderNightLine } from "@/lib/render";
 
-const DIFFICULTIES: { value: Difficulty; label: string }[] = [
-  { value: "easy", label: "쉬움" },
-  { value: "normal", label: "보통" },
-  { value: "hard", label: "어려움" },
+/** 주장할 수 없는 역할 — 솔버의 구조 검사(solve.ts validatePuzzle)와 같은 목록: 숨은 외부인 + 악마 전체 */
+const UNCLAIMABLE: readonly RoleId[] = [
+  ...UNCLAIMABLE_ROLES,
+  ...(ROLE_IDS as readonly RoleId[]).filter((r) => ROLES[r].team === "demon"),
 ];
-
-/** 주장할 수 없는 역할: 주정뱅이(자신을 모름)와 악마 */
-const UNCLAIMABLE: RoleId[] = ["drunk", ...(ROLE_IDS as readonly RoleId[]).filter((r) => ROLES[r].team === "demon")];
 
 /** 그리모어 순서 — 규칙 문서(/rules)와 같은 배열을 쓴다 */
 const TEAM_ORDER: Team[] = ["townsfolk", "outsider", "minion", "demon"];
@@ -82,14 +82,11 @@ const TEAM_STYLE: Record<Team, { rail: string; text: string; chipOn: string }> =
  */
 const DASHED_CHIP_ON = "border-brass bg-brass/15 text-brass";
 
-/** 정보를 만들어 내는 역할 = 정보 입력칸이 있는 역할 */
-const INFO_ROLES: RoleId[] = [
-  "washerwoman", "librarian", "investigator", "chef", "empath", "fortuneteller",
-  "undertaker", "ravenkeeper", "clockmaker", "seamstress", "mathematician", "chambermaid",
-  "monk", "exorcist", "dreamer", "oracle", "grandmother", "gambler", "sage",
-  "flowergirl", "towncrier", "sailor", "innkeeper", "courtier", "professor", "artist", "savant",
-  "snakecharmer", "philosopher",
-];
+/** 정보를 만들어 내는 역할 = 정보 입력칸이 있는 역할. InfoData 타입 목록에서 파생한다 (타입 이름 = 역할 id) */
+type InfoRole = (typeof INFO_TYPES)[number];
+function isInfoRole(r: RoleId): r is InfoRole {
+  return (INFO_TYPES as readonly string[]).includes(r);
+}
 
 interface DraftInfo {
   night: number;
@@ -105,6 +102,10 @@ interface DraftClaim {
   roleChange?: { night: number; from: RoleId };
 }
 
+/**
+ * 검증 결과. 초안의 지문(draftKey)과 함께 저장되어, 초안이 한 글자라도 바뀌면 자동으로 idle로
+ * 돌아간다 — 핸들러마다 리셋을 기억할 필요가 없다 (제목·별명·난이도에서 빠뜨렸던 전례).
+ */
 type Verdict =
   | { kind: "idle" }
   | { kind: "error"; message: string }
@@ -113,8 +114,8 @@ type Verdict =
   | { kind: "unverified"; roles: RoleId[]; link: string; shared: SharedPuzzle }
   | { kind: "unique"; link: string; shared: SharedPuzzle };
 
-/** 역할에 맞는 기본 정보값 */
-function blankInfo(role: RoleId, night: number, players: number): DraftInfo | null {
+/** 역할에 맞는 기본 정보값. default 없음 — InfoData에 변형을 더하면 컴파일러가 누락을 잡는다 */
+function blankInfo(role: InfoRole, night: number, players: number): DraftInfo {
   const pair: [Seat, Seat] = [0, Math.min(1, players - 1)];
   switch (role) {
     case "washerwoman": return { night, data: { type: "washerwoman", targets: pair, shownRole: "librarian" } };
@@ -127,6 +128,7 @@ function blankInfo(role: RoleId, night: number, players: number): DraftInfo | nu
     case "ravenkeeper": return { night, data: { type: "ravenkeeper", target: 0, shownRole: "imp" } };
     case "clockmaker": return { night, data: { type: "clockmaker", steps: 1 } };
     case "seamstress": return { night, data: { type: "seamstress", targets: pair, sameTeam: true } };
+    case "juggler": return { night: 2, data: { type: "juggler", guesses: [{ seat: 0, role: "imp" }], correct: 0 } };
     case "mathematician": return { night, data: { type: "mathematician", count: 0 } };
     case "chambermaid": return { night, data: { type: "chambermaid", targets: pair, count: 0 } };
     case "monk": return { night: Math.max(2, night), data: { type: "monk", target: 0 } };
@@ -147,7 +149,6 @@ function blankInfo(role: RoleId, night: number, players: number): DraftInfo | nu
     case "artist": return { night, data: { type: "artist", question: { kind: "isDemon", seat: 0 }, yes: false } };
     case "savant":
       return { night, data: { type: "savant", statements: [{ kind: "isEvil", seat: 0 }, { kind: "roleInPlay", role: "drunk" }] } };
-    default: return null;
   }
 }
 
@@ -166,11 +167,11 @@ type LedgerRow =
   | { kind: "night"; index: number; label: string; picked: Seat[]; selectable: boolean[]; alive: number }
   | {
       kind: "day"; index: number; label: string; picked: Seat | null; selectable: boolean[]; alive: number;
-      actions: DraftDayAction[]; virginExec: Seat | null; // 처녀 발동이 있으면 그 지명자가 그날의 처형이다
+      actions: DraftDayAction[]; virginExec: Seat | null; // 성결자 발동이 있으면 그 지명자가 그날의 처형이다
     }
   | { kind: "now"; index: number; label: string; alive: number; actions: DraftDayAction[]; selectable: boolean[] };
 
-/** 죽은 참여자·자기 지명 등 무효 행동을 거르고, 낮의 죽음(총격·처녀 발동)을 반영한다 */
+/** 죽은 참여자·자기 지명 등 무효 행동을 거르고, 낮의 죽음(총격·성결자 발동)을 반영한다 */
 function applyDraftActions(
   raw: DraftDayAction[],
   alive: boolean[],
@@ -216,7 +217,7 @@ function buildLedger(
     if (n === nights) break;
     const daySelectable = [...alive];
     const { actions, virginExec } = applyDraftActions(dayActs[n] ?? [], alive, playerCount, true);
-    // 처녀 발동이 있으면 그것이 그날의 처형 — 별도 처형은 무시된다
+    // 성결자 발동이 있으면 그것이 그날의 처형 — 별도 처형은 무시된다
     const ex = virginExec !== null ? undefined : executions[n];
     const picked2 = ex !== undefined && ex < playerCount && alive[ex] ? ex : null;
     if (picked2 !== null) alive[picked2] = false;
@@ -226,7 +227,7 @@ function buildLedger(
     });
   }
   const nowSelectable = [...alive];
-  // 현재 낮: 처형 전이므로 처녀 발동(=처형)은 없고, 총격·지명만 가능하다
+  // 현재 낮: 처형 전이므로 성결자 발동(=처형)은 없고, 총격·지명만 가능하다
   const { actions } = applyDraftActions(dayActs[nights] ?? [], alive, playerCount, false);
   rows.push({ kind: "now", index: nights, label: `낮 ${nights}`, alive: count(), actions, selectable: nowSelectable });
   return rows;
@@ -247,30 +248,14 @@ function ledgerEvents(rows: LedgerRow[]): GameEvent[] {
   return events;
 }
 
-/** 낮 행동 한 건이 문제에 실릴 문장. 풀이 화면의 타임라인과 같은 말을 쓴다. */
-function actionLine(act: DraftDayAction): string {
-  if (act.type === "slayerShot") {
-    return act.died
-      ? `${seatName(act.seat)}가 사냥꾼을 자처하며 ${seatName(act.target)}를 쐈다 — ${seatName(act.target)}가 죽었다!`
-      : `${seatName(act.seat)}가 사냥꾼을 자처하며 ${seatName(act.target)}를 쐈지만, 아무 일도 일어나지 않았다.`;
-  }
-  if (act.type === "nomination") {
-    return `${seatName(act.nominator)}가 ${seatName(act.nominee)}를 지명했지만, 아무 일도 일어나지 않았다.`;
-  }
-  return `${seatName(act.nominator)}가 ${seatName(act.nominee)}를 지명한 순간, ${seatName(act.nominator)}가 그 자리에서 처형됐다!`;
-}
-
-/** 원장 한 줄이 문제에 실릴 문장. 풀이 화면의 타임라인과 같은 말을 쓴다. */
+/** 원장 한 줄이 문제에 실릴 문장 — 풀이 화면과 같은 렌더러(render.ts)를 쓴다 */
 function ledgerLine(row: LedgerRow): string {
-  if (row.kind === "now") return "지금 — 처형 전, 여기서 추리가 시작된다.";
+  if (row.kind === "now") return NOW_LINE;
   if (row.kind === "day") {
-    if (row.virginExec !== null) return `처녀 발동 — ${seatName(row.virginExec)}가 처형으로 죽었다.`;
-    return row.picked === null ? "처형이 없었다." : `마을은 ${seatName(row.picked)}를 처형했다.`;
+    // 성결자 발동 낮은 행동 문장이 처형을 대신 말한다 — 위 행동 목록에 이미 있다
+    return renderExecutionLine(row.picked, row.virginExec !== null) ?? "";
   }
-  if (row.index === 1) return "첫 밤 — 악마는 죽이지 않는다.";
-  return row.picked.length === 0
-    ? "아무도 죽지 않았다."
-    : `${row.picked.map(seatName).join(", ")}가 죽은 채 발견됐다.`;
+  return renderNightLine(row.index, row.picked);
 }
 
 const CHIP_BASE =
@@ -281,15 +266,10 @@ const CHIP_DEATH_ON = "border-blood bg-blood/20 text-parchment";
 const CHIP_EXEC_ON = "border-brass bg-brass/15 text-parchment";
 const CHIP_NONE_ON = "border-faded/70 text-parchment";
 
-/** 킬 실패를 설명할 수 있는 역할들 — 솔버의 임프 킬 부재 분기와 같은 목록 (timeline.ts) */
-const KILL_FAIL_ROLES: RoleId[] = ["poisoner", "soldier", "monk", "exorcist", "tealady", "fool", "minstrel", "sailor", "innkeeper", "courtier"];
-/** 한 밤 2인 이상 사망을 설명할 수 있는 역할들 */
-const MULTI_KILL_ROLES: RoleId[] = ["assassin", "godfather", "grandmother", "gambler", "tinker"];
-
 const field = "rounded border border-panel-edge bg-ink px-2 py-1 text-sm text-parchment";
 const label = "block text-xs text-faded";
 
-/** 낮 공개 행동(총격·지명·처녀 발동) 목록 + 추가 폼. day 행과 now 행이 함께 쓴다 */
+/** 낮 공개 행동(총격·지명·성결자 발동) 목록 + 추가 폼. day 행과 now 행이 함께 쓴다 */
 function DayActionEditor({
   row,
   onAdd,
@@ -319,7 +299,7 @@ function DayActionEditor({
     <div className="space-y-1">
       {row.actions.map((act, i) => (
         <p key={i} className="flex items-baseline justify-between gap-2 text-xs text-parchment">
-          <span>{actionLine(act)}</span>
+          <span>{renderDayAction(act)}</span>
           <button type="button" onClick={() => onRemove(act)} className="shrink-0 text-faded underline hover:text-blood">
             삭제
           </button>
@@ -333,8 +313,8 @@ function DayActionEditor({
           onChange={(e) => setType(e.target.value as DraftDayAction["type"])}
         >
           <option value="nomination">지명 (아무 일 없음)</option>
-          {row.kind === "day" && <option value="virginTrigger">처녀 발동 (지명자 즉시 처형)</option>}
-          <option value="slayerShot">사냥꾼 총격</option>
+          {row.kind === "day" && <option value="virginTrigger">{roleLabel("virgin")} 발동 (지명자 즉시 처형)</option>}
+          <option value="slayerShot">{roleLabel("slayer")} 총격</option>
         </select>
         <select aria-label={type === "slayerShot" ? "총격자" : "지명자"} className={field} value={actor} onChange={(e) => setActor(Number(e.target.value))}>
           {aliveSeats.map((s) => (
@@ -374,6 +354,7 @@ export function PuzzleCreator({ existingIds }: { existingIds: string[] }) {
   const [title, setTitle] = useState("");
   const [author, setAuthor] = useState("");
   const [difficulty, setDifficulty] = useState<Difficulty>("normal");
+  const [realGame, setRealGame] = useState(false);
   const [playerCount, setPlayerCount] = useState(7);
   const [nights, setNights] = useState(2);
   const [pool, setPool] = useState<RoleId[]>([
@@ -388,7 +369,16 @@ export function PuzzleCreator({ existingIds }: { existingIds: string[] }) {
   const [dayActs, setDayActs] = useState<Record<number, DraftDayAction[]>>({});
   const [votes, setVotes] = useState<Record<number, Seat[]>>({});
   const [walkthrough, setWalkthrough] = useState("");
-  const [verdict, setVerdict] = useState<Verdict>({ kind: "idle" });
+
+  /** 초안 전체의 지문 — 검증 결과의 신선도를 이것으로 판정한다 */
+  const draftKey = useMemo(
+    () => JSON.stringify({ title, author, difficulty, realGame, playerCount, nights, pool, claims, solution, deaths, executions, dayActs, votes, walkthrough }),
+    [title, author, difficulty, realGame, playerCount, nights, pool, claims, solution, deaths, executions, dayActs, votes, walkthrough],
+  );
+  const [stored, setStored] = useState<{ key: string; verdict: Verdict } | null>(null);
+  /** 파생값: 검증 당시의 초안과 지금 초안이 같을 때만 결과가 살아 있다 */
+  const verdict: Verdict = stored !== null && stored.key === draftKey ? stored.verdict : { kind: "idle" };
+  const setVerdict = (v: Verdict) => setStored({ key: draftKey, verdict: v });
 
   const seats = useMemo(() => Array.from({ length: playerCount }, (_, i) => i), [playerCount]);
   const communityId = useMemo(() => nextCommunityId(existingIds), [existingIds]);
@@ -397,9 +387,9 @@ export function PuzzleCreator({ existingIds }: { existingIds: string[] }) {
     [nights, playerCount, deaths, executions, dayActs],
   );
   /** 킬 실패(아무도 안 죽은 밤)를 설명할 수 있는 역할이 대본에 있는가 */
-  const hasKillFailExplainer = KILL_FAIL_ROLES.some((r) => pool.includes(r));
+  const hasKillFailExplainer = KILL_FAIL_EXPLAINERS.some((r) => pool.includes(r));
   /** 한 밤 2인 이상 사망을 설명할 수 있는 역할이 대본에 있는가 */
-  const hasMultiKill = MULTI_KILL_ROLES.some((r) => pool.includes(r));
+  const hasMultiKill = MULTI_DEATH_EXPLAINERS.some((r) => pool.includes(r));
   const minionKinds = pool.filter((r) => ROLES[r].team === "minion").length;
   /** 대본이 공개되므로 좌석 수에 비해 좁으면 그 자체가 답을 좁힌다 */
   const narrowPool = pool.length < playerCount + 4;
@@ -443,12 +433,10 @@ export function PuzzleCreator({ existingIds }: { existingIds: string[] }) {
       const next = cur.includes(seat) ? cur.filter((s) => s !== seat) : [...cur, seat].sort((a, b) => a - b);
       return { ...prev, [night]: next };
     });
-    setVerdict({ kind: "idle" });
   }
 
   function clearNight(night: number) {
     setDeaths((prev) => ({ ...prev, [night]: [] }));
-    setVerdict({ kind: "idle" });
   }
 
   function pickExecution(day: number, seat: Seat | null) {
@@ -458,18 +446,15 @@ export function PuzzleCreator({ existingIds }: { existingIds: string[] }) {
       else next[day] = seat;
       return next;
     });
-    setVerdict({ kind: "idle" });
   }
 
   function addDayAction(day: number, act: DraftDayAction) {
     setDayActs((prev) => ({ ...prev, [day]: [...(prev[day] ?? []), act] }));
-    setVerdict({ kind: "idle" });
   }
 
   /** 화면에 보이는(=유효한) 행동 목록 기준 인덱스로 지운다 */
   function removeDayAction(day: number, act: DraftDayAction) {
     setDayActs((prev) => ({ ...prev, [day]: (prev[day] ?? []).filter((a) => a !== act) }));
-    setVerdict({ kind: "idle" });
   }
 
   /** 투표 기록 토글 — 유령 투표가 있어 죽은 좌석도 기록될 수 있다 */
@@ -479,7 +464,6 @@ export function PuzzleCreator({ existingIds }: { existingIds: string[] }) {
       const next = cur.includes(seat) ? cur.filter((s) => s !== seat) : [...cur, seat].sort((a, b) => a - b);
       return { ...prev, [day]: next };
     });
-    setVerdict({ kind: "idle" });
   }
 
   /** 인원수가 바뀌면 좌석 배열들을 맞춘다 */
@@ -489,7 +473,6 @@ export function PuzzleCreator({ existingIds }: { existingIds: string[] }) {
       Array.from({ length: n }, (_, i) => prev[i] ?? { role: claimable[0] ?? "chef", info: [] }),
     );
     setSolution((prev) => Array.from({ length: n }, (_, i) => prev[i] ?? "chef"));
-    setVerdict({ kind: "idle" });
   }
 
   /**
@@ -508,7 +491,6 @@ export function PuzzleCreator({ existingIds }: { existingIds: string[] }) {
       setSolution((sol) => sol.map((r) => (r === role && fallbackRole ? fallbackRole : r)));
       return next;
     });
-    setVerdict({ kind: "idle" });
   }
 
   /** 해설은 한 줄 = 한 단계다 */
@@ -534,18 +516,19 @@ export function PuzzleCreator({ existingIds }: { existingIds: string[] }) {
       ),
     ];
 
-    const demonSeat = solution.findIndex((r) => ROLES[r].team === "demon");
     return {
       title: title.trim() || "이름 없는 문제",
       author: author.trim() || undefined,
       edition: "mixed",
       difficulty,
+      realGame: realGame || undefined,
       playerCount,
       rolePool: pool,
       nights,
       claims: claims.map((c, seat) => ({ seat, role: c.role, info: c.info, roleChange: c.roleChange })),
       events,
-      questions: [{ id: "demon" as const, text: "지금 이 순간의 악마는 누구인가?", answerSeats: [demonSeat] }],
+      // 표준 질문 셋 — 정답은 그리모어에서 파생된다. 승계가 있으면 verify가 현재 악마 좌석을 채워 다시 만든다
+      questions: standardQuestions({ solution, rolePool: pool }),
       solution,
       walkthrough: walkthroughSteps.length > 0 ? walkthroughSteps : undefined,
     };
@@ -621,9 +604,16 @@ export function PuzzleCreator({ existingIds }: { existingIds: string[] }) {
       });
       return;
     }
+    // 승계(탕녀·팡 구 점프)가 있었으면 "지금 이 순간의 악마"는 solution의 악마 좌석이 아니다 —
+    // 에디터에는 입력란이 없으므로 솔버가 찾은 현재 악마 좌석을 채우고 질문 정답을 다시 만든다.
+    const currentDemonSeat = worlds[0].currentDemonSeat;
+    const setupDemonSeat = shared.solution.findIndex((r) => ROLES[r].team === "demon");
+    const withDemon: SharedPuzzle = currentDemonSeat === setupDemonSeat
+      ? shared
+      : { ...shared, currentDemonSeat, questions: standardQuestions({ solution: shared.solution, rolePool: shared.rolePool, currentDemonSeat }) };
 
-    const link = await makeLink(shared);
-    if (link) setVerdict({ kind: "unique", link, shared });
+    const link = await makeLink(withDemon);
+    if (link) setVerdict({ kind: "unique", link, shared: withDemon });
   }
 
   /** CompressionStream이 없는 구형 브라우저에서는 링크를 만들 수 없다. */
@@ -660,8 +650,12 @@ export function PuzzleCreator({ existingIds }: { existingIds: string[] }) {
             <label className={label} htmlFor="difficulty">난이도</label>
             <select id="difficulty" className={`${field} w-full`} value={difficulty}
               onChange={(e) => setDifficulty(e.target.value as Difficulty)}>
-              {DIFFICULTIES.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
+              {DIFFICULTY_ORDER.map((d) => <option key={d} value={d}>{DIFFICULTY_LABELS[d]}</option>)}
             </select>
+            <label className="mt-1.5 flex items-center gap-1.5 text-xs text-faded">
+              <input type="checkbox" checked={realGame} onChange={(e) => setRealGame(e.target.checked)} />
+              실제로 진행된 판을 옮긴 문제 (정답이 그날의 실제 그리모어)
+            </label>
           </div>
           <div className="flex gap-3">
             <div className="flex-1">
@@ -675,7 +669,7 @@ export function PuzzleCreator({ existingIds }: { existingIds: string[] }) {
             <div className="flex-1">
               <label className={label} htmlFor="nights">경과한 밤</label>
               <select id="nights" className={`${field} w-full`} value={nights}
-                onChange={(e) => { setNights(Number(e.target.value)); setVerdict({ kind: "idle" }); }}>
+                onChange={(e) => setNights(Number(e.target.value))}>
                 {Array.from({ length: LIMITS.maxNights }, (_, i) => i + 1)
                   .map((n) => <option key={n} value={n}>밤 {n}</option>)}
               </select>
@@ -780,18 +774,17 @@ export function PuzzleCreator({ existingIds }: { existingIds: string[] }) {
                   onChange={(e) => {
                     const role = e.target.value as RoleId;
                     setClaims((prev) => prev.map((c, i) => (i === seat ? { role, info: [] } : c)));
-                    setVerdict({ kind: "idle" });
                   }}>
                   {claimable.map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}
                 </select>
-                {INFO_ROLES.includes(claim.role) && claim.info.length < LIMITS.maxInfoPerClaim && (
+                {isInfoRole(claim.role) && claim.info.length < LIMITS.maxInfoPerClaim && (
                   <button type="button"
                     className="rounded border border-brass/60 px-2 py-1 text-xs text-brass hover:bg-brass/10"
                     onClick={() => {
-                      const added = blankInfo(claim.role, Math.min(claim.info.length + 1, nights), playerCount);
-                      if (!added) return;
+                      const role = claim.role;
+                      if (!isInfoRole(role)) return;
+                      const added = blankInfo(role, Math.min(claim.info.length + 1, nights), playerCount);
                       setClaims((prev) => prev.map((c, i) => (i === seat ? { ...c, info: [...c.info, added] } : c)));
-                      setVerdict({ kind: "idle" });
                     }}>
                     + 정보 추가
                   </button>
@@ -808,7 +801,6 @@ export function PuzzleCreator({ existingIds }: { existingIds: string[] }) {
                           const from = c.roleChange?.from ?? changeableFrom(pool, c.role)[0];
                           return { ...c, roleChange: { night: Number(v), from } };
                         }));
-                        setVerdict({ kind: "idle" });
                       }}>
                       <option value="">변신 없음</option>
                       {Array.from({ length: Math.max(nights - 1, 0) }, (_, i) => i + 2).map((n) => (
@@ -822,7 +814,6 @@ export function PuzzleCreator({ existingIds }: { existingIds: string[] }) {
                           const from = e.target.value as RoleId;
                           setClaims((prev) => prev.map((c, i) =>
                             i === seat && c.roleChange ? { ...c, roleChange: { ...c.roleChange, from } } : c));
-                          setVerdict({ kind: "idle" });
                         }}>
                         {changeableFrom(pool, claim.role).map((r) => (
                           <option key={r} value={r}>그전엔 {roleLabel(r)}</option>
@@ -839,12 +830,10 @@ export function PuzzleCreator({ existingIds }: { existingIds: string[] }) {
                   onChange={(next) => {
                     setClaims((prev) => prev.map((c, i) =>
                       i === seat ? { ...c, info: c.info.map((x, j) => (j === idx ? next : x)) } : c));
-                    setVerdict({ kind: "idle" });
                   }}
                   onRemove={() => {
                     setClaims((prev) => prev.map((c, i) =>
                       i === seat ? { ...c, info: c.info.filter((_, j) => j !== idx) } : c));
-                    setVerdict({ kind: "idle" });
                   }} />
               ))}
             </div>
@@ -859,8 +848,8 @@ export function PuzzleCreator({ existingIds }: { existingIds: string[] }) {
           경과한 밤을 늘리면 칸도 따라 늘어납니다.{" "}
           <strong className="text-parchment">아무 일도 없던 밤과 낮 역시 하나의 단서입니다</strong> — 비워 두면
           “아무도 죽지 않았다”, “처형이 없었다”로 문제에 그대로 실립니다. 밤에는 여러 명을 고를 수 있습니다.
-          낮에는 공개 행동(지명·처녀 발동·사냥꾼 총격)을 추가할 수 있고, 처녀 발동이 있는 낮은 그
-          지명자가 처형으로 죽어 별도 처형을 고를 수 없습니다.
+          낮에는 공개 행동(지명·{roleLabel("virgin")} 발동·{roleLabel("slayer")} 총격)을 추가할 수 있고,
+          {roleLabel("virgin")} 발동이 있는 낮은 그 지명자가 처형으로 죽어 별도 처형을 고를 수 없습니다.
         </p>
 
         <ol className="overflow-hidden rounded border border-panel-edge bg-panel">
@@ -988,13 +977,13 @@ export function PuzzleCreator({ existingIds }: { existingIds: string[] }) {
                   {row.kind === "night" && row.picked.length > 1 && !hasMultiKill && (
                     <p className="text-[11px] text-blood">
                       한 밤에 두 명 이상이 죽으려면{" "}
-                      {MULTI_KILL_ROLES.map(roleLabel).join("·")} 중 하나가 대본에 있어야 합니다 —
+                      {MULTI_DEATH_EXPLAINERS.map(roleLabel).join("·")} 중 하나가 대본에 있어야 합니다 —
                       지금 대본으로는 “해가 없습니다”가 나옵니다.
                     </p>
                   )}
                   {row.kind === "night" && row.index > 1 && row.picked.length === 0 && !hasKillFailExplainer && (
                     <p className="text-[11px] text-faded">
-                      악마의 킬이 실패하려면 {KILL_FAIL_ROLES.map(roleLabel).join("·")} 중 하나가
+                      악마의 킬이 실패하려면 {KILL_FAIL_EXPLAINERS.map(roleLabel).join("·")} 중 하나가
                       대본에 있어야 합니다 — 지금 대본에 없습니다.
                     </p>
                   )}
@@ -1021,7 +1010,6 @@ export function PuzzleCreator({ existingIds }: { existingIds: string[] }) {
                 onChange={(e) => {
                   const role = e.target.value as RoleId;
                   setSolution((prev) => prev.map((r, i) => (i === seat ? role : r)));
-                  setVerdict({ kind: "idle" });
                 }}>
                 {pool.map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}
               </select>
@@ -1055,7 +1043,7 @@ export function PuzzleCreator({ existingIds }: { existingIds: string[] }) {
           className={`${field} w-full`}
           rows={6}
           value={walkthrough}
-          onChange={(e) => { setWalkthrough(e.target.value); setVerdict({ kind: "idle" }); }}
+          onChange={(e) => setWalkthrough(e.target.value)}
           placeholder={"① B의 밤1 정보가 참이면 D는 마을 사람이다.\n② 그러면 E의 주장과 충돌한다 — E가 거짓말이다.\n③ 따라서 악마는 E다."}
         />
         <p
@@ -1288,8 +1276,7 @@ function InfoEditor({
                 onChange({ night: info.night, data: info.data });
               } else {
                 // 데이터 타입은 당시 역할을 따른다 — 그 역할의 기본 정보로 교체
-                const blank = blankInfo(r, info.night, seats.length);
-                if (blank) onChange({ night: info.night, data: blank.data, asRole: r });
+                if (isInfoRole(r)) onChange({ night: info.night, data: blankInfo(r, info.night, seats.length).data, asRole: r });
               }
             }}
           >
@@ -1318,6 +1305,33 @@ function InfoEditor({
               : { type: "librarian", targets: null })}>
             {d.targets === null ? "외지인 지목으로" : "‘외지인 없음’으로"}
           </button>
+        )}
+
+        {d.type === "juggler" && (
+          <>
+            <span className="text-xs text-faded">공굴리기 추측</span>
+            {d.guesses.map((g, i) => (
+              <span key={i} className="inline-flex items-center gap-1">
+                {seatSelect(g.seat, (seat) => set({ ...d, guesses: d.guesses.map((x, j) => (j === i ? { ...x, seat } : x)) }))}
+                <span className="text-xs text-faded">=</span>
+                {roleSelect(g.role, (role) => set({ ...d, guesses: d.guesses.map((x, j) => (j === i ? { ...x, role } : x)) }))}
+                {d.guesses.length > 1 && (
+                  <button type="button" className="text-xs text-faded hover:text-blood"
+                    onClick={() => set({ ...d, guesses: d.guesses.filter((_, j) => j !== i), correct: Math.min(d.correct, d.guesses.length - 1) })}>
+                    ×
+                  </button>
+                )}
+              </span>
+            ))}
+            {d.guesses.length < 5 && (
+              <button type="button" className="text-xs text-brass underline"
+                onClick={() => set({ ...d, guesses: [...d.guesses, { seat: 0, role: "imp" }] })}>
+                + 추측
+              </button>
+            )}
+            <span className="text-xs text-faded">적중</span>
+            {numberSelect(d.correct, d.guesses.length, (n) => set({ ...d, correct: n }))}
+          </>
         )}
 
         {(d.type === "chef" || d.type === "empath" || d.type === "mathematician") && (

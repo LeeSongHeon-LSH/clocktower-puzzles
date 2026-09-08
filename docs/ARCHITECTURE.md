@@ -22,7 +22,7 @@
 src/
   app/
     page.tsx              # 홈: 퍼즐 목록 + 필터
-    puzzles/[id]/page.tsx # 퍼즐 풀이 페이지
+    puzzle/[id]/page.tsx  # 퍼즐 풀이 페이지
     about/page.tsx        # 소개 + 팬 고지문
     rules/page.tsx        # 규칙 허브: 취함·중독 + 역할 목록 (§8)
     rules/drunk-and-poison/page.tsx  # 취함·중독 해설 + 알마낙 원문 출처
@@ -32,10 +32,14 @@ src/
     guide/page.tsx        # 문제 업로드 가이드 (경로 A/B 안내)
   components/             # TownSquare, PuzzleCreator, PuzzleSubmit, SharedPuzzleLoader …
   lib/
-    solver/               # 룰 엔진 (퍼즐 검증용, UI 비노출)
-      types.ts            # World(그리모어 배정), 등록 시스템
-      roles/              # 역할별 제약 로직 (1역할 1파일)
+    solver/               # 룰 엔진 (퍼즐 검증용, UI 비노출 — 예외는 아래 §4.2)
+      types.ts            # 역할 사전 id·InfoData·World, 공용 상수(SOLVER_ROLES·INFO_TYPES·UNCLAIMABLE_ROLES)
+      registration.ts     # 오등록 ∃ 판정 + evilRange·isGoodTeam 공용 유틸
+      seats.ts            # 원형 좌석 유틸 (ctx·timeline이 함께 쓰는 말단 모듈)
+      roles/              # 역할별 제약 로직 (1역할 1파일) + false-info.ts (보르톡스 거짓 판정)
+      timeline.ts         # 사건 원장(Schedule) + 데몬 승계·킬 귀속 분기 + 킬 설명 역할 목록
       solve.ts            # 전수 탐색 + 제약 평가
+    render.ts             # InfoData → 한국어 문장, 사건 원장 → 타임라인 문장 (풀이 화면·에디터 공용)
     progress.ts           # localStorage 풀이 기록
     notes.ts              # localStorage 좌석 메모 (표시 + 역할 추측)
   data/
@@ -48,14 +52,17 @@ src/
       index.ts            # 퍼즐 레지스트리
       tb-01.ts …          # 문제당 1파일
   lib/puzzles/
-    schema.ts             # Puzzle 타입 (difficulty ⟂ source 두 축)
-    codec.ts              # 사설 문제 ↔ 공유 링크 + 신뢰불가 입력 검증 (§9)
+    schema.ts             # Puzzle 타입, 난이도 라벨, 표준 질문 셋(standardQuestions), 현재 악마 좌석
+    codec.ts              # 사설 문제 ↔ 공유 링크 + 신뢰불가 입력 검증 (§9). SharedPuzzle은 Puzzle에서 파생
     source.ts             # 수록 신청용 퍼즐 파일 생성 (§9 경로 B)
 scripts/
   fetch-rule-sources.ts   # 공식 위키 API에서 규칙 원문 대조·생성 (§8)
+  solve-puzzle.ts         # 문제 하나에 솔버를 돌려 월드 목록 출력 (제작 도구)
+  verify-scenarios.ts     # SOLVER_ROLES 커버리지 검사 (제작 도구)
 tests/
   solver/                 # 솔버 단위 테스트 (역할 로직별)
   puzzles.test.ts         # 전 퍼즐 유일해 검증 (배포 게이트)
+  role-names.test.ts      # 산문의 역할명이 사전 표기를 따르는지 (옛 표기 금지어)
 docs/                     # 이 문서들
 ```
 
@@ -81,7 +88,7 @@ export default definePuzzle({
     { day: 1, type: "execution", seat: 3 },
     { night: 2, type: "death", seat: 4 },
   ],
-  questions: [                // 악마 위치 → 악마 종류 → 하수인 위치 (+ 보너스)
+  questions: [                // 표준 셋 = standardQuestions(): 악마 위치 → 악마 종류 → 하수인 위치 (+ 보너스)
     { id: "demon", text: "악마는 누구인가?", answerSeats: [5] },
     { id: "demonType", text: "그 악마는 어떤 악마인가?", answerRole: "imp" },
     { id: "minion", text: "하수인은 누구인가?", answerSeats: [3] },
@@ -89,7 +96,7 @@ export default definePuzzle({
   ],
   hints: ["…", "…"],          // 최대 2개
   walkthrough: ["① …", "② …"], // 단계별 해설
-  solution: { 0: "washerwoman", 1: "empath", /* seat → 실제 역할 */ },
+  solution: ["washerwoman", "empath", /* 배열 인덱스 = 좌석, 값 = 실제 역할 */],
 })
 ```
 
@@ -144,6 +151,21 @@ clocktower-puzzles-notes-v1 = {
 - 역할 1개 = 파일 1개, `checkInfo(world, claim, gameLog): boolean` 형태의 제약 함수 등록.
 - 지원 역할 목록은 REQUIREMENTS §2.4. 새 역할 추가 = 파일 추가 + 테스트 추가.
 - 정보 교란 계층: 술 취함(drunk) / 중독(poisoned) / 은둔자·스파이 오등록(misregistration)을 공통 유틸로 처리.
+- **수 정보는 범위 하나를 두 판정이 공유한다.** 초공감자·예언자·수학자·객실 청소부·곡예사 모듈은
+  `xxxRange()`로 `[min, max]`를 내보내고, 참 판정(`roles/index.ts`)은 "범위 안", 보르톡스 거짓 판정
+  (`roles/false-info.ts`)은 "범위 밖의 값이 존재"를 그 범위로 판정한다. 관대 집합(노 다시·푸카·
+  비고르모르티스의 '받았을 수 있는' 독, 마귀할멈 자기 변신)은 max에만 들어간다. 참·거짓을 따로 세면
+  두 판정이 갈라진다 (2026-09-08 정정).
+- **정보 역할 하나를 더할 때 손볼 곳은 컴파일러가 알려준다.** `InfoData` 유니온에 변형을 더하면
+  `INFO_TYPES`(`types.ts`)의 `satisfies` 검사, 코덱의 `validateInfoData`, 렌더러 `renderInfo`, 참·거짓
+  판정 `switch`, 에디터 `blankInfo`가 모두 exhaustive라 빠뜨린 곳에서 타입 오류가 난다. 에디터의
+  위젯 분기(`InfoEditor`)만 예외다 — 거기는 눈으로 더한다.
+- **킬 설명 역할 목록은 솔버가 내보낸다.** `timeline.ts`의 `KILL_FAIL_EXPLAINERS`(킬 부재를 설명하는
+  역할)·`MULTI_DEATH_EXPLAINERS`(한 밤 다중 사망)를 에디터가 import해 저자 안내에 쓴다. 분기를
+  더하면 목록도 더한다.
+- **UI 비노출의 예외**: `composition.ts`(인원수별 팀 구성 표)와 `types.ts`의 상수·타입은 UI가 직접
+  import한다 — 순수 표라 스포일러와 무관하다. 실행 코드(`analyze`)를 클라이언트에서 부르는 곳은
+  에디터(`/create`)와 공유 링크 로더(`/play`) 둘뿐이고, 수록 퍼즐 페이지 번들에는 솔버가 실리지 않는다.
 - **사전 ≠ 커버리지.** 역할 사전(`ROLE_IDS`)은 3개 판본 72종 + 실험적 역할 66종 = 138종
   전부지만, 능력이 구현된 역할은 `SOLVER_ROLES`뿐이다. 에디터에서는 138종 전부를 풀·정답
   배치·거짓 정보 토큰으로 쓸 수 있다 (실험적 역할은 기본 접힘 — "실험적 역할 보기" 토글).
@@ -261,6 +283,12 @@ scripts/fetch-rule-sources.ts      두 공식 소스에서 대조·생성
   솔버가 자체적으로 10인을 상한으로 두어 탐색 공간이 유계다 (`composition.ts`).
 - 스팸·모더레이션·삭제 요청 문제가 애초에 생기지 않는다 — 남는 데이터가 없다.
 - 대가: **목록·검색이 없다.** 링크를 잃으면 문제도 사라진다. 보존하려면 경로 B.
+- **에디터의 검증 결과는 파생값이다.** 결과를 초안의 지문(`draftKey`)과 함께 저장하고, 초안이 한
+  글자라도 바뀌면 자동으로 idle로 돌아간다 — 입력 핸들러마다 리셋을 기억하지 않는다 (2026-09-08).
+- 에디터가 만드는 `SharedPuzzle`은 `Puzzle`에서 파생한 타입이다 (`Omit<Puzzle, "id" | "source">`).
+  스키마에 필드를 더하면 코덱의 `validateShared`가 그 필드를 읽지 않을 때 타입 오류가 나고,
+  `tests/codec.test.ts`가 왕복을 필드 전체 비교로 검사한다. 질문은 `standardQuestions`로 채우고,
+  유일해가 승계 세계면 솔버가 찾은 현재 악마 좌석을 `currentDemonSeat`에 채운다.
 - 링크가 나오는 조건은 두 가지다. **배정되는 역할이 전부 `SOLVER_ROLES`에 있으면** 그 배치가
   유일해일 때만 나온다. **구현되지 않은 역할이 섞이면** 유일해 탐색을 건너뛰고, 해설을 적은
   경우에 한해 「미검증」 표시와 함께 나온다 (REQUIREMENTS §2.5.1). 어느 쪽이든 구조 검사는

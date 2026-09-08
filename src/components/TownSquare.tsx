@@ -71,7 +71,7 @@ const WIDE: Geometry = { size: 410, ring: 144, seat: 112, token: 26, guess: 178,
 /**
  * 글자 수에 맞춰 원 안에 들어가는 크기. 글줄이 놓이는 높이마다 쓸 수 있는 폭이
  * 다르므로 한글 자폭을 1em으로 잡고 넘치지 않게 맞췄다.
- * 솔버가 아는 역할 중 가장 긴 이름이 6자(객실 청소부)다.
+ * 솔버가 아는 역할 중 가장 긴 이름은 7자(악마의 변호사)로, 6자 이상은 모두 같은 크기다.
  */
 function labelSize(text: string): number {
   if (text.length <= 3) return 9.5;

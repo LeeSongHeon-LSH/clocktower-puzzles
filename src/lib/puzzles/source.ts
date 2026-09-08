@@ -98,6 +98,7 @@ export function puzzleFileSource(p: SharedPuzzle, id: string): string {
     ["nights", p.nights],
     ["rolePool", p.rolePool],
     ["intro", p.intro],
+    ["realGame", p.realGame],
     ["claims", p.claims],
     ["events", p.events],
     ["questions", p.questions],

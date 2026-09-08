@@ -92,30 +92,7 @@ function changedAt(ctx: Ctx, seat: Seat): number | null {
   return null;
 }
 
-export function circularDistance(n: number, a: Seat, b: Seat): number {
-  const d = Math.abs(a - b) % n;
-  return Math.min(d, n - d);
-}
-
-/**
- * 원형 좌석에서 자신을 제외한 가장 가까운 생존 이웃 [왼쪽, 오른쪽].
- * 생존한 타인이 없으면 null. (둘이 같은 좌석일 수 있음 — 생존 타인이 1명일 때)
- */
-export function aliveNeighbors(alive: boolean[], seat: Seat): [Seat, Seat] | null {
-  const n = alive.length;
-  let left: Seat | null = null;
-  let right: Seat | null = null;
-  for (let step = 1; step < n; step++) {
-    const l = (seat - step + n) % n;
-    if (alive[l]) { left = l; break; }
-  }
-  for (let step = 1; step < n; step++) {
-    const r = (seat + step) % n;
-    if (alive[r]) { right = r; break; }
-  }
-  if (left === null || right === null) return null;
-  return [left, right];
-}
+export { aliveNeighbors, circularDistance } from "./seats";
 
 /**
  * 좌석이 밤 night에 깨어나는가 (텔러가 깨우는가).

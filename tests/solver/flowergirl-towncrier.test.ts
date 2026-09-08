@@ -110,7 +110,7 @@ describe("Town Crier: 어제 하수인이 지명했는가", () => {
     expect(worlds.some((w) => w.assignment[0] === "spy" && w.assignment[1] === "towncrier" && w.poisonTargets[2] === null)).toBe(true);
   });
 
-  it("처녀 발동의 지명자도 지명 기록으로 센다", () => {
+  it("성결자 발동의 지명자도 지명 기록으로 센다", () => {
     // 발동 지명자는 주민 등록이 강제되므로 '하수인 지명 없음'과 충돌하지 않는다 —
     // 두 제약이 한 세계에서 공존함을 확인한다
     const withVirgin: RoleId[] = ["imp", "poisoner", "towncrier", "virgin", "soldier", "chef", "empath", "librarian", "washerwoman", "undertaker"];

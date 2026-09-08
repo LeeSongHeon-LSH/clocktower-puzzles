@@ -47,7 +47,7 @@ describe("Shabaloth: 2킬", () => {
     expect(demonScenarios(pz, new Schedule(pz), imp)).toHaveLength(0);
   });
 
-  it("한 밤 3인 사망은 샤바로스 단독으로 모순", () => {
+  it("한 밤 3인 사망은 샤발로스 단독으로 모순", () => {
     const pz = makePuzzle({
       assignmentLength: 7, rolePool: ["shabaloth", "spy"], nights: 2,
       events: [
@@ -78,7 +78,7 @@ describe("Shabaloth: 2킬", () => {
 });
 
 describe("Shabaloth: 승계", () => {
-  it("밤에 죽은 샤바로스는 탕녀만 승계한다 — 스타 패스는 임프 전용", () => {
+  it("밤에 죽은 샤발로스는 탕녀만 승계한다 — 스타 패스는 임프 전용", () => {
     const events = [{ type: "death", night: 2, seat: 0 } as const]; // 자기 자신을 고를 수 있다
     const withSw: RoleId[] = ["shabaloth", "scarletwoman", "empath", "chef", "librarian", "washerwoman", "fortuneteller"];
     const pzSw = makePuzzle({ assignmentLength: 7, rolePool: ["shabaloth", "scarletwoman"], nights: 2, events: [...events] });
@@ -93,7 +93,7 @@ describe("Shabaloth: 승계", () => {
 });
 
 describe("Shabaloth: solve 통합", () => {
-  it("설명 없는 2인 사망 밤이 임프 세계를 지우고 샤바로스 세계만 남긴다", () => {
+  it("설명 없는 2인 사망 밤이 임프 세계를 지우고 샤발로스 세계만 남긴다", () => {
     const pz = makePuzzle({
       assignmentLength: 7,
       rolePool: ["imp", "shabaloth", "spy", "empath", "chef", "librarian", "washerwoman", "fortuneteller", "undertaker", "clockmaker"],

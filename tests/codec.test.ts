@@ -14,17 +14,26 @@ function sharedFrom(id: string): SharedPuzzle {
 }
 
 describe("공유 링크 코덱", () => {
-  it("공식 퍼즐을 왕복해도 내용이 보존된다", async () => {
+  it("공식 퍼즐을 왕복해도 내용이 보존된다 — 필드 전체 비교", async () => {
+    // 일부 필드만 비교하면 스키마에 더한 필드가 코덱에서 조용히 떨어져도 잡지 못한다 (realGame 전례)
     for (const p of PUZZLES) {
       const original = sharedFrom(p.id);
       const round = await decodePuzzle(await encodePuzzle(original));
-      expect(round.title, p.id).toBe(original.title);
-      expect(round.playerCount, p.id).toBe(original.playerCount);
-      expect(round.solution, p.id).toEqual(original.solution);
-      expect(round.claims, p.id).toEqual(original.claims);
-      expect(round.events, p.id).toEqual(original.events);
-      expect(round.questions, p.id).toEqual(original.questions);
+      expect(round, p.id).toEqual(original);
     }
+  });
+
+  it("실제 판 표시(realGame)도 왕복한다", async () => {
+    const original: SharedPuzzle = { ...sharedFrom("mx-05"), realGame: true };
+    const round = await decodePuzzle(await encodePuzzle(original));
+    expect(round.realGame).toBe(true);
+    expect((await decodePuzzle(await encodePuzzle(sharedFrom("mx-05")))).realGame).toBeUndefined();
+  });
+
+  it("알 수 없는 판본·난이도는 기본값으로 바꾸지 않고 거부한다", () => {
+    const base = sharedFrom("mx-05");
+    expect(() => validateShared({ ...base, difficulty: "insane" })).toThrow(/난이도/);
+    expect(() => validateShared({ ...base, edition: "xx" })).toThrow(/판본/);
   });
 
   it("왕복한 퍼즐도 솔버에서 여전히 유일해다", async () => {
@@ -132,7 +141,7 @@ describe("검증 — 신뢰할 수 없는 입력", () => {
     expect(() => validateShared({ ...b, solution })).toThrow(/역할 풀/);
   });
 
-  it("낮 공개 행동 이벤트(총격·지명·처녀 발동)가 왕복에 보존된다", async () => {
+  it("낮 공개 행동 이벤트(총격·지명·성결자 발동)가 왕복에 보존된다", async () => {
     const b = base();
     const events = [
       { type: "slayerShot", day: 1, seat: 0, target: 1, died: false },
