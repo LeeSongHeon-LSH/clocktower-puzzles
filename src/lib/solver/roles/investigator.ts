@@ -7,7 +7,8 @@ import type { InfoData, Seat } from "../types";
 
 type Data = Extract<InfoData, { type: "investigator" }>;
 
-export function investigator(ctx: Ctx, _seat: Seat, data: Data, night: number): boolean {
+export function investigator(ctx: Ctx, seat: Seat, data: Data, night: number): boolean {
+  if (data.targets !== null && (data.targets.includes(seat) || data.targets[0] === data.targets[1])) return false; // 자기 자신은 지목 대상이 아니고, 두 좌석은 서로 다르다
   if (ROLES[data.shownRole].team !== "minion") return false;
   const v = view(ctx, night);
   return data.targets.some((t) => canShowAsRole(v, t, data.shownRole));

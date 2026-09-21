@@ -38,6 +38,7 @@ export function checkContentFalse(ctx: Ctx, seat: Seat, data: InfoData, night: n
   const v = view(ctx, night);
   switch (data.type) {
     case "washerwoman":
+      if (data.targets.includes(seat) || data.targets[0] === data.targets[1]) return false; // 자기 자신은 지목 대상이 아니고, 두 좌석은 서로 다르다
       if (ROLES[data.shownRole].team !== "townsfolk") return false;
       return data.targets.every((t) => canShowAsOtherThan(v, t, [data.shownRole]));
     case "librarian":
@@ -45,9 +46,11 @@ export function checkContentFalse(ctx: Ctx, seat: Seat, data: InfoData, night: n
         // "외지인 없음"이 거짓일 수 있으려면 외지인으로 등록될 수 있는 누군가가 있어야 한다
         return ctx.assignment.some((r) => ROLES[r].team === "outsider") || ctx.assignment.includes("spy");
       }
+      if (data.targets.includes(seat) || data.targets[0] === data.targets[1]) return false; // 자기 자신은 지목 대상이 아니고, 두 좌석은 서로 다르다
       if (ROLES[data.shownRole].team !== "outsider") return false;
       return data.targets.every((t) => canShowAsOtherThan(v, t, [data.shownRole]));
     case "investigator":
+      if (data.targets.includes(seat) || data.targets[0] === data.targets[1]) return false; // 자기 자신은 지목 대상이 아니고, 두 좌석은 서로 다르다
       if (ROLES[data.shownRole].team !== "minion") return false;
       return data.targets.every((t) => canShowAsOtherThan(v, t, [data.shownRole]));
     case "chef":

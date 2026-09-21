@@ -7,7 +7,8 @@ import type { InfoData, Seat } from "../types";
 
 type Data = Extract<InfoData, { type: "librarian" }>;
 
-export function librarian(ctx: Ctx, _seat: Seat, data: Data, night: number): boolean {
+export function librarian(ctx: Ctx, seat: Seat, data: Data, night: number): boolean {
+  if (data.targets !== null && (data.targets.includes(seat) || data.targets[0] === data.targets[1])) return false; // 자기 자신은 지목 대상이 아니고, 두 좌석은 서로 다르다
   const v = view(ctx, night);
   if (data.targets === null) {
     // "외지인 없음"은 **아무도 외지인으로 등록되지 않는 선택이 있을 때만** 참이다.

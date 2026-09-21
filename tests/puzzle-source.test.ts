@@ -79,4 +79,11 @@ describe("수록 신청 파일 생성", () => {
   it("등록 두 줄이 파일명과 맞물린다", () => {
     expect(indexSnippet("cm-01")).toEqual({ importLine: 'import cm01 from "./cm-01";', arrayItem: "cm01" });
   });
+
+  it("별명에 개행이 섞여도 생성 파일의 주석을 벗어나지 못한다", () => {
+    // 코덱이 제어문자를 거르지만, 이 함수는 단독으로도 안전해야 한다 (받는 쪽이 링크를 파일로 옮긴다)
+    const src = puzzleFileSource({ ...sharedFrom("mx-05"), author: "a\nexport const X = 1;" }, "cm-01");
+    expect(src).not.toMatch(/^export const X/m);
+    expect(() => definePuzzle(evaluate(src))).not.toThrow();
+  });
 });

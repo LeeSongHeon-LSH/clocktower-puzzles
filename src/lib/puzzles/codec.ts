@@ -27,6 +27,12 @@ export const LIMITS = {
   maxWalkthrough: 12,
   maxQuestions: 5,
   maxInfoPerClaim: 5,
+  /** 사건 원장 상한 — 10인·5밤에서 사망·처형·낮 행동·투표를 다 적어도 이 안이다 */
+  maxEvents: 120,
+  /** 링크 프래그먼트 길이 상한 (수록 퍼즐은 8,000자 미만 — codec.test.ts) */
+  maxFragment: 20_000,
+  /** 해동된 JSON 바이트 상한 — deflate는 반복 데이터를 1000:1까지 줄이므로 압축 크기만으로는 못 막는다 */
+  maxJsonBytes: 512 * 1024,
 } as const;
 
 /**
@@ -48,9 +54,26 @@ async function squeeze(text: string): Promise<Uint8Array> {
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
+/** 해동 크기를 넘으면 중단한다 — 작은 프래그먼트가 거대한 JSON으로 부풀어 탭을 멎게 하지 못하도록 */
 async function unsqueeze(bytes: Uint8Array): Promise<string> {
   const stream = new Blob([bytes as BlobPart]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
-  return new Response(stream).text();
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > LIMITS.maxJsonBytes) {
+      await reader.cancel();
+      throw new Error("링크에 담긴 문제가 너무 큽니다.");
+    }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(total);
+  let at = 0;
+  for (const c of chunks) { out.set(c, at); at += c.byteLength; }
+  return new TextDecoder().decode(out);
 }
 
 function toBase64Url(bytes: Uint8Array): string {
@@ -72,10 +95,12 @@ export async function encodePuzzle(p: SharedPuzzle): Promise<string> {
 
 /** 링크 프래그먼트 → 퍼즐. 형식이 틀리면 사람이 읽을 수 있는 오류를 던진다. */
 export async function decodePuzzle(fragment: string): Promise<SharedPuzzle> {
+  if (fragment.length > LIMITS.maxFragment) throw new Error("링크에 담긴 문제가 너무 큽니다.");
   let json: string;
   try {
     json = await unsqueeze(fromBase64Url(fragment));
-  } catch {
+  } catch (e) {
+    if (e instanceof Error && e.message.includes("너무 큽니다")) throw e;
     throw new Error("링크가 손상됐습니다. 주소가 잘리지 않았는지 확인해 주세요.");
   }
 
@@ -105,6 +130,8 @@ function str(v: unknown, max: number, field: string, required = true): string | 
     return undefined;
   }
   if (typeof v !== "string") throw new Error(`${field} 형식이 잘못됐습니다.`);
+  // 제어문자 금지 — 서술은 한 줄 산문이고, 별명은 수록 신청 파일의 주석에 보간된다 (source.ts)
+  if (/\p{Cc}/u.test(v)) throw new Error(`${field}에 쓸 수 없는 문자가 있습니다.`);
   const trimmed = v.trim();
   if (required && trimmed.length === 0) throw new Error(`${field}이(가) 비어 있습니다.`);
   if (trimmed.length > max) throw new Error(`${field}이(가) 너무 깁니다 (최대 ${max}자).`);
@@ -256,10 +283,16 @@ function validateClaim(v: unknown, players: number, nights: number): Claim {
   const info: ClaimInfo[] = v.info.map((raw) => {
     if (!isRecord(raw)) throw new Error(`좌석 ${seat}: 정보 형식이 잘못됐습니다.`);
     const night = int(raw.night, 1, nights, `좌석 ${seat} 정보의 밤`);
+    const data = raw.data === undefined ? undefined : validateInfoData(raw.data, players, `좌석 ${seat} 밤 ${night}`);
+    // 세탁부·사서·수사관은 자기 자신을 지목받지 않고, 두 좌석은 서로 다르다 — 솔버도 거부하지만 여기서 이유를 말한다
+    if (data && (data.type === "washerwoman" || data.type === "librarian" || data.type === "investigator") && data.targets !== null) {
+      if (data.targets.includes(seat)) throw new Error(`좌석 ${seat} 밤 ${night}: 자기 자신은 지목 대상이 될 수 없습니다.`);
+      if (data.targets[0] === data.targets[1]) throw new Error(`좌석 ${seat} 밤 ${night}: 두 좌석이 서로 달라야 합니다.`);
+    }
     return {
       night,
       text: str(raw.text, LIMITS.maxText, `좌석 ${seat} 밤 ${night} 서술`, false),
-      data: raw.data === undefined ? undefined : validateInfoData(raw.data, players, `좌석 ${seat} 밤 ${night}`),
+      data,
       asRole: raw.asRole === undefined ? undefined : roleId(raw.asRole, `좌석 ${seat} 밤 ${night} 당시 역할`),
     };
   });
@@ -323,6 +356,10 @@ export function validateShared(v: unknown): SharedPuzzle {
   }
   const claims = v.claims.map((c) => validateClaim(c, playerCount, nights));
 
+  if (v.events !== undefined && !Array.isArray(v.events)) throw new Error("사건 목록 형식이 잘못됐습니다.");
+  if (Array.isArray(v.events) && v.events.length > LIMITS.maxEvents) {
+    throw new Error(`사건이 너무 많습니다 (최대 ${LIMITS.maxEvents}건).`);
+  }
   const events = Array.isArray(v.events) ? v.events.map((e) => validateEvent(e, playerCount, nights)) : [];
 
   if (!Array.isArray(v.questions) || v.questions.length === 0) throw new Error("질문이 없습니다.");

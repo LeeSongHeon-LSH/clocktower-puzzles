@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { solve } from "@/lib/solver/solve";
 import { Schedule, demonScenarios } from "@/lib/solver/timeline";
 import { wakes } from "@/lib/solver/ctx";
+import { checkContent } from "@/lib/solver/roles";
 import type { RoleId } from "@/lib/solver/types";
 import { makeCtx, makePuzzle } from "./helpers";
 
@@ -126,5 +127,14 @@ describe("구성 전용 역할: solve 통합 스모크", () => {
     });
     const keys = solve(pz).map((w) => w.assignment.join(","));
     expect(keys.some((k) => k.includes("pacifist"))).toBe(true);
+  });
+
+  it("세탁부·사서·수사관은 자기 자신이나 같은 좌석 둘을 지목받을 수 없다 (2026-09-21)", () => {
+    const ctx = makeCtx({ assignment: ["washerwoman", "librarian", "investigator", "chef", "empath", "poisoner", "imp"], rolePool: ["washerwoman", "librarian", "investigator", "chef", "empath", "poisoner", "imp", "drunk"] });
+    expect(checkContent(ctx, 0, { type: "washerwoman", targets: [0, 3], shownRole: "chef" }, 1)).toBe(false);
+    expect(checkContent(ctx, 0, { type: "washerwoman", targets: [3, 3], shownRole: "chef" }, 1)).toBe(false);
+    expect(checkContent(ctx, 0, { type: "washerwoman", targets: [3, 4], shownRole: "chef" }, 1)).toBe(true);
+    expect(checkContent(ctx, 2, { type: "investigator", targets: [2, 5], shownRole: "poisoner" }, 1)).toBe(false);
+    expect(checkContent(ctx, 1, { type: "librarian", targets: [1, 4], shownRole: "drunk" }, 1)).toBe(false);
   });
 });

@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 import { PUZZLES } from "@/data/puzzles";
-import { decodePuzzle, encodePuzzle, toPuzzle, validateShared, type SharedPuzzle } from "@/lib/puzzles/codec";
+import { LIMITS, decodePuzzle, encodePuzzle, toPuzzle, validateShared, type SharedPuzzle } from "@/lib/puzzles/codec";
 import { solve } from "@/lib/solver/solve";
 
 function sharedFrom(id: string): SharedPuzzle {
@@ -159,5 +159,46 @@ describe("검증 — 신뢰할 수 없는 입력", () => {
       .toThrow(/총격자 좌석/);
     expect(() => validateShared({ ...b, events: [{ type: "nomination", day: 1, nominator: 0, nominee: -1 }] }))
       .toThrow(/지명 대상 좌석/);
+  });
+
+  it("사건이 상한을 넘으면 거부한다 — 반복 이벤트는 압축이 잘 돼 작은 링크로도 솔버를 오래 돌릴 수 있다", () => {
+    const b = base();
+    const events = Array.from({ length: LIMITS.maxEvents + 1 }, () => ({ type: "vote", day: 1, seat: 0 }));
+    expect(() => validateShared({ ...b, events })).toThrow(/사건이 너무 많습니다/);
+    expect(() => validateShared({ ...b, events: events.slice(0, LIMITS.maxEvents) })).not.toThrow();
+  });
+
+  it("제어문자(개행 등)가 든 문자열은 거부한다 — 별명은 수록 신청 파일의 주석에 보간된다", () => {
+    const b = base();
+    expect(() => validateShared({ ...b, author: "a\nexport const X = 1;" })).toThrow(/별명/);
+    expect(() => validateShared({ ...b, title: "제목\u0000" })).toThrow(/제목/);
+    expect(() => validateShared({ ...b, walkthrough: ["한 줄\r\n두 줄"] })).toThrow(/해설/);
+  });
+
+  it("지나치게 긴 프래그먼트는 해동 전에 거부한다", async () => {
+    await expect(decodePuzzle("A".repeat(LIMITS.maxFragment + 1))).rejects.toThrow(/너무 큽니다/);
+  });
+
+  it("작은 링크가 거대한 JSON으로 부푸는 것을 해동 단계에서 막는다", async () => {
+    // 압축은 잘 되지만 해동하면 maxJsonBytes를 넘는 페이로드
+    const huge = JSON.stringify({ v: 1, p: { title: "x".repeat(LIMITS.maxJsonBytes + 1024) } });
+    const bytes = new Uint8Array(await new Response(new Blob([huge]).stream().pipeThrough(new CompressionStream("deflate-raw"))).arrayBuffer());
+    let bin = "";
+    for (const x of bytes) bin += String.fromCharCode(x);
+    const fragment = btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    expect(fragment.length).toBeLessThan(LIMITS.maxFragment); // 프래그먼트 길이 검사로는 안 걸린다
+    await expect(decodePuzzle(fragment)).rejects.toThrow(/너무 큽니다/);
+  });
+
+  it("세탁부류 지목이 자기 자신이거나 같은 좌석 둘이면 거부한다", () => {
+    const b = base();
+    const withTargets = (targets: [number, number]) => {
+      const claims = structuredClone(b.claims) as { seat: number; info: unknown[] }[];
+      claims[0].info = [{ night: 1, data: { type: "washerwoman", targets, shownRole: "chef" } }];
+      return { ...b, claims };
+    };
+    expect(() => validateShared(withTargets([0, 1]))).toThrow(/자기 자신/);
+    expect(() => validateShared(withTargets([1, 1]))).toThrow(/서로 달라야/);
+    expect(() => validateShared(withTargets([1, 2]))).not.toThrow();
   });
 });

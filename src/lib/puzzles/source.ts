@@ -112,7 +112,8 @@ export function puzzleFileSource(p: SharedPuzzle, id: string): string {
     .map(([k, v]) => `  ${k}: ${lit(v, "  ")},`)
     .join("\n");
 
-  const by = p.author ? `${p.author} 제작. ` : "";
+  // 별명은 코덱이 제어문자를 거르지만, 줄 주석 안이라 개행만은 여기서도 한 번 더 막는다
+  const by = p.author ? `${p.author.replace(/[\r\n]+/g, " ")} 제작. ` : "";
   return [
     'import { definePuzzle } from "@/lib/puzzles/schema";',
     "",
