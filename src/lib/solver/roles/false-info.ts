@@ -15,7 +15,7 @@ import { empathRange } from "./empath";
 import { oracleRange } from "./oracle";
 import { mathematicianRange } from "./mathematician";
 import { chambermaidRange } from "./chambermaid";
-import { clockmakerSteps } from "./clockmaker";
+import { clockmakerStepsSet } from "./clockmaker";
 import { fortuneteller } from "./fortuneteller";
 import { seamstress } from "./seamstress";
 import { monk } from "./monk";
@@ -65,10 +65,9 @@ export function checkContentFalse(ctx: Ctx, seat: Seat, data: InfoData, night: n
     }
     case "ravenkeeper":
       return canShowAsOtherThan(v, data.target, [data.shownRole]);
-    case "clockmaker": {
-      const best = clockmakerSteps(ctx);
-      return best !== null && data.steps !== best;
-    }
+    case "clockmaker":
+      // 참-검증과 같은 오등록 조합 전수 — 스텝 수가 claimed와 달라지는 조합이 있는가
+      return [...clockmakerStepsSet(ctx, night)].some((steps) => steps !== data.steps);
     case "seamstress":
       if (data.targets.includes(seat)) return false;
       return seamstress(ctx, seat, { ...data, sameTeam: !data.sameTeam }, night);

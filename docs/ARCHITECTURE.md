@@ -156,6 +156,8 @@ clocktower-puzzles-notes-v1 = {
   (`roles/false-info.ts`)은 "범위 밖의 값이 존재"를 그 범위로 판정한다. 관대 집합(노 다시·푸카·
   비고르모르티스의 '받았을 수 있는' 독, 마귀할멈 자기 변신)은 max에만 들어간다. 참·거짓을 따로 세면
   두 판정이 갈라진다 (2026-09-08 정정).
+  값이 범위가 아닌 집합인 요리사·시계공은 `xxxPairCounts()`/`xxxStepsSet()`으로 오등록 조합의
+  결과 집합을 내보내고, 참 판정은 "집합에 있다", 거짓 판정은 "다른 값이 집합에 있다"다.
 - **정보 역할 하나를 더할 때 손볼 곳은 컴파일러가 알려준다.** `InfoData` 유니온에 변형을 더하면
   `INFO_TYPES`(`types.ts`)의 `satisfies` 검사, 코덱의 `validateInfoData`, 렌더러 `renderInfo`, 참·거짓
   판정 `switch`, 에디터 `blankInfo`가 모두 exhaustive라 빠뜨린 곳에서 타입 오류가 난다. 에디터의

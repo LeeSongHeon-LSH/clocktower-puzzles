@@ -39,7 +39,7 @@ export function checkContent(ctx: Ctx, seat: Seat, data: InfoData, night: number
     case "fortuneteller": return fortuneteller(ctx, seat, data, night);
     case "undertaker": return undertaker(ctx, seat, data, night);
     case "ravenkeeper": return ravenkeeper(ctx, seat, data, night);
-    case "clockmaker": return clockmaker(ctx, seat, data);
+    case "clockmaker": return clockmaker(ctx, seat, data, night);
     case "seamstress": return seamstress(ctx, seat, data, night);
     case "juggler": return juggler(ctx, seat, data, night);
     case "mathematician": return mathematician(ctx, seat, data, night);
