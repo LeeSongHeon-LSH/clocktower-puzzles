@@ -8,13 +8,14 @@
 
 import { ROLES } from "@/data/roles";
 import { Ctx, view } from "../ctx";
-import { canShowAsOtherThan, canShowAsRole, isGoodTeam } from "../registration";
+import { canShowAsOtherThan, isGoodTeam } from "../registration";
 import type { InfoData, Seat } from "../types";
 import { chefPairCounts } from "./chef";
 import { empathRange } from "./empath";
 import { oracleRange } from "./oracle";
 import { mathematicianRange } from "./mathematician";
 import { chambermaidRange } from "./chambermaid";
+import { jugglerRange } from "./juggler";
 import { clockmakerStepsSet } from "./clockmaker";
 import { fortuneteller } from "./fortuneteller";
 import { seamstress } from "./seamstress";
@@ -74,17 +75,8 @@ export function checkContentFalse(ctx: Ctx, seat: Seat, data: InfoData, night: n
     case "seamstress":
       if (data.targets.includes(seat)) return false;
       return seamstress(ctx, seat, { ...data, sameTeam: !data.sameTeam }, night);
-    case "juggler": {
-      let min = 0;
-      let max = 0;
-      for (const g of data.guesses) {
-        const token = v.tokenRole(g.seat);
-        const flexible = token === "recluse" || token === "spy";
-        if (canShowAsRole(v, g.seat, g.role)) max++;
-        if (token === g.role && !flexible) min++;
-      }
-      return rangeCanDiffer([min, max], data.correct);
-    }
+    case "juggler":
+      return rangeCanDiffer(jugglerRange(ctx, data, night), data.correct);
     case "mathematician":
       return rangeCanDiffer(mathematicianRange(ctx, night), data.count);
     case "chambermaid": {
@@ -135,13 +127,13 @@ export function checkContentFalse(ctx: Ctx, seat: Seat, data: InfoData, night: n
     case "innkeeper":
       return innkeeper(ctx, seat, data, night);
     case "courtier":
-      return courtier(ctx, seat, data, night);
+      return courtier(ctx, seat, data);
     case "professor":
       return professor(ctx, seat, data, night);
     case "snakecharmer":
       return snakecharmer(ctx, seat, data, night);
     case "philosopher":
-      return philosopher(ctx, seat, data, night);
+      return philosopher(ctx, seat, data);
     // 낮 정보 — Vortox 세계에서 화가의 답은 거짓, 학자의 두 진술은 둘 다 거짓 (공식 룰링)
     case "artist":
       return artistFalse(ctx, seat, data, night);

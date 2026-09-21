@@ -32,7 +32,10 @@ const listeners = new Set<() => void>();
 function read(): ProgressMap {
   try {
     const raw = window.localStorage.getItem(KEY);
-    return raw ? (JSON.parse(raw) as ProgressMap) : EMPTY;
+    if (!raw) return EMPTY;
+    // JSON은 유효해도 모양이 다를 수 있다 ("null"·배열 등) — 그대로 새면 progress[id]에서 페이지가 죽는다
+    const parsed: unknown = JSON.parse(raw);
+    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) ? (parsed as ProgressMap) : EMPTY;
   } catch {
     return EMPTY;
   }

@@ -22,7 +22,7 @@ export function innkeeper(ctx: Ctx, seat: Seat, data: InnkeeperData, night: numb
   return alive[data.targets[0]] && alive[data.targets[1]];
 }
 
-export function courtier(ctx: Ctx, _seat: Seat, data: CourtierData, _night: number): boolean {
+export function courtier(ctx: Ctx, _seat: Seat, data: CourtierData): boolean {
   return ctx.pz.rolePool.includes(data.role); // 대본에 있는 역할만 고를 수 있다
 }
 
@@ -37,7 +37,7 @@ export function snakecharmer(ctx: Ctx, seat: Seat, data: SnakeData, night: numbe
 type PhilosopherData = Extract<InfoData, { type: "philosopher" }>;
 
 /** 철학자: 대본 안의 획득 가능한 선한 능력만 고를 수 있다 */
-export function philosopher(ctx: Ctx, _seat: Seat, data: PhilosopherData, _night: number): boolean {
+export function philosopher(ctx: Ctx, _seat: Seat, data: PhilosopherData): boolean {
   return ctx.pz.rolePool.includes(data.role) && PHILOSOPHER_GAINABLE.includes(data.role);
 }
 

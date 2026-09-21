@@ -107,6 +107,15 @@ describe("진행도 스토어", () => {
     expect(Object.keys(loadProgress()).sort()).toEqual(["tb-01", "tb-02"]);
   });
 
+  it("저장된 값이 유효한 JSON이지만 기록 모양이 아니면 빈 기록으로 본다", async () => {
+    // JSON.parse는 성공하므로 try/catch가 잡지 못한다 — null이 새면 progress[id]에서 페이지가 죽는다
+    for (const raw of ["null", "[]", "5", '"x"']) {
+      installWindow(raw);
+      const { loadProgress } = await freshModule();
+      expect(loadProgress(), raw).toEqual({});
+    }
+  });
+
   it("저장된 JSON이 깨져 있어도 던지지 않고 빈 기록으로 본다", async () => {
     installWindow("{ 이건 JSON이 아니다");
     const { loadProgress } = await freshModule();

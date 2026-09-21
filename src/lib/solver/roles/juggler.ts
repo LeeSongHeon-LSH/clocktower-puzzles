@@ -6,7 +6,8 @@ import type { InfoData, Seat } from "../types";
 
 type Data = Extract<InfoData, { type: "juggler" }>;
 
-export function juggler(ctx: Ctx, _seat: Seat, data: Data, night: number): boolean {
+/** 곡예사가 볼 수 있는 적중 수의 [min, max] (참 판정·거짓 판정 공용) */
+export function jugglerRange(ctx: Ctx, data: Data, night: number): [number, number] {
   const v = view(ctx, night);
   let min = 0;
   let max = 0;
@@ -16,5 +17,10 @@ export function juggler(ctx: Ctx, _seat: Seat, data: Data, night: number): boole
     if (canShowAsRole(v, g.seat, g.role)) max++;
     if (token === g.role && !flexible) min++;
   }
+  return [min, max];
+}
+
+export function juggler(ctx: Ctx, _seat: Seat, data: Data, night: number): boolean {
+  const [min, max] = jugglerRange(ctx, data, night);
   return data.correct >= min && data.correct <= max;
 }

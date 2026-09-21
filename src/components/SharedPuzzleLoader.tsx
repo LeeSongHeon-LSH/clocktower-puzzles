@@ -49,11 +49,15 @@ export function SharedPuzzleLoader() {
 
   useEffect(() => {
     let cancelled = false;
+    // 프래그먼트가 빠르게 두 번 바뀌면 먼저 시작한 load가 나중 결과를 덮어쓸 수 있다 — 마지막 호출만 반영한다
+    let latest = 0;
 
     async function load() {
+      const ticket = ++latest;
+      const fresh = () => !cancelled && ticket === latest;
       const fragment = window.location.hash.replace(/^#/, "");
       if (!fragment) {
-        if (!cancelled) setState({ kind: "empty" });
+        if (fresh()) setState({ kind: "empty" });
         return;
       }
       try {
@@ -64,6 +68,11 @@ export function SharedPuzzleLoader() {
         let status: Status;
         try {
           const { unmodeled, worlds } = analyze(puzzle);
+          // 미검증 문제는 해설이 유일한 근거다 (REQUIREMENTS §2.5.1) — 에디터가 강제하지만 링크는
+          // 신뢰하지 않으므로 여는 쪽에서도 확인한다
+          if (unmodeled.length > 0 && puzzle.walkthrough.length === 0) {
+            throw new Error("검증기가 능력을 모르는 역할이 있는데 해설이 없습니다. 이런 문제는 해설이 유일한 근거라 열 수 없습니다.");
+          }
           status =
             unmodeled.length > 0
               ? { kind: "unverified" }
@@ -75,9 +84,9 @@ export function SharedPuzzleLoader() {
         } catch (e) {
           status = { kind: "malformed", message: e instanceof Error ? e.message : "문제 형식이 잘못됐습니다." };
         }
-        if (!cancelled) setState({ kind: "ready", puzzle, status });
+        if (fresh()) setState({ kind: "ready", puzzle, status });
       } catch (e) {
-        if (!cancelled) {
+        if (fresh()) {
           setState({ kind: "error", message: e instanceof Error ? e.message : "링크를 열 수 없습니다." });
         }
       }

@@ -10,7 +10,7 @@ import { useMemo, useState } from "react";
 import { ROLES, TEAM_LABELS, roleLabel } from "@/data/roles";
 import { LIMITS, encodePuzzle, toPuzzle, type SharedPuzzle } from "@/lib/puzzles/codec";
 import { DIFFICULTY_LABELS, DIFFICULTY_ORDER, seatName, standardQuestions, type Difficulty } from "@/lib/puzzles/schema";
-import { nextCommunityId } from "@/lib/puzzles/source";
+import { deriveEdition, nextCommunityId } from "@/lib/puzzles/source";
 import { PuzzleSubmit } from "@/components/PuzzleSubmit";
 import { analyze, unmodeledRoles } from "@/lib/solver/solve";
 import { KILL_FAIL_EXPLAINERS, MULTI_DEATH_EXPLAINERS } from "@/lib/solver/timeline";
@@ -480,17 +480,19 @@ export function PuzzleCreator({ existingIds }: { existingIds: string[] }) {
    * 사용자가 원인을 찾기 어려우므로 뺄 때 함께 정리한다.
    */
   function togglePool(role: RoleId) {
-    setPool((prev) => {
-      if (!prev.includes(role)) return [...prev, role];
-      const next = prev.filter((r) => r !== role);
-      const fallbackClaim = next.find((r) => !UNCLAIMABLE.includes(r));
-      const fallbackRole = next[0];
-      setClaims((cs) =>
-        cs.map((c) => (c.role === role && fallbackClaim ? { role: fallbackClaim, info: [] } : c)),
-      );
-      setSolution((sol) => sol.map((r) => (r === role && fallbackRole ? fallbackRole : r)));
-      return next;
-    });
+    // 업데이터 함수는 순수해야 한다 (StrictMode가 두 번 부른다) — 다른 상태 갱신은 밖에서 한다
+    if (!pool.includes(role)) {
+      setPool([...pool, role]);
+      return;
+    }
+    const next = pool.filter((r) => r !== role);
+    const fallbackClaim = next.find((r) => !UNCLAIMABLE.includes(r));
+    const fallbackRole = next[0];
+    setPool(next);
+    setClaims((cs) =>
+      cs.map((c) => (c.role === role && fallbackClaim ? { role: fallbackClaim, info: [] } : c)),
+    );
+    setSolution((sol) => sol.map((r) => (r === role && fallbackRole ? fallbackRole : r)));
   }
 
   /** 해설은 한 줄 = 한 단계다 */
@@ -519,7 +521,7 @@ export function PuzzleCreator({ existingIds }: { existingIds: string[] }) {
     return {
       title: title.trim() || "이름 없는 문제",
       author: author.trim() || undefined,
-      edition: "mixed",
+      edition: deriveEdition(pool),
       difficulty,
       realGame: realGame || undefined,
       playerCount,
@@ -1294,7 +1296,9 @@ function InfoEditor({
             {seatSelect(pair[1], (s) => set({ ...d, targets: [pair[0], s] } as InfoData), "b")}
             <span className="text-xs text-faded">중 하나가</span>
             {roleSelect(("shownRole" in d ? d.shownRole : "chef") as RoleId,
-              (r) => set({ ...d, shownRole: r } as InfoData))}
+              (r) => set({ ...d, shownRole: r } as InfoData),
+              // 솔버가 요구하는 팀만 — 다른 팀을 고르면 "해가 없습니다"만 나오고 이유는 안 보인다
+              d.type === "washerwoman" ? ["townsfolk"] : d.type === "librarian" ? ["outsider"] : ["minion"])}
           </>
         )}
 

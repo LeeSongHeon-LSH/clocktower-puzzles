@@ -372,6 +372,16 @@ const GOON_RANK: Partial<Record<RoleId, number>> = {
   fortuneteller: 30, dreamer: 31, seamstress: 32, chambermaid: 33, butler: 34,
 };
 
+/**
+ * 순위표에 없는 선택자를 조용히 0(가장 이름)으로 두면 rMin이 0으로 눌려 다른 후보가 전부
+ * 탈락한다 — 세계를 줄이는 방향이라 불건전하다. goonChoiceTargets에 역할을 더하면 순위표도 더한다.
+ */
+function goonRankOf(role: RoleId): number {
+  const rank = GOON_RANK[role];
+  if (rank === undefined) throw new Error(`GOON_RANK에 없는 선택자 역할: ${role}`);
+  return rank;
+}
+
 /** 밤에 플레이어를 고르는 선한 역할 — 기록이 없으면 '누군가 골랐을 수 있다'(goodUnknown)의 근거 */
 const GOON_CHOOSER_ROLES: readonly RoleId[] = [
   "monk", "exorcist", "sailor", "innkeeper", "gambler", "snakecharmer", "professor",
@@ -942,7 +952,7 @@ export function demonScenarios(
         if (targets === null || !targets.includes(goonSeat)) continue;
         recs.push({
           seat: s,
-          rank: GOON_RANK[inf.data.type as RoleId] ?? 0,
+          rank: goonRankOf(inf.data.type as RoleId),
           forcing: aliveStart[s] && tokenAt(st.became, s, night) === inf.data.type,
         });
       }

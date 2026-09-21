@@ -31,7 +31,10 @@ const listeners = new Set<() => void>();
 function read(): NotesMap {
   try {
     const raw = window.localStorage.getItem(KEY);
-    return raw ? (JSON.parse(raw) as NotesMap) : EMPTY;
+    if (!raw) return EMPTY;
+    // JSON은 유효해도 모양이 다를 수 있다 ("null"·배열 등) — progress.ts와 같은 방어
+    const parsed: unknown = JSON.parse(raw);
+    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) ? (parsed as NotesMap) : EMPTY;
   } catch {
     return EMPTY;
   }

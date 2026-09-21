@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from "vitest";
 import { solve } from "@/lib/solver/solve";
-import type { RoleId, SolverPuzzle } from "@/lib/solver/types";
+import type { SolverPuzzle } from "@/lib/solver/types";
 
 function puzzle(overrides: Partial<SolverPuzzle> = {}): SolverPuzzle {
   return {
