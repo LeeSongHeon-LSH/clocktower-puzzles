@@ -17,6 +17,8 @@ const OUTDATED: Record<string, keyof typeof ROLES> = {
   처녀: "virgin",
   샤바로스: "shabaloth",
   좀부울: "zombuul",
+  소문꾼: "gossip", // 2026-09-21 리뷰: 사전은 "험담꾼"인데 해설·규칙 본문이 이 표기를 쓰고 있었다
+  // 궁정대신(courtier)의 옛 표기 "대신"은 일반 단어와 겹쳐 금지어로 두지 못한다 — 눈으로 본다
 };
 
 const ROOTS = ["src/components", "src/app", "src/data/puzzles", "src/data/rules.ts", "src/data/role-notes.ts", "src/lib"];
@@ -32,6 +34,18 @@ describe("역할명 표기", () => {
   it("검사 대상 파일이 있다", () => {
     expect(files.length).toBeGreaterThan(20);
   });
+
+  // 사전 표기에 공백이 든 역할("여관 주인"·"객실 청소부"·"찻집 여인" 등)은 공백을 뺀 변형이 산문에
+  // 스며들기 쉽다 — 사전에서 파생해 전부 검사한다 (2026-09-21 리뷰: "여관주인"이 6개 파일에 있었다)
+  const squished = Object.entries(ROLES).flatMap(([id, meta]) =>
+    meta.ko.includes(" ") ? [[meta.ko.replace(/ /g, ""), id as keyof typeof ROLES] as const] : [],
+  );
+  for (const [variant, id] of squished) {
+    it(`"${variant}"은(는) 쓰지 않는다 — 사전 표기는 "${ROLES[id].ko}"`, () => {
+      const hits = files.filter((f) => readFileSync(f, "utf8").includes(variant));
+      expect(hits, hits.join(", ")).toEqual([]);
+    });
+  }
 
   for (const [old, id] of Object.entries(OUTDATED)) {
     it(`"${old}"은(는) 쓰지 않는다 — 지금 표기는 "${ROLES[id].ko}"`, () => {

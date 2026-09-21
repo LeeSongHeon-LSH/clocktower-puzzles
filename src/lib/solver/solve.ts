@@ -555,7 +555,7 @@ function tryWorld(
       for (const i of soberInfos) {
         if (sc.minstrelNights?.has(i.night)) continue; // 전원 취함 밤의 정보는 무제약
         if (isSweetDrunk(ctx, i.seat, i.night)) continue; // 스위트하트 취함 — 정보 무제약
-        if (isExtraDrunk(ctx, i.seat, i.night)) continue; // 선원·여관주인·대신 취함 — 정보 무제약
+        if (isExtraDrunk(ctx, i.seat, i.night)) continue; // 선원·여관 주인·궁정대신 취함 — 정보 무제약
         if (isNdPoisoned(ctx, i.seat, i.night)) continue; // 노 다시 이웃 독 가능 — 정보 무제약
         if (isPukkaPoisoned(ctx, i.seat, i.night)) continue; // 푸카 독 가능 — 정보 무제약
         if (isVigorPoisoned(ctx, i.seat, i.night)) continue; // 죽은 하수인의 이웃 독 가능 — 정보 무제약
@@ -650,7 +650,7 @@ function tryWorld(
         if (vector[i.night] === i.seat) continue; // 그 밤 중독 → 정보 무제약
         if (sc.minstrelNights?.has(i.night)) continue; // 전원 취함 밤
         if (isSweetDrunk(pctx, i.seat, i.night)) continue; // 스위트하트 취함
-        if (isExtraDrunk(pctx, i.seat, i.night)) continue; // 선원·여관주인·대신 취함
+        if (isExtraDrunk(pctx, i.seat, i.night)) continue; // 선원·여관 주인·궁정대신 취함
         if (isNdPoisoned(pctx, i.seat, i.night)) continue; // 노 다시 이웃 독 가능
         if (isPukkaPoisoned(pctx, i.seat, i.night)) continue; // 푸카 독 가능
         if (isVigorPoisoned(pctx, i.seat, i.night)) continue; // 죽은 하수인의 이웃 독 가능

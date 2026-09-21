@@ -47,7 +47,7 @@ export function isVigorPoisoned(ctx: Ctx, seat: Seat, night: number): boolean {
   return ctx.sc.vigorPoisoned?.[night]?.has(seat) ?? false;
 }
 
-/** 이동식 취함 원천(선원·여관주인·대신)에 그 밤 확정 취해 있었는가 (시나리오 분기별) */
+/** 이동식 취함 원천(선원·여관 주인·궁정대신)에 그 밤 확정 취해 있었는가 (시나리오 분기별) */
 export function isExtraDrunk(ctx: Ctx, seat: Seat, night: number): boolean {
   return ctx.sc.extraDrunk?.[night]?.has(seat) ?? false;
 }

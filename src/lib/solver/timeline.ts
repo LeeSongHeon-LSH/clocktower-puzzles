@@ -46,7 +46,7 @@ import type { Claim, InfoData, RoleId, Seat, SolverPuzzle } from "./types";
 /**
  * 악마의 킬 부재(아무도 죽지 않은 밤)를 설명할 수 있는 역할 — doNightRest의 "킬 부재" 분기와
  * 같은 목록이다. 분기를 더하면 여기도 더한다 (에디터가 저자 안내에 그대로 쓴다).
- * 독살범(독살), 군인·수도사·찻집 여인·어릿광대·선원·여관주인(보호·회피), 구마사제(봉쇄),
+ * 독살범(독살), 군인·수도사·찻집 여인·어릿광대·선원·여관 주인(보호·회피), 구마사제(봉쇄),
  * 음유시인(전원 취함 밤), 대신(악마 취함), 건달(악마가 골라 취함), 좀버얼(처형 다음 밤 휴식),
  * 포(조용한 밤 선택), 샤발로스(시신 선택), 푸카(선택·실행 두 밤에 걸친 실패).
  */
@@ -58,7 +58,7 @@ export const KILL_FAIL_EXPLAINERS: readonly RoleId[] = [
 /**
  * 한 밤에 둘 이상 죽는 것을 설명할 수 있는 역할 — 킬 귀속 `collect`의 후보 + 다중 킬 악마.
  * 암살자·대부(추가 킬), 할머니(손주 연쇄), 도박사(오답 사망), 땜장이(임의 사망),
- * 달의 자손(저주), 소문꾼(참인 발언), 포·샤발로스(다중 킬 악마).
+ * 달의 자손(저주), 험담꾼(참인 발언), 포·샤발로스(다중 킬 악마).
  */
 export const MULTI_DEATH_EXPLAINERS: readonly RoleId[] = [
   "assassin", "godfather", "grandmother", "gambler", "tinker", "moonchild", "gossip", "po", "shabaloth",
@@ -238,7 +238,7 @@ export interface DemonScenario {
    */
   pukkaPoisoned?: Set<Seat>[];
   /**
-   * 이동식 취함 원천(선원·여관주인·대신)의 확정 취함: extraDrunk[n] = 밤 n(과 낮 n)에
+   * 이동식 취함 원천(선원·여관 주인·궁정대신)의 확정 취함: extraDrunk[n] = 밤 n(과 낮 n)에
    * 취해 있던 좌석들. 이 시나리오(분기) 안에서는 확실하다 — 그 좌석의 그 밤 정보는 무제약이다.
    */
   extraDrunk?: Set<Seat>[];
@@ -336,7 +336,7 @@ interface St {
   /** 성결자(실제)가 첫 지명을 받아 능력이 소진됐는가 (중독 상태였어도 소진) */
   virginSpent: boolean;
   /**
-   * 이동식 취함 원천(선원·여관주인·대신)의 **확정** 취함: 밤 n → 그 밤(과 다음 낮) 취한 좌석들.
+   * 이동식 취함 원천(선원·여관 주인·궁정대신)의 **확정** 취함: 밤 n → 그 밤(과 다음 낮) 취한 좌석들.
    * 이 분기(St) 안에서는 확실하다 — require_를 만족시키고 forbid_를 깨뜨린다.
    */
   drunkNights: Map<number, Set<Seat>>;
@@ -907,10 +907,10 @@ export function demonScenarios(
       }
     }
     st.demonNights[night] = st.demon;
-    // 건달의 '첫 선택자'를 먼저 열거한다 — 그 취함이 선원·여관주인의 멀쩡함을 깨야 하므로
+    // 건달의 '첫 선택자'를 먼저 열거한다 — 그 취함이 선원·여관 주인의 멀쩡함을 깨야 하므로
     // 이동식 취함 분기보다 앞선다
     for (const g of goonBranches(st, night, trigger, minstrelActive)) {
-      // 이동식 취함 원천(선원·여관주인·대신)의 선택을 분기로 열거한 뒤 밤을 진행한다
+      // 이동식 취함 원천(선원·여관 주인·궁정대신)의 선택을 분기로 열거한 뒤 밤을 진행한다
       for (const s of drunkSourceBranches(g, night, minstrelActive)) {
         doNightRest(s, night, trigger, minstrelActive, demonless);
       }
@@ -976,7 +976,7 @@ export function demonScenarios(
       const c = cloneSt(st);
       if (require_(c, night, goonSeat)) keepAlign(c, -1);
     }
-    // 대신은 플레이어가 아니라 **캐릭터**를 고르므로 건달을 발동시키지 않는다 —
+    // 궁정대신은 플레이어가 아니라 **캐릭터**를 고르므로 건달을 발동시키지 않는다 —
     // 이 밤 '건달'을 골랐다면 건달은 취해 있고 능력이 작동하지 않는다 (취함 표시는
     // 뒤따르는 이동식 취함 분기가 한다)
     if (courtierRec !== null && courtierRec.night === night && courtierRec.role === "goon"
@@ -1025,7 +1025,7 @@ export function demonScenarios(
    * 밤 night의 이동식 취함 분기들. 각 분기의 취함은 **확정**이다 (require 만족·forbid 파괴).
    * - 선원: (자신이 취함 — 공짜) / (멀쩡 — 기록된 대상이 확정 취함). 중독된 선원(아무도 안 취함)은
    *   관측상 '자신이 취함'과 같아 별도 분기가 없다.
-   * - 여관주인: 기록된 두 대상 중 하나가 취함(여관주인 멀쩡 강제 — 보호도 확실해진다) / 무효(중독 강제)
+   * - 여관 주인: 기록된 두 대상 중 하나가 취함(여관 주인 멀쩡 강제 — 보호도 확실해진다) / 무효(중독 강제)
    * - 대신: 기록된 역할 토큰의 좌석이 3밤 취함(멀쩡 강제) / 무효(중독 강제)
    * 빈 배열 = 이 세계는 기록과 모순 (죽은 좌석을 골랐다 등).
    */
@@ -1177,7 +1177,7 @@ export function demonScenarios(
     const exoAlive = exoSeat >= 0 && aliveStart[exoSeat];
     const exoData = exoAlive ? actionData(exoSeat, "exorcist", night) : undefined;
     const exoTarget = exoData && "target" in exoData ? exoData.target : null;
-    // 여관주인의 이 밤 보호 대상 (기록이 있을 때만 — 없으면 보호를 강제하지 않는다, 관대한 방향)
+    // 여관 주인의 이 밤 보호 대상 (기록이 있을 때만 — 없으면 보호를 강제하지 않는다, 관대한 방향)
     const innRec = innSeat >= 0 && night >= 2 && aliveStart[innSeat] ? actionData(innSeat, "innkeeper", night) : undefined;
     const innProtected: [Seat, Seat] | null = innRec?.type === "innkeeper" ? innRec.targets : null;
     const sailorAlive = sailorSeat >= 0 && aliveStart[sailorSeat];
@@ -1253,7 +1253,7 @@ export function demonScenarios(
           if (tlForced(aliveStart, d, s.became, s.goonEvil) && !require_(s, night, tealadySeat)) return false;
           // 멀쩡한 선원은 죽지 않는다 → 취했거나(자기 선택) 중독됐어야 한다 (암살자는 관통)
           if (d === sailorSeat && !require_(s, night, sailorSeat)) return false;
-          // 여관주인이 보호한 좌석의 죽음 → 여관주인이 비정상이었어야 한다 (암살자는 관통)
+          // 여관 주인이 보호한 좌석의 죽음 → 여관 주인이 비정상이었어야 한다 (암살자는 관통)
           if (innProtected !== null && innProtected.includes(d) && !require_(s, night, innSeat)) return false;
           // 회피 미사용 어릿광대의 죽음 → 그 밤 중독 (암살자·자기 죽음 계열은 회피 무관)
           if (killedByDemonlike && d === foolSeat && !s.foolDodgeUsed && !require_(s, night, foolSeat)) return false;
@@ -1317,11 +1317,11 @@ export function demonScenarios(
             return sideEffects(true)(s);
           }], gfKilled, demonByOther);
         }
-        // 소문꾼: 어제 낮의 공개 발언이 참이었다면(∃ — 발언 내용은 기록되지 않는다)
+        // 험담꾼: 어제 낮의 공개 발언이 참이었다면(∃ — 발언 내용은 기록되지 않는다)
         // 그 밤 텔러가 고른 1명이 죽는다. 밤당 발언 하나 → 한 번만.
         if (gossipSeat >= 0 && aliveStart[gossipSeat] && !usedGossip) {
           collect(idx + 1, usedAs, usedGf, usedLink, usedMc, true, [...muts, (s) => {
-            if (!forbid_(s, night, gossipSeat)) return false; // 취하거나 중독된 소문꾼은 죽이지 못한다
+            if (!forbid_(s, night, gossipSeat)) return false; // 취하거나 중독된 험담꾼은 죽이지 못한다
             return sideEffects(true)(s);
           }], gfKilled, demonByOther || d === demon);
         }
@@ -1367,7 +1367,7 @@ export function demonScenarios(
               }
               // 멀쩡한 선원은 데몬에게도 죽지 않는다 → 취함/중독 강제
               if (k === sailorSeat && !require_(s, night, sailorSeat)) return false;
-              // 여관주인이 보호한 좌석은 그 밤 죽지 않는다 → 여관주인 비정상 강제
+              // 여관 주인이 보호한 좌석은 그 밤 죽지 않는다 → 여관 주인 비정상 강제
               if (innProtected !== null && innProtected.includes(k) && !require_(s, night, innSeat)) return false;
               // 팡 구: 점프 미사용 상태에서는 외부인이 킬로 죽을 수 없다 — 첫 외부인 공격은
               // 점프가 된다 (은둔자는 하수인 오등록으로 정상 사망 가능 ∃)
@@ -1478,7 +1478,7 @@ export function demonScenarios(
             if (pkMonkAlive && (pkMonkTarget === null || sched.aliveAtNightStart(pkPrev)[pkMonkTarget])) {
               impVariants.push((s) => forbid_(s, pkPrev, monkSeat));
             }
-            // (2') 죽음 저지 — 멀쩡한 선원/여관주인 보호가 실행 밤의 죽음을 막았다
+            // (2') 죽음 저지 — 멀쩡한 선원/여관 주인 보호가 실행 밤의 죽음을 막았다
             if (sailorAlive) impVariants.push((s) => forbid_(s, night, sailorSeat));
             if (innSeat >= 0 && night >= 2 && aliveStart[innSeat]) {
               impVariants.push((s) => forbid_(s, night, innSeat));
@@ -1520,7 +1520,7 @@ export function demonScenarios(
               impVariants.push((s) => forbid_(s, night, sailorSeat)); // 멀쩡한 선원을 노렸다
             }
             if (innSeat >= 0 && night >= 2 && aliveStart[innSeat]) {
-              impVariants.push((s) => forbid_(s, night, innSeat)); // 여관주인이 데몬의 대상을 보호했다
+              impVariants.push((s) => forbid_(s, night, innSeat)); // 여관 주인이 데몬의 대상을 보호했다
             }
             if (foolSeat >= 0 && aliveStart[foolSeat] && !st.foolDodgeUsed) {
               impVariants.push((s) => {
