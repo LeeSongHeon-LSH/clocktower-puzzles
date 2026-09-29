@@ -110,6 +110,6 @@ describe("Fang Gu: 구성 [+1 외부인] (solve 통합)", () => {
       nights: 1,
       events: [],
       claims: [],
-    })).toThrowError(/스위트하트/);
+    })).toThrowError(/사랑꾼/);
   });
 });

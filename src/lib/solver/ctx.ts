@@ -19,7 +19,7 @@ export interface Ctx {
    * 이때 정확한 독살 벡터가 필요한 체커(수학자)는 호출되지 않는다.
    */
   poison: (Seat | null)[] | null;
-  /** 스위트하트 사망으로 취한 좌석과 시점 (밤 n = n, 낮 d 처형 = d + 0.5). 없으면 null */
+  /** 사랑꾼 사망으로 취한 좌석과 시점 (밤 n = n, 낮 d 처형 = d + 0.5). 없으면 null */
   sweet: { target: Seat; since: number } | null;
 }
 
@@ -27,7 +27,7 @@ export function isDrunk(ctx: Ctx, seat: Seat): boolean {
   return ctx.assignment[seat] === "drunk";
 }
 
-/** 스위트하트 취함 — 밤 night의 정보·능력이 비정상 동작하는가 (취한 뒤에도 깨어나긴 한다) */
+/** 사랑꾼 취함 — 밤 night의 정보·능력이 비정상 동작하는가 (취한 뒤에도 깨어나긴 한다) */
 export function isSweetDrunk(ctx: Ctx, seat: Seat, night: number): boolean {
   return ctx.sweet !== null && ctx.sweet.target === seat && ctx.sweet.since <= night;
 }
@@ -142,7 +142,7 @@ function wakesAs(ctx: Ctx, seat: Seat, night: number, role: RoleId): boolean {
     }
     case "philosopher": {
       // 사용 밤(주장 기록)부터 획득한 능력의 기상 규칙을 따른다.
-      // 획득 즉시형(빨래꾼·요리사 등)은 획득한 밤에만 깨어난다.
+      // 획득 즉시형(세탁부·요리사 등)은 획득한 밤에만 깨어난다.
       const claim = ctx.claimBySeat[seat];
       const rec = claim.role === "philosopher" ? claim.info.find((i) => i.data?.type === "philosopher") : undefined;
       if (rec === undefined || rec.data?.type !== "philosopher") return false;

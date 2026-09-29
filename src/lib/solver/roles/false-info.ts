@@ -134,7 +134,7 @@ export function checkContentFalse(ctx: Ctx, seat: Seat, data: InfoData, night: n
       return snakecharmer(ctx, seat, data, night);
     case "philosopher":
       return philosopher(ctx, seat, data);
-    // 낮 정보 — Vortox 세계에서 화가의 답은 거짓, 학자의 두 진술은 둘 다 거짓 (공식 룰링)
+    // 낮 정보 — Vortox 세계에서 화가의 답은 거짓, 백치천재의 두 진술은 둘 다 거짓 (공식 룰링)
     case "artist":
       return artistFalse(ctx, seat, data, night);
     case "savant":

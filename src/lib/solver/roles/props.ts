@@ -1,4 +1,4 @@
-// 구조화 명제 평가 + 낮 정보 역할(화가·학자) 체커.
+// 구조화 명제 평가 + 낮 정보 역할(화가·백치천재) 체커.
 //
 // 명제는 등록(오등록 ∃) 기반으로 "참으로 등록될 수 있는가 / 거짓으로 등록될 수 있는가"를
 // 판정한다. 은둔자는 악·데몬으로, 첩자는 선한 역할로 오등록될 수 있고, 등록 선택은 관측
@@ -77,7 +77,7 @@ export function artistFalse(ctx: Ctx, _seat: Seat, data: ArtistData, day: number
   return data.yes ? propCanBeFalse(ctx, day, data.question) : propCanBeTrue(ctx, day, data.question);
 }
 
-/** 학자: 멀쩡하면 둘 중 정확히 하나만 참이다 */
+/** 백치천재: 멀쩡하면 둘 중 정확히 하나만 참이다 */
 export function savant(ctx: Ctx, _seat: Seat, data: SavantData, day: number): boolean {
   const [a, b] = data.statements;
   if (!propWellFormed(ctx, a) || !propWellFormed(ctx, b)) return false;
@@ -87,7 +87,7 @@ export function savant(ctx: Ctx, _seat: Seat, data: SavantData, day: number): bo
   );
 }
 
-/** 학자 (Vortox 세계): 둘 다 거짓이어야 한다 (공식 룰링) */
+/** 백치천재 (Vortox 세계): 둘 다 거짓이어야 한다 (공식 룰링) */
 export function savantFalse(ctx: Ctx, _seat: Seat, data: SavantData, day: number): boolean {
   const [a, b] = data.statements;
   if (!propWellFormed(ctx, a) || !propWellFormed(ctx, b)) return false;

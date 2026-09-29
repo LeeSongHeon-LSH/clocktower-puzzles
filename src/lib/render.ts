@@ -9,7 +9,7 @@ function pair(a: Seat, b: Seat): string {
   return `${seatName(a)}·${seatName(b)}`;
 }
 
-/** 구조화 명제 → 한국어 문장 (화가 질문·학자 진술) */
+/** 구조화 명제 → 한국어 문장 (화가 질문·백치천재 진술) */
 export function renderProp(p: Prop): string {
   switch (p.kind) {
     case "isDemon":

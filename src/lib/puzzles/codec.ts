@@ -244,7 +244,7 @@ function validateInfoData(v: unknown, players: number, where: string): InfoData 
       return { type: "artist", question: validateProp(v.question, players, where), yes: v.yes === true };
     case "savant": {
       if (!Array.isArray(v.statements) || v.statements.length !== 2) {
-        throw new Error(`${where}: 학자의 진술은 2개여야 합니다.`);
+        throw new Error(`${where}: 백치천재의 진술은 2개여야 합니다.`);
       }
       return {
         type: "savant",

@@ -66,11 +66,11 @@ function validatePuzzle(pz: SolverPuzzle): Claim[] {
   if (!pz.rolePool.some((r) => ROLES[r].team === "demon")) throw new Error("역할 풀에 악마가 없습니다");
   if (pz.rolePool.includes("vortox") && pz.rolePool.includes("mastermind")) {
     // 연장 밤에는 죽은 보르톡스의 거짓 강제가 풀리는데 그 조합 처리가 아직 없다 — 건전성 위해 거부
-    throw new Error("보르톡스와 마스터마인드는 아직 한 퍼즐에서 함께 지원되지 않습니다");
+    throw new Error("보르톡스와 주모자는 아직 한 퍼즐에서 함께 지원되지 않습니다");
   }
   if (pz.rolePool.includes("fanggu") && pz.rolePool.includes("sweetheart")) {
-    // 점프한 스위트하트는 능력을 잃는데, 스위트하트 취함 열거가 점프와 얽히는 처리가 아직 없다 — 건전성 위해 거부
-    throw new Error("팡 구와 스위트하트는 아직 한 퍼즐에서 함께 지원되지 않습니다");
+    // 점프한 사랑꾼은 능력을 잃는데, 사랑꾼 취함 열거가 점프와 얽히는 처리가 아직 없다 — 건전성 위해 거부
+    throw new Error("팡 구와 사랑꾼은 아직 한 퍼즐에서 함께 지원되지 않습니다");
   }
   const hasBarber = pz.rolePool.includes("barber");
   if (hasBarber) {
@@ -264,7 +264,7 @@ function enumerate(pz: SolverPuzzle, claimBySeat: Claim[], sched: Schedule): Wor
           if (comp.outsider < 0 || comp.townsfolk < 0) continue;
           const evil = new Set<Seat>([demonSeat, ...minionSeats]);
           const goodSeats = seats.filter((s) => !evil.has(s));
-          // 세레노부스 광기 (18차): 마지막 밤의 광기 선택이 선한 좌석 하나의 주장 전체를
+          // 세레노버스 광기 (18차): 마지막 밤의 광기 선택이 선한 좌석 하나의 주장 전체를
           // 날조로 만들 수 있다 — 그 좌석의 실제 역할은 풀의 어떤 선한 역할이든 될 수 있다.
           const madChoices: ({ seat: Seat; role: RoleId } | null)[] = [null];
           if (minionRoles.includes("cerenovus")) {
@@ -283,8 +283,8 @@ function enumerate(pz: SolverPuzzle, claimBySeat: Claim[], sched: Schedule): Wor
           const madOutsider = mad !== null && ROLES[mad.role].team === "outsider" ? 1 : 0;
           const need = comp.outsider - outsiderClaims.length - madOutsider;
           if (need < 0 || need > 1) continue;
-          // 숨은 외부인: 주정뱅이(자기 역할을 믿음), 광인(외부인임을 알고 사칭),
-          // 루나틱(자기가 데몬인 줄 알고 허세) — 마을 사람을 주장하는 선한 좌석 하나가 실제로는 이들일 수 있다
+          // 숨은 외부인: 주정뱅이(자기 역할을 믿음), 변종(외부인임을 알고 사칭),
+          // 미치광이(자기가 데몬인 줄 알고 허세) — 마을 사람을 주장하는 선한 좌석 하나가 실제로는 이들일 수 있다
           const hiddenRoles = (["drunk", "mutant", "lunatic", "goon"] as RoleId[]).filter((r) => pz.rolePool.includes(r));
           if (need === 1 && hiddenRoles.length === 0) continue;
           const hiddenChoices: ({ seat: Seat; role: RoleId } | null)[] = need === 1
@@ -436,7 +436,7 @@ function snakeSwapNights(
 }
 
 /**
- * 스위트하트 케이스 열거. 스위트하트가 배정에 없거나 살아 있으면 [null] (취함 없음).
+ * 사랑꾼 케이스 열거. 사랑꾼이 배정에 없거나 살아 있으면 [null] (취함 없음).
  * 죽었다면 텔러가 고른 취함 대상 전부 + "사망 순간 중독이라 미발동"(target: null)을 분기한다 —
  * 사망 시점은 이벤트로 고정돼 있어 대상 1명만 열거하면 된다 (docs/REQUIREMENTS.md 2.4).
  */
@@ -476,12 +476,12 @@ function tryWorld(
   const sweetDrunk = sweet !== null && sweet.target !== null ? { target: sweet.target, since: sweet.since } : null;
   const ctx: Ctx = { pz, sched, assignment, claimBySeat, sc, redHerring, poison: null, sweet: sweetDrunk };
 
-  // 세레노부스 광기의 성립 조건: 마지막 밤에 세레노부스가 행동할 수 있어야 한다
+  // 세레노버스 광기의 성립 조건: 마지막 밤에 세레노버스가 행동할 수 있어야 한다
   const cerenoSeat = madSeat !== null ? assignment.indexOf("cerenovus") : -1;
   if (madSeat !== null) {
     const n = pz.nights;
     const kept = (sc.vigorKeptSince?.get(cerenoSeat) ?? Infinity) <= n;
-    if (!sched.aliveAtNightStart(n)[cerenoSeat] && !kept) return null; // 죽은 세레노부스는 광기를 강제하지 못한다
+    if (!sched.aliveAtNightStart(n)[cerenoSeat] && !kept) return null; // 죽은 세레노버스는 광기를 강제하지 못한다
     const became = sc.becameDemonAt.get(cerenoSeat);
     if (became !== undefined && became <= n) return null; // 데몬으로 승계했다면 능력이 없다
     if (sc.minstrelNights?.has(n)) return null; // 전원 취함 밤 — 광기 무효
@@ -492,10 +492,10 @@ function tryWorld(
   // 선한 좌석(주정뱅이 포함)의 정보 수집 + 구조 검증 (깨어날 수 없었다면 그 주장은 참일 수 없다)
   const infos: GoodInfo[] = [];
   for (const s of goodSeats) {
-    if (assignment[s] === "mutant" || assignment[s] === "lunatic") continue; // 광인·루나틱의 주장은 전부 날조 — 구조도 내용도 검증하지 않는다
+    if (assignment[s] === "mutant" || assignment[s] === "lunatic") continue; // 변종·미치광이의 주장은 전부 날조 — 구조도 내용도 검증하지 않는다
     // 마을 사람을 사칭한 건달(지금 악하다)의 주장도 전부 날조다 — 건달을 밝힌 주장은 그대로 검증한다
     if (assignment[s] === "goon" && claimBySeat[s].role !== "goon") continue;
-    if (s === madSeat) continue; // 세레노부스 광기 — 주장 전체가 강제된 날조
+    if (s === madSeat) continue; // 세레노버스 광기 — 주장 전체가 강제된 날조
     const becameAt = sc.becameDemonAt.get(s); // 팡 구 점프로 데몬이 된 선한 좌석
     for (const info of claimBySeat[s].info) {
       if (!info.data) continue;
@@ -554,7 +554,7 @@ function tryWorld(
     if (vortoxSeat < 0) {
       for (const i of soberInfos) {
         if (sc.minstrelNights?.has(i.night)) continue; // 전원 취함 밤의 정보는 무제약
-        if (isSweetDrunk(ctx, i.seat, i.night)) continue; // 스위트하트 취함 — 정보 무제약
+        if (isSweetDrunk(ctx, i.seat, i.night)) continue; // 사랑꾼 취함 — 정보 무제약
         if (isExtraDrunk(ctx, i.seat, i.night)) continue; // 선원·여관 주인·궁정대신 취함 — 정보 무제약
         if (isNdPoisoned(ctx, i.seat, i.night)) continue; // 노 다시 이웃 독 가능 — 정보 무제약
         if (isPukkaPoisoned(ctx, i.seat, i.night)) continue; // 푸카 독 가능 — 정보 무제약
@@ -594,7 +594,7 @@ function tryWorld(
         required.set(night, pick);
       }
     }
-    // 광기가 성립하려면 마지막 밤의 세레노부스가 중독되지 않았어야 한다
+    // 광기가 성립하려면 마지막 밤의 세레노버스가 중독되지 않았어야 한다
     if (madSeat !== null && required.get(pz.nights) === cerenoSeat) return null;
     for (const [night, target] of required) {
       if (poisonerSeat < 0) return null;
@@ -643,13 +643,13 @@ function tryWorld(
   const vector: (Seat | null)[] = new Array(pz.nights + 1).fill(null);
   const tryNight = (night: number): World | null => {
     if (night > pz.nights) {
-      // 광기가 성립하려면 마지막 밤의 세레노부스가 중독되지 않았어야 한다
+      // 광기가 성립하려면 마지막 밤의 세레노버스가 중독되지 않았어야 한다
       if (madSeat !== null && vector[pz.nights] === cerenoSeat) return null;
       const pctx: Ctx = { ...ctx, poison: vector };
       for (const i of soberInfos) {
         if (vector[i.night] === i.seat) continue; // 그 밤 중독 → 정보 무제약
         if (sc.minstrelNights?.has(i.night)) continue; // 전원 취함 밤
-        if (isSweetDrunk(pctx, i.seat, i.night)) continue; // 스위트하트 취함
+        if (isSweetDrunk(pctx, i.seat, i.night)) continue; // 사랑꾼 취함
         if (isExtraDrunk(pctx, i.seat, i.night)) continue; // 선원·여관 주인·궁정대신 취함
         if (isNdPoisoned(pctx, i.seat, i.night)) continue; // 노 다시 이웃 독 가능
         if (isPukkaPoisoned(pctx, i.seat, i.night)) continue; // 푸카 독 가능

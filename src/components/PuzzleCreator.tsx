@@ -1235,7 +1235,7 @@ function InfoEditor({
 
   const pair = "targets" in d && Array.isArray(d.targets) ? (d.targets as [Seat, Seat]) : null;
 
-  /** 구조화 명제 편집 (화가 질문·학자 진술) */
+  /** 구조화 명제 편집 (화가 질문·백치천재 진술) */
   const propEditor = (p: Prop, onPick: (next: Prop) => void, key: string) => (
     <span key={key} className="inline-flex flex-wrap items-center gap-1">
       <select

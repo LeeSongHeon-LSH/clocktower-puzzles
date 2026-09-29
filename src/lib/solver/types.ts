@@ -249,7 +249,7 @@ export type Seat = number;
 // 각 정보 역할이 "받았다고 주장하는" 정보의 형태.
 
 /**
- * 구조화 명제 (18차→19차): 화가의 질문·학자의 진술을 검증 가능한 형태로 담는다.
+ * 구조화 명제 (18차→19차): 화가의 질문·백치천재의 진술을 검증 가능한 형태로 담는다.
  * 평가는 등록(오등록 ∃) 기반 — "참으로 등록될 수 있는가 / 거짓으로 등록될 수 있는가".
  */
 export type Prop =
@@ -324,7 +324,7 @@ export const SWAPPABLE_ROLES: readonly RoleId[] = [
 
 /**
  * 철학자가 획득할 수 있는 능력 — SWAPPABLE에서 점쟁이(붉은 청어 부여 미표현)와
- * 저글러(밤2 고정 규칙이 획득 시점과 어긋남)를 뺀 것. 밖의 획득 세계는 주장으로
+ * 곡예사(밤2 고정 규칙이 획득 시점과 어긋남)를 뺀 것. 밖의 획득 세계는 주장으로
  * 표현할 수 없으므로 (검증이 거부한다) 열거에서 빼도 건전하다.
  */
 export const PHILOSOPHER_GAINABLE: readonly RoleId[] = SWAPPABLE_ROLES.filter(
@@ -388,7 +388,7 @@ export type GameEvent =
   | { type: "virginTrigger"; day: number; nominator: Seat; nominee: Seat }
   // 투표 기록: seat가 그 낮 투표에 손을 들었다 (공개 관측). **부분 기록**이다 —
   // 기록에 없다고 투표하지 않은 것은 아니다. 유령 투표가 있어 죽은 좌석도 가능하다.
-  // 꽃파는 소녀의 "악마 투표 없음"이 기록된 투표자를 물어뜯는 근거가 된다.
+  // 꽃팔이 소녀의 "악마 투표 없음"이 기록된 투표자를 물어뜯는 근거가 된다.
   | { type: "vote"; day: number; seat: Seat };
 
 /** 이벤트에서 죽은 좌석 하나 (지명·불발 총격은 null) */
@@ -431,7 +431,7 @@ export interface World {
   currentDemonSeat: Seat; // 현재(승계 반영) 데몬 좌석
   poisonTargets: (Seat | null)[]; // 밤 n(1-based)의 독살 대상, [0]은 미사용
   redHerring: Seat | null; // 점쟁이 레드 헤링 (점쟁이 있을 때만)
-  sweetheartDrunk: Seat | null; // 스위트하트 사망으로 취한 좌석 (미발동·부재 시 null)
+  sweetheartDrunk: Seat | null; // 사랑꾼 사망으로 취한 좌석 (미발동·부재 시 null)
   /**
    * 건달의 현재 진영 (배정에 건달이 있을 때만). 토큰 회전은 그리모어 상태이므로
    * 같은 배정이라도 진영이 다르면 다른 해다 — worldKey에 들어간다.

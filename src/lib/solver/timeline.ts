@@ -272,7 +272,7 @@ export interface DemonScenario {
 }
 
 /**
- * 이발사 교환 케이스 (solve가 배정별로 열거 — 스위트하트 선례).
+ * 이발사 교환 케이스 (solve가 배정별로 열거 — 사랑꾼 선례).
  * since = 교환된 토큰이 관측되는 첫 밤 (밤 사망 → 그 밤, 처형 → 다음 밤).
  * a·b는 선한 좌석이고 둘의 **셋업 역할이 서로의 최종 주장 역할**이다 (교차 구성).
  */
@@ -283,8 +283,8 @@ export interface RoleSwapCase {
 }
 
 /**
- * 스위트하트 취함 케이스 (solve가 배정별로 열거).
- * 스위트하트가 죽은 배정에서만 존재한다. target이 좌석이면 "사망 순간 멀쩡했고 그
+ * 사랑꾼 취함 케이스 (solve가 배정별로 열거).
+ * 사랑꾼이 죽은 배정에서만 존재한다. target이 좌석이면 "사망 순간 멀쩡했고 그
  * 좌석이 since부터 취한다", null이면 "사망 순간 중독돼 있어 취함이 발동하지 않았다".
  * 시점 규약은 becameDemonAt과 같다: 밤 n 사망 = n, 낮 d 처형 = d + 0.5.
  * deathNight는 사망 순간의 독살 제약이 걸리는 밤 인덱스 (낮 d 처형이면 d — 밤 d의 독이 낮까지 지속).
@@ -476,7 +476,7 @@ export function demonScenarios(
   const demonRole = assignment[origDemonSeat]; // 승계자의 토큰도 이 역할이 된다 (탕녀는 '그 악마'가 된다)
   const poisonerSeat = assignment.indexOf("poisoner");
   const hasPoisoner = poisonerSeat >= 0;
-  // 스위트하트 취함: since 이후의 그 좌석은 능력이 비정상 동작한다 (독살과 같은 효과, 영구)
+  // 사랑꾼 취함: since 이후의 그 좌석은 능력이 비정상 동작한다 (독살과 같은 효과, 영구)
   const sweetTarget = sweet ? sweet.target : null;
   const sweetSince = sweet ? sweet.since : Infinity;
 
@@ -580,7 +580,7 @@ export function demonScenarios(
     return demonRole === "vigormortis" && st.vigorKept.has(seat);
   }
 
-  /** 밤 night에 seat의 능력 비정상 동작을 강제 (스위트하트 취함, 노 다시 독, 또는 독살). 모순이면 false */
+  /** 밤 night에 seat의 능력 비정상 동작을 강제 (사랑꾼 취함, 노 다시 독, 또는 독살). 모순이면 false */
   function require_(st: St, night: number, seat: Seat): boolean {
     if (sweetTarget === seat && sweetSince <= night) return true; // 이미 취해 있다 — 독살 불요
     if (st.drunkNights.get(night)?.has(seat)) return true; // 이동식 취함 원천에 이미 취해 있다
@@ -699,7 +699,7 @@ export function demonScenarios(
   /**
    * 낮 day의 공개 행동을 일어난 순서대로 적용한 St 분기들. 빈 배열 = 이 세계는 모순.
    * 총격 명중이 실제 데몬을 잡으면 좀버얼 가짜 죽음/탕녀 승계로 분기한다
-   * (마스터마인드는 '처형'만 연장하므로 총격 사망에는 발동하지 않는다).
+   * (주모자는 '처형'만 연장하므로 총격 사망에는 발동하지 않는다).
    */
   function applyDayActions(st: St, day: number): St[] {
     const actions = sched.dayActions(day);
@@ -818,13 +818,13 @@ export function demonScenarios(
           branches.push({ st: c, demonless: false });
         }
       }
-      // (b) 마스터마인드 연장 — 게임을 '끝내는' 처형이어야 발동한다 (탕녀가 승계하면 안 끝남).
+      // (b) 주모자 연장 — 게임을 '끝내는' 처형이어야 발동한다 (탕녀가 승계하면 안 끝남).
       //     하루(밤 하나 + 낮 하나)만 이어지므로 마지막 낮(nights-1) 처형일 때만 현재에 닿는다.
       const mmOk = mmSeat >= 0 && mmSeat !== executed && (aliveAtDay[mmSeat] || vigorKeeps(st, mmSeat))
         && !st.became.has(mmSeat) && day === pz.nights - 1 && demonRole !== "vortox";
       if (mmOk) {
         const c = cloneSt(st);
-        let ok = realDeath(c) && forbid_(c, day, mmSeat); // 중독된 마스터마인드는 연장하지 못한다
+        let ok = realDeath(c) && forbid_(c, day, mmSeat); // 중독된 주모자는 연장하지 못한다
         if (ok && swOk) ok = require_(c, day, swSeat); // 승계 가능했던 탕녀는 중독됐던 것
         if (ok) branches.push({ st: c, demonless: true });
       }
@@ -879,7 +879,7 @@ export function demonScenarios(
 
   const charmerSeat = assignment.indexOf("snakecharmer");
 
-  /** demonless: 마스터마인드 연장 밤 — 데몬이 죽어 있어 데몬 킬도, 킬 부재 설명도 없다 */
+  /** demonless: 주모자 연장 밤 — 데몬이 죽어 있어 데몬 킬도, 킬 부재 설명도 없다 */
   function doNight(st: St, night: number, trigger: Trigger, minstrelActive: boolean, demonless = false) {
     // 뱀 조련사 교환 (밤 순서상 맨 처음): 멀쩡한 조련사의 기록된 지목이 당시 데몬이어야 한다.
     // 성립하면 조련사가 그 밤부터 데몬이 되고 (승계), 옛 데몬은 선한 뱀 조련사가 된다
@@ -1646,12 +1646,12 @@ export function demonScenarios(
   };
 
   // 독살범이 건달을 고르는 순간 스스로 취한다 (공식 How to Run: "becomes drunk immediately")
-  // — 그래서 건달은 독살될 수 없다. 다른 취함 원천(스위트하트·대신 등)은 그대로 통한다.
+  // — 그래서 건달은 독살될 수 없다. 다른 취함 원천(사랑꾼·대신 등)은 그대로 통한다.
   if (goonSeat >= 0) {
     for (let n = 1; n <= pz.nights; n++) st0.forbidden.set(n, new Set([goonSeat]));
   }
 
-  // 스위트하트 사망 순간의 상태 제약: 취함 발동에는 멀쩡함이, 미발동에는 중독이 필요하다
+  // 사랑꾼 사망 순간의 상태 제약: 취함 발동에는 멀쩡함이, 미발동에는 중독이 필요하다
   if (sweet) {
     const ok = sweet.target === null
       ? require_(st0, sweet.deathNight, sweet.sweetSeat)

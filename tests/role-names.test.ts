@@ -18,6 +18,20 @@ const OUTDATED: Record<string, keyof typeof ROLES> = {
   샤바로스: "shabaloth",
   좀부울: "zombuul",
   소문꾼: "gossip", // 2026-09-21 리뷰: 사전은 "험담꾼"인데 해설·규칙 본문이 이 표기를 쓰고 있었다
+  // 2026-09-29: 설계 문서 점검에서 드러난 옛 표기 — 퍼즐 산문·해설·솔버 오류 메시지에 남아 있었다
+  저글러: "juggler",
+  스위트하트: "sweetheart",
+  광인: "mutant",
+  루나틱: "lunatic",
+  몽상가: "dreamer",
+  마스터마인드: "mastermind",
+  얼간이: "klutz",
+  "악의 쌍둥이": "eviltwin",
+  세레노부스: "cerenovus",
+  "꽃파는 소녀": "flowergirl",
+  "마을 서기": "towncrier",
+  빨래꾼: "washerwoman",
+  // 백치천재(savant)의 옛 표기 "학자"는 철학자·수학자와 겹쳐 금지어로 두지 못한다 — 눈으로 본다
   // 궁정대신(courtier)의 옛 표기 "대신"은 일반 단어와 겹쳐 금지어로 두지 못한다 — 눈으로 본다
 };
 
