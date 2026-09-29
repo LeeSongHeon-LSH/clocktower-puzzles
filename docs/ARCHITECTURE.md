@@ -8,7 +8,7 @@
 
 | 영역 | 선택 | 비고 |
 |---|---|---|
-| 프레임워크 | Next.js 16 (App Router) | Vercel 네이티브, 추후 텔러 앱 확장 대비 |
+| 프레임워크 | Next.js 16 (App Router) | Vercel 네이티브, 전 페이지 정적 생성 |
 | 언어 | TypeScript (strict) | |
 | 스타일 | Tailwind CSS v4 | |
 | 테스트 | Vitest | 솔버 유일해 검증이 핵심 테스트 |
@@ -30,13 +30,15 @@ src/
     create/page.tsx       # 사설 문제 에디터 (브라우저 유일해 검증, §9)
     play/page.tsx         # 공유 링크로 받은 사설 문제 풀이 (§9)
     guide/page.tsx        # 문제 업로드 가이드 (경로 A/B 안내)
-  components/             # TownSquare, PuzzleCreator, PuzzleSubmit, SharedPuzzleLoader …
+  components/             # TownSquare, PuzzleCreator, PuzzleSubmit, SharedPuzzleLoader, BgmToggle(배경음악) …
   lib/
     solver/               # 룰 엔진 (퍼즐 검증용, UI 비노출 — 예외는 아래 §4.2)
       types.ts            # 역할 사전 id·InfoData·World, 공용 상수(SOLVER_ROLES·INFO_TYPES·UNCLAIMABLE_ROLES)
       registration.ts     # 오등록 ∃ 판정 + evilRange·isGoodTeam 공용 유틸
       seats.ts            # 원형 좌석 유틸 (ctx·timeline이 함께 쓰는 말단 모듈)
-      roles/              # 역할별 제약 로직 (1역할 1파일) + false-info.ts (보르톡스 거짓 판정)
+      ctx.ts              # 체커 공용 컨텍스트 — 기상 판정(wakes/wakesAs)·토큰 뷰(view)·취함/중독 조회
+      composition.ts      # 인원수별 팀 구성표 + OUTSIDER_MODIFIERS (UI 직접 import 허용)
+      roles/              # 정보 타입별 체커 (index.ts의 checkContent 레지스트리) + false-info.ts (보르톡스 거짓 판정)
       timeline.ts         # 사건 원장(Schedule) + 데몬 승계·킬 귀속 분기 + 킬 설명 역할 목록
       solve.ts            # 전수 탐색 + 제약 평가
     render.ts             # InfoData → 한국어 문장, 사건 원장 → 타임라인 문장 (풀이 화면·에디터 공용)
@@ -50,7 +52,7 @@ src/
     role-rules.generated.ts    # 공식 한국어 능력 문구 (자동 생성 — 직접 편집 금지)
     puzzles/
       index.ts            # 퍼즐 레지스트리
-      tb-01.ts …          # 문제당 1파일
+      tb-05.ts, mx-05.ts … # 문제당 1파일
   lib/puzzles/
     schema.ts             # Puzzle 타입, 난이도 라벨, 표준 질문 셋(standardQuestions), 현재 악마 좌석
     codec.ts              # 사설 문제 ↔ 공유 링크 + 신뢰불가 입력 검증 (§9). SharedPuzzle은 Puzzle에서 파생
@@ -58,7 +60,7 @@ src/
 scripts/
   fetch-rule-sources.ts   # 공식 위키 API에서 규칙 원문 대조·생성 (§8)
   solve-puzzle.ts         # 문제 하나에 솔버를 돌려 월드 목록 출력 (제작 도구)
-  verify-scenarios.ts     # SOLVER_ROLES 커버리지 검사 (제작 도구)
+  verify-scenarios.ts     # 시나리오 하네스 — 수록 퍼즐 회귀·SOLVER_ROLES 커버리지·단서 민감도·점선 역할 링크 발급을 JSON으로 출력 (일회성 점검 도구)
 tests/
   solver/                 # 솔버 단위 테스트 (역할 로직별)
   puzzles.test.ts         # 전 퍼즐 유일해 검증 (배포 게이트)
@@ -72,11 +74,13 @@ docs/                     # 이 문서들
 
 ```ts
 export default definePuzzle({
-  id: "tb-01",
+  id: "tb-05",                // 형식 예시 (내용은 가상 — 실제 tb-05와 무관)
   title: "장의사의 증언",
   edition: "tb",              // tb | bmr | sv | mixed
   difficulty: "easy",         // easy | normal | hard
   playerCount: 7,
+  nights: 2,                  // 경과한 밤 수 — 현재 시점은 nights일차 낮
+  rolePool: ["washerwoman", "librarian", /* … */ "poisoner", "imp"], // 대본 — 풀이 화면에 공개
   // 좌석: A, B, C… (배열 인덱스 = 좌석 순서, 원형)
   claims: [                   // 좌석별 공개 주장
     { seat: 0, role: "washerwoman",
@@ -89,28 +93,31 @@ export default definePuzzle({
     { night: 2, type: "death", seat: 4 },
   ],
   questions: [                // 표준 셋 = standardQuestions(): 악마 위치 → 악마 종류 → 하수인 위치 (+ 보너스)
-    { id: "demon", text: "악마는 누구인가?", answerSeats: [5] },
+    { id: "demon", text: "악마는 누구인가?", answerSeats: [5] }, // standardQuestions는 "지금 이 순간의 악마는 누구인가?"를 쓴다
     { id: "demonType", text: "그 악마는 어떤 악마인가?", answerRole: "imp" },
     { id: "minion", text: "하수인은 누구인가?", answerSeats: [3] },
     { id: "drunk", text: "주정뱅이는 누구였나?", answerSeats: [2] },
   ],
-  hints: ["…", "…"],          // 최대 2개
-  walkthrough: ["① …", "② …"], // 단계별 해설
+  hints: ["…", "…"],          // 선택, 최대 2개
+  walkthrough: ["① …", "② …"], // 단계별 해설 (필수)
   solution: ["washerwoman", "empath", /* 배열 인덱스 = 좌석, 값 = 실제 역할 */],
 })
 ```
 
 - `text`는 사람이 읽는 서술, `data`는 솔버 입력. 둘 다 퍼즐 작성자가 유지한다(이중 기입이지만 렌더링 자유도를 위해 허용).
 - `solution`은 정답 그리모어. 솔버 테스트가 "탐색 결과 유일해 == solution"을 검증한다.
+- 선택 필드 `intro`, `currentDemonSeat`, `realGame`, `author`, `source`와 `Claim.roleChange`,
+  `ClaimInfo.asRole`은 `src/lib/puzzles/schema.ts`·`src/lib/solver/types.ts`와
+  [제작 가이드 §2.1](./design/puzzle-authoring.md) 참조.
 
 ### 3.2 역할 사전 (`src/data/roles.ts`)
 
 ```ts
-export const ROLES = {
+export const ROLES: Record<RoleId, RoleMeta> = {   // edition: tb | bmr | sv | exp
   imp: { en: "Imp", ko: "임프", team: "demon", edition: "tb" },
   scarletwoman: { en: "Scarlet Woman", ko: "탕녀", team: "minion", edition: "tb" },
   // …
-} satisfies Record<RoleId, RoleMeta>
+};
 ```
 
 - UI 표기는 항상 `ko(en)` 형식.
@@ -136,10 +143,10 @@ clocktower-puzzles-notes-v1 = {
 
 ### 4.1 모델
 
-- **World** = 좌석 → 실제 역할 배정 + 부가 상태(술꾼이 착각 중인 역할, 임프의 밤 선택, 독살자 대상 등 필요한 만큼의 비결정 변수).
-- 탐색: 역할 배정 후보를 생성(팀 구성 규칙 — 인원수별 마을 사람/외부인/하수인/데몬 수, 남작 수정치 반영)하고, 각 World에 대해 **제약 평가**:
+- **World** = 좌석 → 실제 역할 배정 + 부가 상태(주정뱅이가 착각 중인 역할, 임프의 밤 선택, 독살범 대상 등 필요한 만큼의 비결정 변수).
+- 탐색: 역할 배정 후보를 생성(팀 구성 규칙 — 인원수별 마을 주민/외지인/하수인/악마 수, 남작 수정치 반영)하고, 각 World에 대해 **제약 평가**:
   - 참인 주장(선한 생존 정직 역할)의 정보는 게임 룰상 실제로 발생 가능해야 한다.
-  - 술꾼·독살 상태의 정보는 임의 값 허용(텔러 재량), 악역 주장은 임의 거짓 허용.
+  - 주정뱅이·독살 상태의 정보는 임의 값 허용(텔러 재량), 악역 주장은 임의 거짓 허용.
   - 이벤트 시퀀스(처형·사망)가 룰과 모순되지 않아야 한다 (예: 임프 킬, 탕녀 승계).
 - 결과: 정합한 World 집합. **크기 1**이어야 검증 통과. (서브 질문 정답도 그 World에서 도출되는지 확인.)
 - 입구는 `analyze()`다: 구조 검사(`validatePuzzle` + `Schedule` 생성자)를 **언제나** 돌리고,
@@ -148,9 +155,12 @@ clocktower-puzzles-notes-v1 = {
 
 ### 4.2 역할 로직 구조
 
-- 역할 1개 = 파일 1개, `checkInfo(world, claim, gameLog): boolean` 형태의 제약 함수 등록.
-- 지원 역할 목록은 REQUIREMENTS §2.4. 새 역할 추가 = 파일 추가 + 테스트 추가.
-- 정보 교란 계층: 술 취함(drunk) / 중독(poisoned) / 은둔자·스파이 오등록(misregistration)을 공통 유틸로 처리.
+- 정보·행동 기록 역할은 `InfoData` 타입마다 체커 함수 `(ctx: Ctx, seat, data, night) => boolean`을 두고
+  `roles/index.ts`의 `checkContent` switch에 등록한다(보르톡스 거짓 판정은 `false-info.ts`의
+  `checkContentFalse`). 행동 기록 계열은 `drunk-sources.ts`, 명제 계열은 `props.ts`에 묶여 있다.
+  정보가 없는 역할(군인·임프·악마류 등)의 규칙은 `timeline.ts`(사건·킬 귀속)와 `solve.ts`(배정 열거)에 있다.
+- 지원 역할 목록은 REQUIREMENTS §2.4. 새 역할 추가 절차는 이 절 끝.
+- 정보 교란 계층: 술 취함(drunk) / 중독(poisoned) / 은둔자·첩자 오등록(misregistration)을 공통 유틸로 처리.
 - **수 정보는 범위 하나를 두 판정이 공유한다.** 초공감자·예언자·수학자·객실 청소부·곡예사 모듈은
   `xxxRange()`로 `[min, max]`를 내보내고, 참 판정(`roles/index.ts`)은 "범위 안", 보르톡스 거짓 판정
   (`roles/false-info.ts`)은 "범위 밖의 값이 존재"를 그 범위로 판정한다. 관대 집합(노 다시·푸카·
@@ -165,12 +175,17 @@ clocktower-puzzles-notes-v1 = {
 - **킬 설명 역할 목록은 솔버가 내보낸다.** `timeline.ts`의 `KILL_FAIL_EXPLAINERS`(킬 부재를 설명하는
   역할)·`MULTI_DEATH_EXPLAINERS`(한 밤 다중 사망)를 에디터가 import해 저자 안내에 쓴다. 분기를
   더하면 목록도 더한다.
-- **UI 비노출의 예외**: `composition.ts`(인원수별 팀 구성 표)와 `types.ts`의 상수·타입은 UI가 직접
-  import한다 — 순수 표라 스포일러와 무관하다. 실행 코드(`analyze`)를 클라이언트에서 부르는 곳은
-  에디터(`/create`)와 공유 링크 로더(`/play`) 둘뿐이고, 수록 퍼즐 페이지 번들에는 솔버가 실리지 않는다.
+- **UI 비노출의 예외**: 솔버 실행 코드는 수록 퍼즐 페이지 번들에 실리지 않는다. 허용되는 것은 셋이다.
+  (a) 순수 표·상수·순수 함수 — `composition.ts`(인원수별 팀 구성 표), `types.ts`의 상수·타입·순수 함수
+  (`eventDeadSeat` 등), `timeline.ts`의 `KILL_FAIL_EXPLAINERS`/`MULTI_DEATH_EXPLAINERS`. 스포일러와 무관하다.
+  (b) 클라이언트에서 `analyze`/`unmodeledRoles`를 실행하는 곳은 에디터(`/create`)와 공유 링크
+  로더(`/play`)뿐이다. (c) 서버 컴포넌트(`src/app/page.tsx`, `src/app/puzzle/[id]/page.tsx`)는 빌드
+  타임에 `unmodeledRoles`로 검증 여부를 계산해 **boolean만** 넘긴다 — 솔버를 클라이언트로 보내지 않고,
+  어떤 역할이 걸렸는지도 알리지 않는다(`solution`에만 있는 역할명이 새어 나가지 않게).
 - **사전 ≠ 커버리지.** 역할 사전(`ROLE_IDS`)은 3개 판본 72종 + 실험적 역할 66종 = 138종
   전부지만, 능력이 구현된 역할은 `SOLVER_ROLES`뿐이다. 에디터에서는 138종 전부를 풀·정답
-  배치·거짓 정보 토큰으로 쓸 수 있다 (실험적 역할은 기본 접힘 — "실험적 역할 보기" 토글).
+  배치·거짓 정보 토큰으로 쓸 수 있다 (`SOLVER_ROLES` 밖 역할은 점선 테두리 칩으로 항상 표시되고,
+  선택하면 황동색 — 좌석에 배정되면 미검증 레인이 된다는 안내가 붙는다).
 - **모르는 역할은 세지 않는다.** `solve.ts`의 `unmodeledRoles()`가 *배정될 수 있는* 역할 —
   풀 안의 하수인·데몬, 주장 역할, 주정뱅이 — 에 `solution`을 더해 `SOLVER_ROLES`에 없는 것을
   모은다. 비어 있지 않으면 전수 탐색을 하지 않는다. 모르는 능력을 없는 셈 치고 세면
@@ -204,16 +219,19 @@ clocktower-puzzles-notes-v1 = {
 - `tests/puzzles.test.ts`: 모든 퍼즐에 대해 (1) 스키마 유효, (2) 구조 검사 통과, (3) questions
   정답이 solution에서 도출, (4) 솔버 유일해 + solution 일치. **이 테스트가 깨지면 머지/배포 금지.**
   (4)만 미검증 퍼즐에서 해설 필수 검사로 대체된다 (REQUIREMENTS §2.5.1).
-- `tests/solver/*`: 역할 로직 단위 테스트 (참/거짓 정보 케이스).
+- `tests/solver/*`: 역할 로직 단위 테스트 (참/거짓 정보 케이스). 공용 픽스처는 `tests/solver/helpers.ts`.
 - `tests/codec.test.ts`, `tests/community-puzzle.test.ts`: 공유 링크 왕복·신뢰불가 입력 방어,
   그리고 에디터의 약속 두 개 (§9) — "검증이 성립하는 문제의 링크는 유일해일 때만 나온다",
   "미검증 판정은 링크로 왕복해도 되살아난다".
+- 그 밖에: `tests/puzzle-source.test.ts`(수록 신청 파일 생성, §9), `tests/security-headers.test.ts`(§7),
+  `tests/rules.test.ts`·`tests/role-rules.test.ts`(§8), `tests/role-names.test.ts`(역할명 표기),
+  `tests/progress.test.ts`·`tests/notes.test.ts`(localStorage), `tests/font-loading.test.ts`(글꼴 로딩).
 - **CI: `.github/workflows/ci.yml`** — push·PR마다 test → typecheck → lint → build.
   외부 기여(경로 B)의 관문이며, 유일해 검증에 실패하면 병합되지 않는다.
 
 ## 7. 배포
 
-- GitHub private repo `LeeSongHeon-LSH/clocktower-puzzles` → Vercel 연동(사용자가 1회 클릭).
+- GitHub public repo `LeeSongHeon-LSH/clocktower-puzzles` → Vercel 연동(사용자가 1회 클릭).
 - `main` push = 프로덕션 배포.
 - **전 페이지가 정적이다.** 서버 라우트도 API도 없다 — 순수 정적 배포로 CDN에서 전부 서빙된다.
 - 보안 헤더는 `next.config.ts`의 `headers()`가 CDN 엣지에서 붙인다 (CSP, HSTS, X-Frame-Options,
@@ -222,7 +240,10 @@ clocktower-puzzles-notes-v1 = {
   향후 실수의 피해를 줄이는 안전망이다.
   - CSP는 정적 배포라 요청별 nonce를 만들 수 없어 `script-src`에 `'unsafe-inline'`이 불가피하다
     (Next 인라인 부트스트랩). 대신 `connect-src 'self'`로 유출 경로를, `object-src 'none'`·
-    `base-uri 'self'`·`frame-ancestors 'none'`으로 삽입·피벗 경로를 막는다.
+    `base-uri 'self'`·`frame-ancestors 'none'`으로 삽입·피벗 경로를 막는다. React 인라인 `style`
+    속성 때문에 `style-src`에도 `'unsafe-inline'`이 있다.
+  - `/audio/*`는 `Cache-Control: public, max-age=31536000, immutable` — 음원은 내용이 바뀌면 파일
+    이름도 바꾸는 규칙이라(`BgmToggle.tsx`의 `SRC` 주석) 영구 캐시가 안전하다.
   - **`output: "export"`로 바꾸면 이 헤더가 경고 없이 사라진다.** 호스팅을 옮긴다면 헤더도
     호스팅 쪽으로 옮겨야 한다. `tests/security-headers.test.ts`가 이 조건과 핵심 지시어 누락을
     감시한다.
@@ -281,13 +302,16 @@ scripts/fetch-rule-sources.ts      두 공식 소스에서 대조·생성
 - **서버 부하가 구조적으로 0이다.** 업로드 엔드포인트가 없고 저장도 하지 않는다.
   프래그먼트(`#`)는 서버로 전송되지 않아 정적 배포·CDN 캐싱이 그대로 유지된다.
   따라서 동시 제작자가 아무리 많아도 서버가 하는 일은 정적 페이지 서빙뿐이다.
-- 비용은 각 사용자의 CPU로 분산된다. 실측: 기존 퍼즐 0.4~6ms, 최악(10인·역할풀 18)도 14ms.
+- 비용은 각 사용자의 CPU로 분산된다. 실측: 수록 퍼즐 대부분 1~10ms, 대본이 가장
+  넓은 `mx-26`(36종)·`mx-28`(49종)은 150~180ms (Node, 2026-09-28 측정).
   솔버가 자체적으로 10인을 상한으로 두어 탐색 공간이 유계다 (`composition.ts`).
 - 스팸·모더레이션·삭제 요청 문제가 애초에 생기지 않는다 — 남는 데이터가 없다.
 - 대가: **목록·검색이 없다.** 링크를 잃으면 문제도 사라진다. 보존하려면 경로 B.
 - **에디터의 검증 결과는 파생값이다.** 결과를 초안의 지문(`draftKey`)과 함께 저장하고, 초안이 한
   글자라도 바뀌면 자동으로 idle로 돌아간다 — 입력 핸들러마다 리셋을 기억하지 않는다 (2026-09-08).
-- 에디터가 만드는 `SharedPuzzle`은 `Puzzle`에서 파생한 타입이다 (`Omit<Puzzle, "id" | "source">`).
+- 에디터가 만드는 `SharedPuzzle`은 `Puzzle`에서 파생한 타입이다 — `Omit<Puzzle, "id" | "source" | "hints" | "walkthrough">`에
+  `hints?`·`walkthrough?`를 선택 필드로 더했다. 사설 링크는 해설이 선택이고(미검증이면 에디터가 강제),
+  수록 퍼즐은 `definePuzzle`이 강제한다.
   스키마에 필드를 더하면 코덱의 `validateShared`가 그 필드를 읽지 않을 때 타입 오류가 나고,
   `tests/codec.test.ts`가 왕복을 필드 전체 비교로 검사한다. 질문은 `standardQuestions`로 채우고,
   유일해가 승계 세계면 솔버가 찾은 현재 악마 좌석을 `currentDemonSeat`에 채운다.
@@ -298,7 +322,11 @@ scripts/fetch-rule-sources.ts      두 공식 소스에서 대조·생성
 - **링크 공유는 수록이 아니다.** 서버에 남는 것이 없는 사적인 링크이고, 사이트 목록(경로 B)과는
   무관하다. 에디터는 수록을 약속하지 않는다.
 - `codec.ts`의 `validateShared()`는 **링크를 신뢰하지 않는다.** 좌석 범위·역할 id·
-  길이 상한·구조를 전부 검사하고 사람이 읽을 수 있는 오류를 던진다.
+  길이 상한·구조를 전부 검사하고 사람이 읽을 수 있는 오류를 던진다. 상한은 `LIMITS`에 모여 있다 —
+  인원 5~10, 밤 ≤ 5, 제목 60자, 별명 20자, 서술 300자, 힌트 2, 해설 12, 질문 5, 좌석당 정보 5,
+  사건 120, 프래그먼트 20,000자, 해동 JSON 512KiB(압축 폭탄 방어).
+- 링크 형식에는 버전이 붙는다(`SHARE_VERSION = 1`). 형식이 바뀌면 올리고, 옛 버전 링크는
+  안내 문구를 띄운다.
 
 ### 경로 B — 정식 수록 (GitHub PR)
 

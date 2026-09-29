@@ -30,11 +30,12 @@ export default function CreatePage() {
       </header>
 
       <div className="max-w-prose rounded-lg border border-panel-edge bg-panel p-4 text-sm leading-relaxed">
-        <p className="font-display font-bold text-brass">문제는 하나만 묻습니다 — 악마는 누구인가.</p>
+        <p className="font-display font-bold text-brass">질문은 따로 쓰지 않습니다 — 악마는 누구인가, 어떤 악마인가, 하수인은 누구인가.</p>
         <p className="mt-1 text-faded">
-          질문은 따로 쓰지 않습니다. 지금까지 있었던 일을 전부 기록해 마지막 순간까지 펼쳐 보이고,
-          푸는 사람은 <strong className="text-parchment">지금 이 순간의 악마가 누구인지</strong> 하나만
-          답합니다. 정답은 5번의 그리모어에서 자동으로 나오므로 답을 따로 적을 일도 없습니다.
+          지금까지 있었던 일을 전부 기록해 마지막 순간까지 펼쳐 보이면, 푸는 사람은{" "}
+          <strong className="text-parchment">지금 이 순간의 악마</strong>와 그 종류, 하수인을 답합니다.
+          셋 다 5번의 그리모어에서 자동으로 나오므로 답을 따로 적을 일도 없습니다 (대본에 악마가 한
+          종류면 두 번째 질문은 빠집니다).
         </p>
       </div>
 

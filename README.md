@@ -17,7 +17,7 @@
 ![React](https://img.shields.io/badge/React-19-087EA4?logo=react&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
 ![Tailwind](https://img.shields.io/badge/Tailwind-v4-06B6D4?logo=tailwindcss&logoColor=white)
-![Vitest](https://img.shields.io/badge/Vitest-105_passing-6E9F18?logo=vitest&logoColor=white)
+![Vitest](https://img.shields.io/badge/test-Vitest-6E9F18?logo=vitest&logoColor=white)
 ![Static](https://img.shields.io/badge/배포-100%25_정적-brightgreen)
 
 </div>
@@ -38,7 +38,8 @@
 
 모든 퍼즐은 배포 전에 **솔버가 가능한 모든 배치를 전수 탐색해** 답이 정확히 하나임을 증명합니다.
 이 검증에 실패하면 어떤 문제도 사이트에 올라가지 못합니다. 사용자가 직접 만든 문제도 예외가 아니며,
-그쪽은 **브라우저가 그 자리에서** 같은 검증을 수행합니다.
+그쪽은 **브라우저가 그 자리에서** 같은 검증을 수행합니다. 단, 솔버가 능력을 모르는 실험적 역할이
+배정되는 문제는 유일해 증명 대신 해설을 필수로 요구하고 「솔버 미검증」 표시를 붙입니다(구조 검사는 그대로).
 
 ```
 가능한 모든 그리모어 배치 생성
@@ -50,12 +51,13 @@
 
 | | |
 |---|---|
-| 🔍 **검증된 퍼즐 10종** | 쉬움부터 어려움까지, 전부 유일해 증명 완료 |
+| 🔍 **검증된 수록 퍼즐** | 쉬움부터 어려움까지, 수록 퍼즐 전부 유일해 증명 완료 |
 | 🕯️ **시계 문자판 타운스퀘어** | 좌석을 눌러 주장·정보 확인, 정답 제출 후 그리모어 공개 |
-| 📖 **규칙 문서** | 취함·중독과 역할 20종 해설 — **모든 서술에 공식 원문 출처 각주** |
+| 📖 **규칙 문서** | 취함·중독 + 역할 138종 규칙 문서(공식 능력 문구), 그중 솔버가 모델링하는 72종은 한국어 해설 포함 — **모든 서술에 공식 원문 출처 각주** |
 | ✍️ **사설 문제 만들기** | 브라우저가 유일해를 검증하고, 통과하면 공유 링크 발급 |
 | 🔗 **저장소 없는 공유** | 문제 전체가 링크 안에 들어감 — 서버에 아무것도 남지 않음 |
 | 📈 **진행도 기록** | localStorage에만 저장, 서버 전송 없음 |
+| 🎵 **배경음악** | 켜고 끄는 토글, 기본은 꺼짐 |
 
 ## 기술 스택
 
@@ -78,9 +80,10 @@
 ```bash
 npm install
 npm run dev          # http://localhost:3000
+npm run build && npm start  # 프로덕션 빌드로 실행
 
 npm test             # 솔버 단위 테스트 + 전 퍼즐 유일해 검증 (배포 게이트)
-npm run typecheck
+npm run typecheck    # next typegen(라우트 타입 생성) 후 tsc --noEmit
 npm run lint
 npm run build
 
@@ -96,8 +99,8 @@ npm run rules:sync   # 대조 후 생성 파일 갱신
 만들면 브라우저가 즉시 검증하고 링크를 줍니다. 가입도 승인도 필요 없습니다.
 
 **경로 B — 사이트에 정식 수록.** `src/data/puzzles/`에 파일을 추가해 PR을 열면 CI가 유일해를
-다시 검증합니다. 통과하지 못하면 병합되지 않습니다. 정식 수록 문제에는 힌트(최대 2개)와
-단계별 해설이 필요합니다.
+다시 검증합니다. 통과하지 못하면 병합되지 않습니다. 정식 수록 문제에는 단계별 해설이
+필수이고, 힌트는 선택(최대 2개)입니다.
 
 자세한 작성법은 사이트의 [업로드 가이드](https://clocktower-fan-puzzles.vercel.app/guide)에 있습니다.
 
@@ -124,10 +127,10 @@ npm run rules:sync   # 대조 후 생성 파일 갱신
 <tr><td><strong>아트워크</strong></td>
 <td><strong>공식 아트워크·아이콘·토큰 이미지를 일절 사용하지 않습니다.</strong> 이 저장소에는 공식
 이미지 자산이 포함돼 있지 않으며, 타운스퀘어를 포함한 UI 그래픽은 모두 직접 구현한 SVG입니다.
-비트맵은 배너와 사이트 배경 두 장뿐이고, 둘 다 아래 「AI 생성 자산」 항목에 해당합니다.</td></tr>
+비트맵은 배너와 사이트 배경 두 장뿐이고(파비콘은 Next.js 기본 아이콘), 둘 다 아래 「AI 생성 자산」 항목에 해당합니다.</td></tr>
 
 <tr><td><strong>AI 생성 자산</strong></td>
-<td>사이트 배경 이미지와 배경음악 &lt;Dolce Follia&gt;는 이 프로젝트를 위해 <strong>생성형 AI로 만든
+<td>저장소 배너, 사이트 배경 이미지와 배경음악 &lt;Dolce Follia&gt;는 이 프로젝트를 위해 <strong>생성형 AI로 만든
 창작물</strong>입니다 — 이미지는 Nano Banana 2(Google Gemini)로, 가사는 Claude로, 음원은
 <a href="https://suno.com">Suno</a>로 제작했습니다. 공식 <em>Blood on the Clocktower</em>
 아트워크·음원이나 기존 상업 저작물을 사용하거나 참조하지 않았습니다.</td></tr>

@@ -19,14 +19,14 @@ graph LR
     R --> N
   end
 
-  N --> H["정적 HTML/JS<br/>39개 라우트"]
+  N --> H["정적 HTML/JS<br/>역할 문서 · 퍼즐 · 고정 페이지"]
 
   subgraph runtime["런타임"]
     H --> CDN["Vercel 엣지 CDN"]
     CDN --> B["사용자 브라우저"]
   end
 
-  B -.->|"localStorage"| LS["진행도<br/>(기기 안에만)"]
+  B -.->|"localStorage"| LS["진행도 · 좌석 메모<br/>(기기 안에만)"]
 
   style S fill:#8e2a24,color:#fff
   style CDN fill:#cfa96a,color:#000
@@ -56,7 +56,7 @@ mindmap
         외부 차트 라이브러리 없음
     검증
       Vitest
-        유일해 증명 105건
+        퍼즐 유일해 증명 + 솔버 단위 테스트
       GitHub Actions
         PR 관문
     배포
@@ -123,8 +123,8 @@ flowchart TD
 > 공식 규칙상 텔러는 아무 정보나 줄 수 있고, 우연히 참일 수도 있다. 이를 "거짓"으로
 > 모델링하면 실제로는 답이 여럿인 문제를 유일해로 잘못 통과시킨다.
 
-**성능 (실측):** 기존 퍼즐 0.4\~6ms. 최악의 경우(10인·역할풀 18종) 14ms.
-밤 수를 12로 늘려도 13ms — 솔버가 10인을 상한으로 두어 탐색 공간이 유계이기 때문이다.
+**성능 (실측, Node, 2026-09-28):** 수록 퍼즐 대부분 1\~10ms. 대본이 가장 넓은 `mx-26`(36종)·`mx-28`(49종)은
+150\~180ms — 솔버가 10인을 상한으로 두어 탐색 공간이 유계이기 때문이다. 수치의 원본은 [ARCHITECTURE.md](./ARCHITECTURE.md) §9.
 그래서 **브라우저에서 그대로 돌릴 수 있다.**
 
 ## 5. 두 종류의 퍼즐, 같은 관문
@@ -136,9 +136,13 @@ flowchart TD
 flowchart LR
   subgraph A["경로 A — 사설 (저장소 없음)"]
     direction TB
-    A1["/create 에디터"] --> A2["브라우저에서<br/>solve() 실행"]
-    A2 -->|"유일해 아님"| A3["링크 발급 거부<br/>+ 이유 설명"]
-    A2 -->|"유일해 ✓"| A4["퍼즐 전체를 압축해<br/>URL 프래그먼트에"]
+    A1["/create 에디터"] --> A2["브라우저에서<br/>analyze() 실행"]
+    A2 -->|"구조 오류"| A3["링크 발급 거부<br/>+ 이유 설명"]
+    A2 -->|"검증 가능 · 유일해 아님"| A3
+    A2 -->|"검증 가능 · 유일해 ✓"| A4["퍼즐 전체를 압축해<br/>URL 프래그먼트에"]
+    A2 -->|"미검증 · 해설 없음"| A3
+    A2 -->|"미검증(SOLVER_ROLES 밖 역할 배정)<br/>· 해설 있음"| A6["「솔버 미검증」 표시와 함께"]
+    A6 --> A4
     A4 --> A5["/play#… 로 공유"]
   end
 
@@ -147,6 +151,8 @@ flowchart LR
     B1["퍼즐 TS 파일 PR"] --> B2["GitHub Actions<br/>npm test"]
     B2 -->|"유일해 아님"| B3["병합 거부"]
     B2 -->|"유일해 ✓"| B4["병합 → 자동 배포"]
+    B2 -->|"미검증 퍼즐<br/>(구조 검사 + 해설만 강제)"| B6["사람 검토가 관문"]
+    B6 --> B4
     B4 --> B5["/puzzle/[id] 에 수록"]
   end
 
@@ -170,9 +176,9 @@ sequenceDiagram
   participant P as 푸는 사람
 
   M->>BM: 문제 입력
-  BM->>BM: solve() — 유일해 검증 (~14ms)
+  BM->>BM: analyze() — 유일해 검증 (수 ms~수백 ms)
   Note over BM: 서버 요청 없음
-  BM->>BM: 압축 + base64url → 링크 (~600~800자)
+  BM->>BM: 압축 + base64url → 링크 (수록 퍼즐 기준 약 2~4천 자, 상한 2만 자)
   BM-->>M: 링크
   M-->>P: 카톡·디스코드로 링크 전달
 
@@ -219,7 +225,7 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-  C["코드 변경"] --> T1["npm test<br/>105건"]
+  C["코드 변경"] --> T1["npm test<br/>vitest"]
   T1 --> T2["typecheck<br/>tsc --noEmit"]
   T2 --> T3["lint<br/>eslint"]
   T3 --> T4["build<br/>next build"]

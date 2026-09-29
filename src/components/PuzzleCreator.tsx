@@ -77,8 +77,8 @@ const TEAM_STYLE: Record<Team, { rail: string; text: string; chipOn: string }> =
  * 모델링되지 않았다는 뜻이다. 그래서 대본만 봐도 어느 칩이 이 문제를 미검증 쪽으로
  * 끌고 가는지 보인다.
  *
- * 판정 기준은 판본이 아니라 SOLVER_ROLES다 — 실험적 66종에 건달·마귀할멈(기본 판본이지만
- * 아직 미모델링)이 더해져 점선은 68종이다. 그래서 UI는 "실험적"이 아니라 "점선"으로 부른다.
+ * 판정 기준은 판본이 아니라 SOLVER_ROLES다 — 지금은 점선이 실험적 역할 66종 전부와 같지만,
+ * 판본과 모델링 여부는 별개의 축이다. 그래서 UI는 "실험적"이 아니라 "점선"으로 부른다.
  */
 const DASHED_CHIP_ON = "border-brass bg-brass/15 text-brass";
 
